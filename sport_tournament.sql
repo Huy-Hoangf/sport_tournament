@@ -20,7 +20,7 @@ IF OBJECT_ID('vw_leaderboard', 'V') IS NOT NULL
     DROP VIEW vw_leaderboard;
 GO
 
--- Drop tables theo đúng thứ tự khóa ngoại
+-- Drop tables in the correct foreign key order
 IF OBJECT_ID('leaderboard_snapshots', 'U') IS NOT NULL
     DROP TABLE leaderboard_snapshots;
 GO
