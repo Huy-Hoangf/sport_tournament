@@ -1,10 +1,56 @@
-IF DB_ID('sport_tournament') IS NULL
+﻿IF DB_ID('sport_tournament') IS NULL
 BEGIN
     CREATE DATABASE sport_tournament;
 END
 GO
 
 USE sport_tournament;
+GO
+-- Drop procedures
+IF OBJECT_ID('sp_finish_match', 'P') IS NOT NULL
+    DROP PROCEDURE sp_finish_match;
+GO
+
+IF OBJECT_ID('sp_calculate_match_points', 'P') IS NOT NULL
+    DROP PROCEDURE sp_calculate_match_points;
+GO
+
+-- Drop views
+IF OBJECT_ID('vw_leaderboard', 'V') IS NOT NULL
+    DROP VIEW vw_leaderboard;
+GO
+
+-- Drop tables theo đúng thứ tự khóa ngoại
+IF OBJECT_ID('leaderboard_snapshots', 'U') IS NOT NULL
+    DROP TABLE leaderboard_snapshots;
+GO
+
+IF OBJECT_ID('predictions', 'U') IS NOT NULL
+    DROP TABLE predictions;
+GO
+
+IF OBJECT_ID('matches', 'U') IS NOT NULL
+    DROP TABLE matches;
+GO
+
+IF OBJECT_ID('teams', 'U') IS NOT NULL
+    DROP TABLE teams;
+GO
+
+IF OBJECT_ID('stages', 'U') IS NOT NULL
+    DROP TABLE stages;
+GO
+
+IF OBJECT_ID('tournament_participants', 'U') IS NOT NULL
+    DROP TABLE tournament_participants;
+GO
+
+IF OBJECT_ID('tournaments', 'U') IS NOT NULL
+    DROP TABLE tournaments;
+GO
+
+IF OBJECT_ID('users', 'U') IS NOT NULL
+    DROP TABLE users;
 GO
 
 CREATE TABLE users (
