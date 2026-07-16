@@ -299,7 +299,8 @@ BEGIN
 
     IF @actual_home_score IS NULL OR @actual_away_score IS NULL
     BEGIN
-        THROW 50001, 'Match score is not available or match is not finished.', 1;
+        RAISERROR('Match score is not available or match is not finished.', 16, 1);
+        RETURN;
     END;
 
     SET @actual_outcome =
@@ -338,7 +339,8 @@ BEGIN
 
     IF @actual_home_score < 0 OR @actual_away_score < 0
     BEGIN
-        THROW 50002, 'Score cannot be negative.', 1;
+        RAISERROR('Score cannot be negative.', 16, 1);
+        RETURN;
     END;
 
     UPDATE matches
