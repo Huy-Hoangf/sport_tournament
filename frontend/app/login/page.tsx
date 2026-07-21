@@ -1,16 +1,90 @@
 "use client";
 
 import Link from "next/link";
-import { CircleHelp, EyeOff, Globe2, LogIn, Lock, UserCircle } from "lucide-react";
+import { useRouter } from "next/navigation";
+import {
+  CircleHelp,
+  EyeOff,
+  Globe2,
+  LogIn,
+  Lock,
+  UserCircle,
+} from "lucide-react";
 import type { FormEvent } from "react";
 import { useState } from "react";
 
+const ADMIN_EMAIL = "son.vu@twenty-tech.com";
+const DEFAULT_PASSWORD = "123456";
+
+type DemoUser = {
+  id: string;
+  fullName: string;
+  email: string;
+  password: string;
+  role: "ADMIN" | "PLAYER";
+};
+
 export default function LoginPage() {
+  const router = useRouter();
   const [showPassword, setShowPassword] = useState(false);
+  const [username, setUsername] = useState("");
+  const [password, setPassword] = useState("");
 
   function handleLogin(event: FormEvent<HTMLFormElement>) {
     event.preventDefault();
-    alert("Đăng nhập giả lập, chưa có backend.");
+
+    const email = username.trim().toLowerCase();
+
+    if (!email || !password) {
+      alert("Vui lòng nhập email và mật khẩu.");
+      return;
+    }
+
+    if (email === ADMIN_EMAIL) {
+  const adminPassword = localStorage.getItem("adminPassword") || "123456";
+
+      if (password !== adminPassword) {
+        alert("Sai email hoặc mật khẩu.");
+        return;
+      }
+
+      localStorage.setItem(
+        "currentUser",
+        JSON.stringify({
+          email: ADMIN_EMAIL,
+          fullName: "Son Vu",
+          role: "ADMIN",
+        })
+      );
+
+      router.push("/admin");
+      return;
+    }
+
+    const users: DemoUser[] = JSON.parse(
+      localStorage.getItem("users") || "[]"
+    );
+
+    const foundUser = users.find(
+      (user) =>
+        user.email.toLowerCase() === email && user.password === password
+    );
+
+    if (!foundUser) {
+      alert("Sai email hoặc mật khẩu. User demo có mật khẩu mặc định là 123456.");
+      return;
+    }
+
+    localStorage.setItem(
+      "currentUser",
+      JSON.stringify({
+        email: foundUser.email,
+        fullName: foundUser.fullName,
+        role: foundUser.role,
+      })
+    );
+
+    alert("Player monitor under construction")
   }
 
   return (
@@ -42,7 +116,10 @@ export default function LoginPage() {
 
           <input
             type="text"
-            className="mb-8 h-[72px] w-full rounded border border-white/10 bg-[#080f0f] px-5 text-xl font-bold text-zinc-200 outline-none transition focus:border-[#8ed8ec88]"
+            value={username}
+            onChange={(event) => setUsername(event.target.value)}
+            placeholder="Email/User"
+            className="mb-8 h-[72px] w-full rounded border border-white/10 bg-[#080f0f] px-5 text-xl font-bold text-zinc-200 outline-none transition placeholder:text-zinc-600 focus:border-[#8ed8ec88]"
           />
 
           <label className="mb-3 flex items-center gap-2 text-sm font-bold uppercase tracking-[0.18em] text-zinc-400">
@@ -53,8 +130,12 @@ export default function LoginPage() {
           <div className="mb-8 flex h-[72px] items-center rounded border border-white/10 bg-[#080f0f] px-5 focus-within:border-[#8ed8ec88]">
             <input
               type={showPassword ? "text" : "password"}
-              className="w-full bg-transparent text-xl font-bold text-zinc-200 outline-none"
+              value={password}
+              onChange={(event) => setPassword(event.target.value)}
+              placeholder="Your pass"
+              className="w-full bg-transparent text-xl font-bold text-zinc-200 outline-none placeholder:text-zinc-600"
             />
+
             <button
               type="button"
               onClick={() => setShowPassword(!showPassword)}
@@ -73,10 +154,9 @@ export default function LoginPage() {
           </button>
 
           <div className="mt-12 flex justify-between text-sm font-semibold text-zinc-300">
-            <Link href="/access" className="hover:text-[#8ed8ec]">
-              Đăng ký tài khoản
-            </Link>
-            <Link href="/access" className="hover:text-[#8ed8ec]">
+
+
+            <Link href="/forgot-password" className="hover:text-[#8ed8ec]">
               Quên mật khẩu?
             </Link>
           </div>
@@ -91,6 +171,7 @@ export default function LoginPage() {
 
       <footer className="flex h-[78px] shrink-0 items-center justify-between border-t border-white/10 px-10 text-xs font-bold uppercase tracking-[0.16em] text-zinc-400">
         <p>© 2024 GoalCrystal Predictor. Tất cả dữ liệu được mã hóa.</p>
+
         <div className="flex gap-10">
           <span>Điều khoản</span>
           <span>Bảo mật</span>
