@@ -1,6 +1,7 @@
 "use client";
 
-import { logoutAll } from "../auth-sync";
+import { logoutAll, readCurrentUser } from "../auth-sync";
+import { apiRequest, type CurrentUser } from "../api";
 import { useEffect, useMemo, useState } from "react";
 import { useRouter } from "next/navigation";
 import {
@@ -23,149 +24,107 @@ import {
   Zap,
 } from "lucide-react";
 
-const ADMIN_EMAIL = "son.vu@twenty-tech.com";
-const DEFAULT_PASSWORD = "123456";
+type BackendUser = {
+  id: number;
+  fullName: string;
+  email: string;
+  role: "ADMIN" | "PLAYER";
+  createdAt?: string;
+};
 
 type Player = {
   id: string;
   fullName: string;
   email: string;
-  password: string;
-  role: "PLAYER";
+  role: "ADMIN" | "PLAYER";
   rank: "ELITE" | "PRO" | "ROOKIE";
   points: number;
   status: "ACTIVE" | "BANNED" | "PENDING";
 };
 
-const demoPlayers: Player[] = [
-  {
-    id: "829-X01-22",
-    fullName: "Alex \"Neon\" VanHousen",
-    email: "a.neon@cybercrystal.io",
-    password: DEFAULT_PASSWORD,
-    role: "PLAYER",
-    rank: "ELITE",
-    points: 1248500,
-    status: "ACTIVE",
-  },
-  {
-    id: "114-Z45-09",
-    fullName: "Sarah \"Blade\" Connor",
-    email: "s.connor@mainframe.com",
-    password: DEFAULT_PASSWORD,
-    role: "PLAYER",
-    rank: "PRO",
-    points: 842100,
-    status: "ACTIVE",
-  },
-  {
-    id: "000-ERR-XX",
-    fullName: "Unknown_Hacker_99",
-    email: "shadow@deepweb.net",
-    password: DEFAULT_PASSWORD,
-    role: "PLAYER",
-    rank: "ROOKIE",
-    points: 0,
-    status: "BANNED",
-  },
-  {
-    id: "554-A90-11",
-    fullName: "Elena \"Pulse\" Rodriguez",
-    email: "e.rod@neocity.global",
-    password: DEFAULT_PASSWORD,
-    role: "PLAYER",
-    rank: "PRO",
-    points: 512300,
-    status: "PENDING",
-  },
-];
+type CreateUserResponse = {
+  message: string;
+  user: BackendUser & {
+    defaultPassword: string;
+  };
+};
 
 export default function AdminPage() {
   const router = useRouter();
   const [players, setPlayers] = useState<Player[]>([]);
   const [fullName, setFullName] = useState("");
   const [email, setEmail] = useState("");
-  const [openModal, setOpenModal] = useState<"createUser" | "createUserFromList" | null>(null);
+  const [isLoading, setIsLoading] = useState(false);
+  const [openModal, setOpenModal] = useState<
+    "createUser" | "createUserFromList" | null
+  >(null);
 
   useEffect(() => {
-    const currentUser = JSON.parse(localStorage.getItem("currentUser") || "null");
+    const currentUser = readCurrentUser() as CurrentUser | null;
 
     if (!currentUser || currentUser.role !== "ADMIN") {
       router.push("/login");
       return;
     }
 
-    const savedPlayers = JSON.parse(localStorage.getItem("users") || "[]");
+    void fetchPlayers();
 
-    if (savedPlayers.length > 0) {
-      setPlayers(savedPlayers);
-    } else {
-      setPlayers(demoPlayers);
-      localStorage.setItem("users", JSON.stringify(demoPlayers));
+    function handleStorage(event: StorageEvent) {
+      if (event.key === "logoutEvent" || event.key === "currentUser") {
+        if (!localStorage.getItem("currentUser")) {
+          router.push("/login");
+        }
+      }
     }
+
+    window.addEventListener("storage", handleStorage);
+
+    return () => {
+      window.removeEventListener("storage", handleStorage);
+    };
   }, [router]);
 
   const activeCount = useMemo(
     () => players.filter((player) => player.status === "ACTIVE").length,
-    [players]
+    [players],
   );
-  useEffect(() => {
-  function handleStorage(event: StorageEvent) {
-        if (event.key === "logoutEvent" || event.key === "currentUser") {
-        const currentUser = localStorage.getItem("currentUser");
 
-        if (!currentUser) {
-            router.push("/login");
-        }
-        }
+  async function fetchPlayers() {
+    try {
+      const users = await apiRequest<BackendUser[]>("/users");
+      setPlayers(users.map(mapUserToPlayer));
+    } catch (error) {
+      alert(error instanceof Error ? error.message : "Cannot load users.");
     }
+  }
 
-        window.addEventListener("storage", handleStorage);
-
-        return () => {
-            window.removeEventListener("storage", handleStorage);
-        };
-    }, [router]);
-
-  function createPlayer() {
+  async function createPlayer() {
     if (!fullName.trim() || !email.trim()) {
-      alert("Vui lòng nhập tên và email.");
+      alert("Please enter name and email.");
       return;
     }
 
-    if (email.trim().toLowerCase() === ADMIN_EMAIL) {
-      alert("Không được tạo thêm admin.");
-      return;
+    setIsLoading(true);
+
+    try {
+      const data = await apiRequest<CreateUserResponse>("/users/admin/create", {
+        method: "POST",
+        body: JSON.stringify({
+          fullName: fullName.trim(),
+          email: email.trim().toLowerCase(),
+        }),
+      });
+
+      alert(`User created successfully. Default password: ${data.user.defaultPassword}`);
+      setFullName("");
+      setEmail("");
+      setOpenModal(null);
+      await fetchPlayers();
+    } catch (error) {
+      alert(error instanceof Error ? error.message : "Create user failed.");
+    } finally {
+      setIsLoading(false);
     }
-
-    const existed = players.some(
-      (player) => player.email.toLowerCase() === email.trim().toLowerCase()
-    );
-
-    if (existed) {
-      alert("Email này đã tồn tại.");
-      return;
-    }
-
-    const newPlayer: Player = {
-      id: Date.now().toString().slice(-3) + "-NEW-01",
-      fullName: fullName.trim(),
-      email: email.trim(),
-      password: DEFAULT_PASSWORD,
-      role: "PLAYER",
-      rank: "ROOKIE",
-      points: 0,
-      status: "ACTIVE",
-    };
-
-    const nextPlayers = [newPlayer, ...players];
-    setPlayers(nextPlayers);
-    localStorage.setItem("users", JSON.stringify(nextPlayers));
-
-    setFullName("");
-    setEmail("");
-
-    alert("Tạo người chơi thành công. Mật khẩu mặc định là 123456.");
   }
 
   function logout() {
@@ -238,39 +197,39 @@ export default function AdminPage() {
         </header>
 
         <div className="px-10 py-10">
-          <div className="mb-10 flex items-start justify-between">
+          <div className="mb-10 flex items-start justify-between gap-8">
             <div>
               <h2 className="text-[24px] text-zinc-100">Player Directory</h2>
               <p className="text-[21px] text-zinc-300">
                 Total active users:{" "}
-                <span className="font-black text-[#8ed8ec]">12,842</span>{" "}
+                <span className="font-black text-[#8ed8ec]">{activeCount}</span>{" "}
                 registered in the system.
               </p>
             </div>
-            
-            <div className="mb-10 flex items-start justify-between gap-20">
-                <button
-              onClick={() => setOpenModal("createUser")}
-              className="flex h-[62px] items-center gap-3 rounded bg-[#8ed8ec] px-8 text-xl font-black text-[#102026]"
-            >
-              <UserPlus size={27} />
-              Add Player
-            </button>
-            <button
-              onClick={() => setOpenModal("createUserFromList")}
-              className="flex h-[62px] items-center gap-3 rounded bg-[#8ed8ec] px-8 text-xl font-black text-[#102026]"
-            >
-              <UserPlus size={27} />
-              Add Player From List
-            </button>
+
+            <div className="flex items-start justify-between gap-5">
+              <button
+                onClick={() => setOpenModal("createUser")}
+                className="flex h-[62px] items-center gap-3 rounded bg-[#8ed8ec] px-8 text-xl font-black text-[#102026]"
+              >
+                <UserPlus size={27} />
+                Add Player
+              </button>
+              <button
+                onClick={() => setOpenModal("createUserFromList")}
+                className="flex h-[62px] items-center gap-3 rounded bg-[#8ed8ec] px-8 text-xl font-black text-[#102026]"
+              >
+                <UserPlus size={27} />
+                Add Player From List
+              </button>
             </div>
           </div>
 
           <div className="mb-10 grid grid-cols-4 gap-5">
-            <StatCard title="Total Players" value="24,592" accent="cyan" icon={<Users />} />
+            <StatCard title="Total Players" value={players.length.toLocaleString()} accent="cyan" icon={<Users />} />
             <StatCard title="Active Now" value={activeCount.toLocaleString()} accent="cyan" icon={<Zap />} />
-            <StatCard title="New Today" value="142" accent="orange" icon={<UserPlus />} />
-            <StatCard title="Total Predictions" value="482.1k" accent="gray" icon={<TrendingUp />} />
+            <StatCard title="New Today" value="0" accent="orange" icon={<UserPlus />} />
+            <StatCard title="Total Predictions" value="0" accent="gray" icon={<TrendingUp />} />
           </div>
 
           <div className="mb-8 flex h-[92px] items-center gap-5 rounded-lg border border-[#293636] bg-[#141a1a] px-6">
@@ -309,7 +268,7 @@ export default function AdminPage() {
               </thead>
 
               <tbody>
-                {players.map((player, index) => (
+                {players.map((player) => (
                   <tr key={player.id} className="h-[118px] border-t border-white/5">
                     <td className="px-8">
                       <div className="flex items-center gap-4">
@@ -341,12 +300,20 @@ export default function AdminPage() {
                     </td>
                   </tr>
                 ))}
+
+                {players.length === 0 && (
+                  <tr>
+                    <td colSpan={6} className="p-8 text-center text-zinc-500">
+                      No users found.
+                    </td>
+                  </tr>
+                )}
               </tbody>
             </table>
 
             <div className="flex h-[102px] items-center justify-between border-t border-white/5 px-8">
               <p className="text-xl uppercase tracking-[0.12em] text-zinc-300">
-                Showing 1 to {players.length} of 12,842 players
+                Showing 1 to {players.length} of {players.length} players
               </p>
 
               <div className="flex items-center gap-2">
@@ -354,10 +321,6 @@ export default function AdminPage() {
                   <ChevronLeft size={22} />
                 </PageButton>
                 <PageButton active>1</PageButton>
-                <PageButton>2</PageButton>
-                <PageButton>3</PageButton>
-                <span className="px-2">...</span>
-                <PageButton>120</PageButton>
                 <PageButton>
                   <ChevronRight size={22} />
                 </PageButton>
@@ -371,84 +334,97 @@ export default function AdminPage() {
         </footer>
       </section>
 
-            {openModal === "createUser" && (
+      {openModal === "createUser" && (
         <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/70">
-            <div className="w-[520px] rounded-lg border border-[#8ed8ec55] bg-[#101818] p-7 shadow-[0_0_50px_rgba(142,216,236,0.18)]">
+          <div className="w-[520px] rounded-lg border border-[#8ed8ec55] bg-[#101818] p-7 shadow-[0_0_50px_rgba(142,216,236,0.18)]">
             <h2 className="mb-6 text-2xl font-black text-[#8ed8ec]">
-                New Player
+              New Player
             </h2>
 
             <input
-                value={fullName}
-                onChange={(event) => setFullName(event.target.value)}
-                placeholder="Name"
-                className="mb-4 h-[54px] w-full rounded border border-white/10 bg-[#070d0d] px-4 text-zinc-100 outline-none focus:border-[#8ed8ec]"
+              value={fullName}
+              onChange={(event) => setFullName(event.target.value)}
+              placeholder="Name"
+              className="mb-4 h-[54px] w-full rounded border border-white/10 bg-[#070d0d] px-4 text-zinc-100 outline-none focus:border-[#8ed8ec]"
             />
 
             <input
-                value={email}
-                onChange={(event) => setEmail(event.target.value)}
-                placeholder="Email"
-                className="mb-4 h-[54px] w-full rounded border border-white/10 bg-[#070d0d] px-4 text-zinc-100 outline-none focus:border-[#8ed8ec]"
+              value={email}
+              onChange={(event) => setEmail(event.target.value)}
+              placeholder="name@twenty-tech.com"
+              className="mb-4 h-[54px] w-full rounded border border-white/10 bg-[#070d0d] px-4 text-zinc-100 outline-none focus:border-[#8ed8ec]"
             />
 
             <p className="mb-6 text-sm text-zinc-400">
-                Default Password: 123456
+              Default Password: 123456
             </p>
 
             <div className="flex justify-end gap-3">
-                <button
+              <button
                 onClick={() => setOpenModal(null)}
                 className="h-[46px] rounded border border-white/10 px-5 text-zinc-300"
-                >
+              >
                 Cancel
-                </button>
+              </button>
 
-                <button
+              <button
                 onClick={createPlayer}
-                className="h-[46px] rounded bg-[#8ed8ec] px-5 font-black text-[#102026]"
-                >
-                Create User
-                </button>
+                disabled={isLoading}
+                className="h-[46px] rounded bg-[#8ed8ec] px-5 font-black text-[#102026] disabled:opacity-60"
+              >
+                {isLoading ? "Creating..." : "Create User"}
+              </button>
             </div>
-            </div>
+          </div>
         </div>
-        )}
+      )}
 
-        {openModal === "createUserFromList" && (
+      {openModal === "createUserFromList" && (
         <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/70">
-            <div className="w-[520px] rounded-lg border border-[#8ed8ec55] bg-[#101818] p-7 shadow-[0_0_50px_rgba(142,216,236,0.18)]">
+          <div className="w-[520px] rounded-lg border border-[#8ed8ec55] bg-[#101818] p-7 shadow-[0_0_50px_rgba(142,216,236,0.18)]">
             <h2 className="mb-4 text-2xl font-black text-[#8ed8ec]">
-                Add Player From List
+              Add Player From List
             </h2>
 
             <p className="mb-6 text-base text-zinc-400">
-                Import From Excel
+              Import From Excel
             </p>
 
             <div className="flex justify-end gap-3">
-                <button
+              <button
                 onClick={() => setOpenModal(null)}
                 className="h-[46px] rounded border border-white/10 px-5 text-zinc-300"
-                >
+              >
                 Cancel
-                </button>
+              </button>
 
-                <button
+              <button
                 onClick={() => {
-                    alert("this feature is not available");
-                    setOpenModal(null);
+                  alert("this feature is not available");
+                  setOpenModal(null);
                 }}
                 className="h-[46px] rounded bg-[#8ed8ec] px-5 font-black text-[#102026]"
-                >
+              >
                 Import
-                </button>
+              </button>
             </div>
-            </div>
+          </div>
         </div>
-        )}
+      )}
     </main>
   );
+}
+
+function mapUserToPlayer(user: BackendUser): Player {
+  return {
+    id: String(user.id),
+    fullName: user.fullName,
+    email: user.email,
+    role: user.role,
+    rank: user.role === "ADMIN" ? "ELITE" : "ROOKIE",
+    points: 0,
+    status: "ACTIVE",
+  };
 }
 
 function MenuItem({
@@ -501,7 +477,7 @@ function StatCard({
         <div className={accentClass}>{icon}</div>
       </div>
       <p className="mb-4 text-2xl font-black text-zinc-100">{value}</p>
-      <p className="text-sm text-[#9ddff2]">↗ +12% from last month</p>
+      <p className="text-sm text-[#9ddff2]">Synced from backend</p>
     </div>
   );
 }
@@ -531,7 +507,7 @@ function StatusBadge({ status }: { status: Player["status"] }) {
 
   return (
     <span className={`rounded-full border px-4 py-2 text-sm font-black ${className}`}>
-      • {status}
+      * {status}
     </span>
   );
 }

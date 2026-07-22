@@ -12,16 +12,11 @@ import {
 } from "lucide-react";
 import type { FormEvent } from "react";
 import { useState } from "react";
+import { apiRequest, type CurrentUser } from "../api";
 
-const ADMIN_EMAIL = "son.vu@twenty-tech.com";
-const DEFAULT_PASSWORD = "123456";
-
-type DemoUser = {
-  id: string;
-  fullName: string;
-  email: string;
-  password: string;
-  role: "ADMIN" | "PLAYER";
+type LoginResponse = {
+  message: string;
+  user: CurrentUser;
 };
 
 export default function LoginPage() {
@@ -29,62 +24,36 @@ export default function LoginPage() {
   const [showPassword, setShowPassword] = useState(false);
   const [username, setUsername] = useState("");
   const [password, setPassword] = useState("");
+  const [isLoading, setIsLoading] = useState(false);
 
-  function handleLogin(event: FormEvent<HTMLFormElement>) {
+  async function handleLogin(event: FormEvent<HTMLFormElement>) {
     event.preventDefault();
 
     const email = username.trim().toLowerCase();
 
     if (!email || !password) {
-      alert("Vui lòng nhập email và mật khẩu.");
+      alert("Please enter email and password.");
       return;
     }
 
-    if (email === ADMIN_EMAIL) {
-  const adminPassword = localStorage.getItem("adminPassword") || "123456";
+    setIsLoading(true);
 
-      if (password !== adminPassword) {
-        alert("Sai email hoặc mật khẩu.");
-        return;
-      }
+    try {
+      const data = await apiRequest<LoginResponse>("/auth/login", {
+        method: "POST",
+        body: JSON.stringify({
+          email,
+          password,
+        }),
+      });
 
-      localStorage.setItem(
-        "currentUser",
-        JSON.stringify({
-          email: ADMIN_EMAIL,
-          fullName: "Son Vu",
-          role: "ADMIN",
-        })
-      );
-
-      router.push("/admin");
-      return;
+      localStorage.setItem("currentUser", JSON.stringify(data.user));
+      router.push(data.user.role === "ADMIN" ? "/admin" : "/player");
+    } catch (error) {
+      alert(error instanceof Error ? error.message : "Login failed.");
+    } finally {
+      setIsLoading(false);
     }
-
-    const users: DemoUser[] = JSON.parse(
-      localStorage.getItem("users") || "[]"
-    );
-
-    const foundUser = users.find(
-      (user) =>
-        user.email.toLowerCase() === email && user.password === password
-    );
-
-    if (!foundUser) {
-      alert("Sai email hoặc mật khẩu. User demo có mật khẩu mặc định là 123456.");
-      return;
-    }
-
-    localStorage.setItem(
-      "currentUser",
-      JSON.stringify({
-        email: foundUser.email,
-        fullName: foundUser.fullName,
-        role: foundUser.role,
-      })
-    );
-
-    alert("Player monitor under construction")
   }
 
   return (
@@ -106,25 +75,25 @@ export default function LoginPage() {
           className="w-full max-w-[560px] rounded-lg border border-[#8ed8ec44] bg-[#111a1acc] px-10 py-11 shadow-[0_0_55px_rgba(75,190,210,0.12)] backdrop-blur"
         >
           <h2 className="mb-12 text-center text-[40px] font-bold tracking-[-0.02em] text-zinc-200">
-            Truy Cập Hệ Thống
+            System Access
           </h2>
 
           <label className="mb-3 flex items-center gap-2 text-[15px] font-bold uppercase tracking-[0.18em] text-zinc-400">
             <UserCircle size={18} />
-            Email / Tên đăng nhập
+            Email
           </label>
 
           <input
-            type="text"
+            type="email"
             value={username}
             onChange={(event) => setUsername(event.target.value)}
-            placeholder="Email/User"
+            placeholder="son.vu@twenty-tech.com"
             className="mb-8 h-[72px] w-full rounded border border-white/10 bg-[#080f0f] px-5 text-xl font-bold text-zinc-200 outline-none transition placeholder:text-zinc-600 focus:border-[#8ed8ec88]"
           />
 
           <label className="mb-3 flex items-center gap-2 text-sm font-bold uppercase tracking-[0.18em] text-zinc-400">
             <Lock size={17} />
-            Mật khẩu
+            Password
           </label>
 
           <div className="mb-8 flex h-[72px] items-center rounded border border-white/10 bg-[#080f0f] px-5 focus-within:border-[#8ed8ec88]">
@@ -132,7 +101,7 @@ export default function LoginPage() {
               type={showPassword ? "text" : "password"}
               value={password}
               onChange={(event) => setPassword(event.target.value)}
-              placeholder="Your pass"
+              placeholder="123456"
               className="w-full bg-transparent text-xl font-bold text-zinc-200 outline-none placeholder:text-zinc-600"
             />
 
@@ -147,35 +116,35 @@ export default function LoginPage() {
 
           <button
             type="submit"
-            className="flex h-[72px] w-full items-center justify-center gap-4 rounded bg-[#8ed8ec] text-[18px] font-black uppercase tracking-[0.28em] text-[#122226] shadow-[0_0_22px_rgba(142,216,236,0.35)] transition hover:bg-[#a4e7f5]"
+            disabled={isLoading}
+            className="flex h-[72px] w-full items-center justify-center gap-4 rounded bg-[#8ed8ec] text-[18px] font-black uppercase tracking-[0.28em] text-[#122226] shadow-[0_0_22px_rgba(142,216,236,0.35)] transition hover:bg-[#a4e7f5] disabled:opacity-60"
           >
-            Đăng nhập
+            {isLoading ? "Logging in..." : "Login"}
             <LogIn size={24} />
           </button>
 
           <div className="mt-12 flex justify-between text-sm font-semibold text-zinc-300">
-
-
             <Link href="/forgot-password" className="hover:text-[#8ed8ec]">
-              Quên mật khẩu?
+              Forgot password?
             </Link>
+            <span className="text-zinc-500">Admin default: 123456</span>
           </div>
 
           <div className="mt-10 flex items-center gap-5 text-[13px] font-medium uppercase tracking-[0.45em] text-zinc-600">
             <span className="h-px flex-1 bg-white/10" />
-            <span>CỔNG BẢO MẬT</span>
+            <span>Secure Portal</span>
             <span className="h-px flex-1 bg-white/10" />
           </div>
         </form>
       </section>
 
       <footer className="flex h-[78px] shrink-0 items-center justify-between border-t border-white/10 px-10 text-xs font-bold uppercase tracking-[0.16em] text-zinc-400">
-        <p>© 2024 GoalCrystal Predictor. Tất cả dữ liệu được mã hóa.</p>
+        <p>2024 GoalCrystal Predictor. All data is encrypted.</p>
 
         <div className="flex gap-10">
-          <span>Điều khoản</span>
-          <span>Bảo mật</span>
-          <span>Trạng thái hệ thống</span>
+          <span>Terms</span>
+          <span>Security</span>
+          <span>System Status</span>
         </div>
       </footer>
     </main>

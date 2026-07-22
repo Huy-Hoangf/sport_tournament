@@ -4,8 +4,7 @@ import { useState } from "react";
 import { useRouter } from "next/navigation";
 import { ArrowLeft, KeyRound, Lock, Mail } from "lucide-react";
 import Link from "next/link";
-
-const ADMIN_EMAIL = "son.vu@twenty-tech.com";
+import { apiRequest } from "../api";
 
 export default function ForgotPasswordPage() {
   const router = useRouter();
@@ -14,43 +13,62 @@ export default function ForgotPasswordPage() {
   const [isVerified, setIsVerified] = useState(false);
   const [newPassword, setNewPassword] = useState("");
   const [confirmPassword, setConfirmPassword] = useState("");
+  const [isLoading, setIsLoading] = useState(false);
 
-  function verifyEmail() {
+  async function verifyEmail() {
     const normalizedEmail = email.trim().toLowerCase();
 
-    if (!normalizedEmail.endsWith("@twenty-tech.com")) {
-      alert("Email phải thuộc domain @twenty-tech.com");
+    if (!normalizedEmail) {
+      alert("Please enter admin email.");
       return;
     }
 
-    if (normalizedEmail !== ADMIN_EMAIL) {
-      alert("Chỉ admin mới được reset password ở màn demo này.");
-      return;
-    }
+    setIsLoading(true);
 
-    setIsVerified(true);
+    try {
+      await apiRequest<{ message: string; email: string }>("/auth/forgot-password", {
+        method: "POST",
+        body: JSON.stringify({ email: normalizedEmail }),
+      });
+
+      setEmail(normalizedEmail);
+      setIsVerified(true);
+    } catch (error) {
+      alert(error instanceof Error ? error.message : "Email verification failed.");
+    } finally {
+      setIsLoading(false);
+    }
   }
 
-  function resetPassword() {
+  async function resetPassword() {
     if (!newPassword || !confirmPassword) {
-      alert("Vui lòng nhập đầy đủ mật khẩu mới.");
-      return;
-    }
-
-    if (newPassword.length < 6) {
-      alert("Mật khẩu phải có ít nhất 6 ký tự.");
+      alert("Please enter and confirm the new password.");
       return;
     }
 
     if (newPassword !== confirmPassword) {
-      alert("Mật khẩu xác nhận không khớp.");
+      alert("Confirm password does not match.");
       return;
     }
 
-    localStorage.setItem("adminPassword", newPassword);
+    setIsLoading(true);
 
-    alert("Đổi mật khẩu admin thành công.");
-    router.push("/login");
+    try {
+      await apiRequest<{ message: string }>("/auth/reset-password", {
+        method: "POST",
+        body: JSON.stringify({
+          email,
+          newPassword,
+        }),
+      });
+
+      alert("Admin password reset successfully.");
+      router.push("/login");
+    } catch (error) {
+      alert(error instanceof Error ? error.message : "Reset password failed.");
+    } finally {
+      setIsLoading(false);
+    }
   }
 
   return (
@@ -76,7 +94,7 @@ export default function ForgotPasswordPage() {
           </h2>
 
           <p className="mb-10 text-center text-zinc-400">
-            Only For Admin
+            Only for admin
           </p>
 
           <label className="mb-3 flex items-center gap-2 text-sm font-bold uppercase tracking-[0.18em] text-zinc-400">
@@ -88,16 +106,17 @@ export default function ForgotPasswordPage() {
             value={email}
             onChange={(event) => setEmail(event.target.value)}
             disabled={isVerified}
-            placeholder="Admin Email"
+            placeholder="son.vu@twenty-tech.com"
             className="mb-6 h-[64px] w-full rounded border border-white/10 bg-[#080f0f] px-5 text-lg font-bold text-zinc-200 outline-none transition placeholder:text-zinc-600 focus:border-[#8ed8ec88] disabled:opacity-60"
           />
 
           {!isVerified ? (
             <button
               onClick={verifyEmail}
-              className="flex h-[64px] w-full items-center justify-center gap-3 rounded bg-[#8ed8ec] text-[16px] font-black uppercase tracking-[0.22em] text-[#122226] shadow-[0_0_22px_rgba(142,216,236,0.35)] transition hover:bg-[#a4e7f5]"
+              disabled={isLoading}
+              className="flex h-[64px] w-full items-center justify-center gap-3 rounded bg-[#8ed8ec] text-[16px] font-black uppercase tracking-[0.22em] text-[#122226] shadow-[0_0_22px_rgba(142,216,236,0.35)] transition hover:bg-[#a4e7f5] disabled:opacity-60"
             >
-              Verify Email
+              {isLoading ? "Verifying..." : "Verify Email"}
               <KeyRound size={22} />
             </button>
           ) : (
@@ -128,9 +147,10 @@ export default function ForgotPasswordPage() {
 
               <button
                 onClick={resetPassword}
-                className="flex h-[64px] w-full items-center justify-center gap-3 rounded bg-[#8ed8ec] text-[16px] font-black uppercase tracking-[0.22em] text-[#122226] shadow-[0_0_22px_rgba(142,216,236,0.35)] transition hover:bg-[#a4e7f5]"
+                disabled={isLoading}
+                className="flex h-[64px] w-full items-center justify-center gap-3 rounded bg-[#8ed8ec] text-[16px] font-black uppercase tracking-[0.22em] text-[#122226] shadow-[0_0_22px_rgba(142,216,236,0.35)] transition hover:bg-[#a4e7f5] disabled:opacity-60"
               >
-                Reset Password
+                {isLoading ? "Resetting..." : "Reset Password"}
                 <KeyRound size={22} />
               </button>
             </>
