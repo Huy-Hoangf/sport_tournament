@@ -56,7 +56,13 @@ type CreateUserResponse = {
 export default function AdminPage() {
   const router = useRouter();
   const [players, setPlayers] = useState<Player[]>([]);
-  const [currentUser, setCurrentUser] = useState<CurrentUser | null>(null);
+  const [currentUser] = useState<CurrentUser | null>(() => {
+    if (typeof window === "undefined") {
+      return null;
+    }
+
+    return readCurrentUser() as CurrentUser | null;
+  });
   const [fullName, setFullName] = useState("");
   const [email, setEmail] = useState("");
   const [isLoading, setIsLoading] = useState(false);
@@ -77,7 +83,6 @@ export default function AdminPage() {
       return;
     }
 
-    setCurrentUser(currentUser);
     void fetchPlayers();
 
     function handleStorage(event: StorageEvent) {
