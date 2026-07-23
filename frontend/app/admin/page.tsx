@@ -264,7 +264,6 @@ export default function AdminPage() {
 
           <div className="ml-auto flex items-center gap-7">
             <Bell size={22} />
-            <Settings size={23} />
             <div className="hidden h-10 w-px bg-[#3c5056] md:block" />
             <div className="flex items-center gap-3 border-l border-[#3c5056] pl-6">
               <div className="text-right">
@@ -485,7 +484,7 @@ export default function AdminPage() {
             className="mb-4 h-[54px] w-full rounded border border-white/10 bg-[#070d0d] px-4 text-zinc-100 outline-none focus:border-[#8ed8ec]"
           />
 
-          <p className="mb-6 text-sm text-zinc-400">Default Password: 123456</p>
+          <p className="mb-6 text-sm text-zinc-400">Default Password</p>
 
           <ModalActions
             cancel={() => setOpenModal(null)}
