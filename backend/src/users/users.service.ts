@@ -28,19 +28,31 @@ export class UsersService implements OnModuleInit {
   }
 
   async findAll() {
-    return this.usersRepository.find({
-      select: {
-        id: true,
-        email: true,
-        fullName: true,
-        role: true,
-        createdAt: true,
-        updatedAt: true,
-      },
-      order: {
-        createdAt: 'DESC',
-      },
-    });
+    const rows = await this.usersRepository.query(`
+      SELECT
+        u.id,
+        u.email,
+        u.full_name AS fullName,
+        u.role,
+        u.created_at AS createdAt,
+        u.updated_at AS updatedAt,
+        COUNT(DISTINCT tp.tournament_id) AS eventsCount
+      FROM users u
+      LEFT JOIN tournament_participants tp ON tp.user_id = u.id
+      GROUP BY
+        u.id,
+        u.email,
+        u.full_name,
+        u.role,
+        u.created_at,
+        u.updated_at
+      ORDER BY u.created_at DESC
+    `);
+
+    return rows.map((row) => ({
+      ...row,
+      eventsCount: Number(row.eventsCount ?? 0),
+    }));
   }
 
   async findByEmail(email: string) {

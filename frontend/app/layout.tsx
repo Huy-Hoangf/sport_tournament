@@ -1,11 +1,5 @@
 import type { Metadata } from "next";
-import { Rajdhani } from "next/font/google";
 import "./globals.css";
-
-const rajdhani = Rajdhani({
-  subsets: ["latin", "latin-ext"],
-  weight: ["400", "500", "600", "700"],
-});
 
 export const metadata: Metadata = {
   title: "GoalCrystal Auth",
@@ -19,9 +13,7 @@ export default function RootLayout({
 }>) {
   return (
     <html lang="vi">
-      <body suppressHydrationWarning className={rajdhani.className}>
-        {children}
-      </body>
+      <body suppressHydrationWarning>{children}</body>
     </html>
   );
 }

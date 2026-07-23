@@ -19,7 +19,7 @@ export default function ForgotPasswordPage() {
     const normalizedEmail = email.trim().toLowerCase();
 
     if (!normalizedEmail) {
-      alert("Please enter admin email.");
+      alert("Please enter your company email.");
       return;
     }
 
@@ -62,7 +62,7 @@ export default function ForgotPasswordPage() {
         }),
       });
 
-      alert("Admin password reset successfully.");
+      alert("Password reset successfully.");
       router.push("/login");
     } catch (error) {
       alert(error instanceof Error ? error.message : "Reset password failed.");
@@ -94,19 +94,19 @@ export default function ForgotPasswordPage() {
           </h2>
 
           <p className="mb-10 text-center text-zinc-400">
-            Only for admin
+            Reset password for admin or player accounts
           </p>
 
           <label className="mb-3 flex items-center gap-2 text-sm font-bold uppercase tracking-[0.18em] text-zinc-400">
             <Mail size={17} />
-            Admin Email
+            Company Email
           </label>
 
           <input
             value={email}
             onChange={(event) => setEmail(event.target.value)}
             disabled={isVerified}
-            placeholder="son.vu@twenty-tech.com"
+            placeholder="YOUR COMPANY EMAIL"
             className="mb-6 h-[64px] w-full rounded border border-white/10 bg-[#080f0f] px-5 text-lg font-bold text-zinc-200 outline-none transition placeholder:text-zinc-600 focus:border-[#8ed8ec88] disabled:opacity-60"
           />
 

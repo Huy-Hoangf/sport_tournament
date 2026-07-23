@@ -7,7 +7,6 @@ import * as bcrypt from 'bcrypt';
 import { UsersService } from '../users/users.service';
 import {
   ADMIN_EMAIL,
-  DEFAULT_ADMIN_PASSWORD,
   isTwentyTechEmail,
   normalizeEmail,
 } from './auth.constants';
@@ -43,27 +42,29 @@ export class AuthService {
     };
   }
 
-  verifyForgotPasswordEmail(email: string) {
+  async verifyForgotPasswordEmail(email: string) {
     const normalizedEmail = normalizeEmail(email);
 
     if (!isTwentyTechEmail(normalizedEmail)) {
       throw new BadRequestException('Email must use @twenty-tech.com.');
     }
 
-    if (normalizedEmail !== ADMIN_EMAIL) {
-      throw new BadRequestException('Only the admin account can use this flow.');
+    const user = await this.usersService.findByEmail(normalizedEmail);
+
+    if (!user) {
+      throw new BadRequestException('Account does not exist.');
     }
 
     return {
-      message: 'Admin email verified.',
+      message: 'Email verified.',
       email: normalizedEmail,
     };
   }
 
-  async resetAdminPassword(email: string, newPassword: string) {
+  async resetPassword(email: string, newPassword: string) {
     const normalizedEmail = normalizeEmail(email);
 
-    this.verifyForgotPasswordEmail(normalizedEmail);
+    await this.verifyForgotPasswordEmail(normalizedEmail);
 
     if (!newPassword || newPassword.length < 6) {
       throw new BadRequestException(
@@ -77,13 +78,50 @@ export class AuthService {
     );
 
     if (!updatedUser) {
-      throw new BadRequestException(
-        `Admin user does not exist. Seed ${ADMIN_EMAIL} with default password ${DEFAULT_ADMIN_PASSWORD}.`,
-      );
+      throw new BadRequestException('Account does not exist.');
     }
 
     return {
-      message: 'Admin password reset successfully.',
+      message: 'Password reset successfully.',
+    };
+  }
+
+  async changePassword(
+    email: string,
+    currentPassword: string,
+    newPassword: string,
+  ) {
+    const normalizedEmail = normalizeEmail(email);
+
+    if (!isTwentyTechEmail(normalizedEmail)) {
+      throw new BadRequestException('Email must use @twenty-tech.com.');
+    }
+
+    if (!newPassword || newPassword.length < 6) {
+      throw new BadRequestException(
+        'Password must contain at least 6 characters.',
+      );
+    }
+
+    const user = await this.usersService.findByEmail(normalizedEmail);
+
+    if (!user || !user.passwordHash) {
+      throw new UnauthorizedException('Invalid user.');
+    }
+
+    const passwordMatched = await bcrypt.compare(
+      currentPassword,
+      user.passwordHash,
+    );
+
+    if (!passwordMatched) {
+      throw new UnauthorizedException('Current password is incorrect.');
+    }
+
+    await this.usersService.updatePassword(normalizedEmail, newPassword);
+
+    return {
+      message: 'Password changed successfully.',
     };
   }
 }

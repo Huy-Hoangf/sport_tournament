@@ -14,7 +14,7 @@ describe('AuthController', () => {
           useValue: {
             login: jest.fn(),
             verifyForgotPasswordEmail: jest.fn(),
-            resetAdminPassword: jest.fn(),
+            resetPassword: jest.fn(),
           },
         },
       ],

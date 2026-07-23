@@ -16,6 +16,10 @@ IF OBJECT_ID('sp_calculate_match_points', 'P') IS NOT NULL
 GO
 
 -- Drop views
+IF OBJECT_ID('vw_user_admin_summary', 'V') IS NOT NULL
+    DROP VIEW vw_user_admin_summary;
+GO
+
 IF OBJECT_ID('vw_leaderboard', 'V') IS NOT NULL
     DROP VIEW vw_leaderboard;
 GO
@@ -299,6 +303,26 @@ ON predictions(user_id);
 
 CREATE INDEX idx_leaderboard_snapshots_tournament_date_rank
 ON leaderboard_snapshots(tournament_id, snapshot_date, rank_no);
+GO
+
+CREATE VIEW vw_user_admin_summary AS
+SELECT
+    u.id,
+    u.email,
+    u.full_name,
+    u.role,
+    u.created_at,
+    u.updated_at,
+    COUNT(DISTINCT tp.tournament_id) AS events_count
+FROM users u
+LEFT JOIN tournament_participants tp ON tp.user_id = u.id
+GROUP BY
+    u.id,
+    u.email,
+    u.full_name,
+    u.role,
+    u.created_at,
+    u.updated_at;
 GO
 
 CREATE VIEW vw_leaderboard AS
