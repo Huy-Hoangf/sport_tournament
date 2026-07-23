@@ -114,15 +114,28 @@ export class UsersService implements OnModuleInit {
     };
   }
 
-  async renamePlayerByAdmin(id: number, fullName: string) {
-    const name = fullName.trim();
+  async renamePlayerByAdmin(data: {
+    id: number;
+    email: string;
+    fullName: string;
+  }) {
+    const name = data.fullName.trim();
+    const email = normalizeEmail(data.email);
 
     if (!name) {
       throw new BadRequestException('Full name is required.');
     }
 
+    if (!isTwentyTechEmail(email)) {
+      throw new BadRequestException('Email must use @twenty-tech.com.');
+    }
+
+    if (email === ADMIN_EMAIL) {
+      throw new BadRequestException('Cannot use the admin email.');
+    }
+
     const user = await this.usersRepository.findOne({
-      where: { id },
+      where: { id: data.id },
     });
 
     if (!user) {
@@ -133,7 +146,14 @@ export class UsersService implements OnModuleInit {
       throw new BadRequestException('Cannot rename the admin account.');
     }
 
+    const existingUser = await this.findByEmail(email);
+
+    if (existingUser && existingUser.id !== user.id) {
+      throw new ConflictException('Email already exists.');
+    }
+
     user.fullName = name;
+    user.email = email;
     const savedUser = await this.usersRepository.save(user);
 
     return {

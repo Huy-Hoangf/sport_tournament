@@ -4,6 +4,7 @@ import { apiRequest, type CurrentUser } from "../api";
 import { logoutAll, readCurrentUser } from "../auth-sync";
 import { useEffect, useMemo, useState } from "react";
 import { useRouter } from "next/navigation";
+import * as XLSX from "xlsx";
 import {
   BarChart3,
   Bell,
@@ -53,7 +54,13 @@ type CreateUserResponse = {
   };
 };
 
+type ImportedPlayer = {
+  fullName: string;
+  email: string;
+};
+
 const PLAYERS_PER_PAGE = 5;
+const COMPANY_EMAIL_DOMAIN = "@twenty-tech.com";
 
 export default function AdminPage() {
   const router = useRouter();
@@ -73,6 +80,9 @@ export default function AdminPage() {
   const [currentPage, setCurrentPage] = useState(1);
   const [selectedPlayer, setSelectedPlayer] = useState<Player | null>(null);
   const [renameFullName, setRenameFullName] = useState("");
+  const [renameEmail, setRenameEmail] = useState("");
+  const [importFileName, setImportFileName] = useState("");
+  const [importPlayers, setImportPlayers] = useState<ImportedPlayer[]>([]);
   const [openModal, setOpenModal] = useState<
     | "createUser"
     | "createUserFromList"
@@ -196,6 +206,11 @@ export default function AdminPage() {
       return;
     }
 
+    if (!renameEmail.trim()) {
+      alert("Please enter player email.");
+      return;
+    }
+
     setIsLoading(true);
 
     try {
@@ -205,20 +220,105 @@ export default function AdminPage() {
           method: "PATCH",
           body: JSON.stringify({
             fullName: renameFullName.trim(),
+            email: renameEmail.trim().toLowerCase(),
           }),
         },
       );
 
-      alert("Player renamed successfully.");
+      alert("Player updated successfully.");
       setSelectedPlayer(null);
       setRenameFullName("");
+      setRenameEmail("");
       setOpenModal(null);
       await fetchPlayers();
     } catch (error) {
-      alert(error instanceof Error ? error.message : "Rename player failed.");
+      alert(error instanceof Error ? error.message : "Update player failed.");
     } finally {
       setIsLoading(false);
     }
+  }
+
+  async function handleImportFile(file: File | null) {
+    if (!file) {
+      setImportFileName("");
+      setImportPlayers([]);
+      return;
+    }
+
+    try {
+      const buffer = await file.arrayBuffer();
+      const workbook = XLSX.read(buffer, { type: "array" });
+      const preferredSheet =
+        workbook.SheetNames.find((sheetName) => sheetName.includes("Dự đoán")) ??
+        workbook.SheetNames[0];
+      const worksheet = workbook.Sheets[preferredSheet];
+      const rows = XLSX.utils.sheet_to_json<unknown[]>(worksheet, {
+        header: 1,
+        blankrows: false,
+      });
+      const imported = parsePlayersFromRows(rows, players.map((player) => player.email));
+
+      setImportFileName(file.name);
+      setImportPlayers(imported);
+
+      if (imported.length === 0) {
+        alert("Cannot find player names in this Excel file.");
+      }
+    } catch {
+      alert("Cannot read this Excel file.");
+      setImportFileName("");
+      setImportPlayers([]);
+    }
+  }
+
+  async function importPlayersFromList() {
+    if (!isAdmin) {
+      alert("Only admin can import players.");
+      return;
+    }
+
+    if (importPlayers.length === 0) {
+      alert("Please choose an Excel file first.");
+      return;
+    }
+
+    setIsLoading(true);
+
+    let successCount = 0;
+    const failedRows: string[] = [];
+
+    for (const player of importPlayers) {
+      try {
+        await apiRequest<CreateUserResponse>("/users/admin/create", {
+          method: "POST",
+          body: JSON.stringify(player),
+        });
+        successCount += 1;
+      } catch (error) {
+        failedRows.push(
+          `${player.fullName}: ${
+            error instanceof Error ? error.message : "Import failed"
+          }`,
+        );
+      }
+    }
+
+    setIsLoading(false);
+    await fetchPlayers();
+
+    if (failedRows.length > 0) {
+      alert(
+        `Imported ${successCount}/${importPlayers.length} players.\nFailed:\n${failedRows.join(
+          "\n",
+        )}`,
+      );
+      return;
+    }
+
+    alert(`Imported ${successCount} players. Default password: 123456`);
+    setImportFileName("");
+    setImportPlayers([]);
+    setOpenModal(null);
   }
 
   async function deletePlayer(player: Player) {
@@ -538,6 +638,7 @@ export default function AdminPage() {
 
                             setSelectedPlayer(player);
                             setRenameFullName(player.fullName);
+                            setRenameEmail(player.email);
                             setOpenModal("renamePlayer");
                           }}
                           title="Rename player"
@@ -642,15 +743,54 @@ export default function AdminPage() {
 
       {openModal === "createUserFromList" && (
         <Modal title="Add Player From List">
-          <p className="mb-6 text-base text-zinc-400">Import From Excel</p>
+          <label className="mb-4 flex min-h-[92px] cursor-pointer flex-col items-center justify-center rounded border border-dashed border-[#8ed8ec66] bg-[#070d0d] px-4 text-center text-zinc-300 transition hover:border-[#8ed8ec]">
+            <span className="text-sm font-black uppercase tracking-[0.16em] text-[#8ed8ec]">
+              Choose Excel File
+            </span>
+            <span className="mt-2 text-sm text-zinc-500">
+              {importFileName || ".xlsx file with name/email columns"}
+            </span>
+            <input
+              type="file"
+              accept=".xlsx,.xls"
+              className="hidden"
+              onChange={(event) => {
+                void handleImportFile(event.target.files?.[0] ?? null);
+              }}
+            />
+          </label>
+
+          <p className="mb-3 text-sm text-zinc-400">
+            If email is empty, it will be generated from player name
+            {COMPANY_EMAIL_DOMAIN}.
+          </p>
+
+          {importPlayers.length > 0 && (
+            <div className="mb-6 max-h-[190px] overflow-auto rounded border border-white/10 bg-[#070d0d]">
+              <div className="border-b border-white/10 px-4 py-3 text-sm font-black text-[#8ed8ec]">
+                Preview: {importPlayers.length} players
+              </div>
+              {importPlayers.slice(0, 6).map((player) => (
+                <div
+                  key={player.email}
+                  className="border-b border-white/5 px-4 py-3 text-sm last:border-b-0"
+                >
+                  <p className="font-black text-white">{player.fullName}</p>
+                  <p className="text-zinc-400">{player.email}</p>
+                </div>
+              ))}
+            </div>
+          )}
 
           <ModalActions
-            cancel={() => setOpenModal(null)}
-            confirm={() => {
-              alert("this feature is not available");
+            cancel={() => {
+              setImportFileName("");
+              setImportPlayers([]);
               setOpenModal(null);
             }}
-            confirmText="Import"
+            confirm={importPlayersFromList}
+            confirmText={isLoading ? "Importing..." : "Import"}
+            disabled={isLoading}
           />
         </Modal>
       )}
@@ -699,6 +839,13 @@ export default function AdminPage() {
             value={renameFullName}
             onChange={(event) => setRenameFullName(event.target.value)}
             placeholder="New player name"
+            className="mb-4 h-[54px] w-full rounded border border-white/10 bg-[#070d0d] px-4 text-zinc-100 outline-none focus:border-[#8ed8ec]"
+          />
+
+          <input
+            value={renameEmail}
+            onChange={(event) => setRenameEmail(event.target.value)}
+            placeholder="name@twenty-tech.com"
             className="mb-6 h-[54px] w-full rounded border border-white/10 bg-[#070d0d] px-4 text-zinc-100 outline-none focus:border-[#8ed8ec]"
           />
 
@@ -706,10 +853,11 @@ export default function AdminPage() {
             cancel={() => {
               setSelectedPlayer(null);
               setRenameFullName("");
+              setRenameEmail("");
               setOpenModal(null);
             }}
             confirm={renamePlayer}
-            confirmText={isLoading ? "Saving..." : "Save Name"}
+            confirmText={isLoading ? "Saving..." : "Save Player"}
             disabled={isLoading}
           />
         </Modal>
@@ -730,6 +878,125 @@ function mapUserToPlayer(user: BackendUser): Player {
     status: user.role === "ADMIN" ? "ACTIVE" : "ACTIVE",
     events: user.eventsCount ?? 0,
   };
+}
+
+function parsePlayersFromRows(
+  rows: unknown[][],
+  existingEmails: string[],
+): ImportedPlayer[] {
+  const usedEmails = new Set(existingEmails.map((email) => email.toLowerCase()));
+  const headerIndex = rows.findIndex((row) =>
+    row.some((cell) => {
+      const value = normalizeHeader(cell);
+      return (
+        value === "email" ||
+        value === "mail" ||
+        value === "name" ||
+        value === "full name" ||
+        value === "player" ||
+        value === "nguoi choi"
+      );
+    }),
+  );
+  const importedPlayers: ImportedPlayer[] = [];
+
+  if (headerIndex >= 0) {
+    const headers = rows[headerIndex].map(normalizeHeader);
+    const nameColumn = headers.findIndex((header) =>
+      ["name", "full name", "player", "nguoi choi"].includes(header),
+    );
+    const emailColumn = headers.findIndex((header) =>
+      ["email", "mail"].includes(header),
+    );
+
+    for (const row of rows.slice(headerIndex + 1)) {
+      const fullName = readCell(row[nameColumn]);
+
+      if (!fullName) {
+        continue;
+      }
+
+      const rawEmail = emailColumn >= 0 ? readCell(row[emailColumn]) : "";
+      const email = buildImportEmail(fullName, rawEmail, usedEmails);
+
+      importedPlayers.push({ fullName, email });
+    }
+
+    return importedPlayers;
+  }
+
+  const firstColumnRows = rows.slice(1);
+
+  for (const row of firstColumnRows) {
+    const fullName = readCell(row[0]);
+
+    if (!fullName || fullName.startsWith("M")) {
+      continue;
+    }
+
+    const email = buildImportEmail(fullName, "", usedEmails);
+    importedPlayers.push({ fullName, email });
+  }
+
+  return importedPlayers;
+}
+
+function buildImportEmail(
+  fullName: string,
+  rawEmail: string,
+  usedEmails: Set<string>,
+) {
+  const normalizedRawEmail = rawEmail.trim().toLowerCase();
+  const generatedLocalPart = slugifyName(fullName) || "player";
+  const baseEmail =
+    normalizedRawEmail || `${generatedLocalPart}${COMPANY_EMAIL_DOMAIN}`;
+  const [rawLocalPart] = baseEmail.split("@");
+  const localPart = rawLocalPart || generatedLocalPart;
+  let email = baseEmail.endsWith(COMPANY_EMAIL_DOMAIN)
+    ? baseEmail
+    : `${localPart}${COMPANY_EMAIL_DOMAIN}`;
+  let duplicateIndex = 2;
+
+  while (usedEmails.has(email)) {
+    email = `${localPart}${duplicateIndex}${COMPANY_EMAIL_DOMAIN}`;
+    duplicateIndex += 1;
+  }
+
+  usedEmails.add(email);
+  return email;
+}
+
+function slugifyName(name: string) {
+  const withoutVietnameseD = name.replace(/đ/g, "d").replace(/Đ/g, "D");
+  const normalized = withoutVietnameseD
+    .normalize("NFD")
+    .replace(/[\u0300-\u036f]/g, "");
+  const words = normalized
+    .toLowerCase()
+    .replace(/[^a-z0-9\s]/g, " ")
+    .trim()
+    .split(/\s+/)
+    .filter(Boolean);
+
+  return words.join(".");
+}
+
+function normalizeHeader(value: unknown) {
+  return readCell(value)
+    .replace(/đ/g, "d")
+    .replace(/Đ/g, "D")
+    .normalize("NFD")
+    .replace(/[\u0300-\u036f]/g, "")
+    .toLowerCase()
+    .trim();
+}
+
+function readCell(value: unknown) {
+  if (value === null || value === undefined) {
+    return "";
+  }
+
+  return String(value).trim();
 }
 
 function MenuItem({

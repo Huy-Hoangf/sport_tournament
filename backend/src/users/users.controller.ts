@@ -25,15 +25,16 @@ export class UsersController {
   @Patch('admin/:id/rename')
   async renamePlayerByAdmin(
     @Param('id') id: string,
-    @Body() body: { fullName: string },
+    @Body() body: { email: string; fullName: string },
   ) {
-    const user = await this.usersService.renamePlayerByAdmin(
-      Number(id),
-      body.fullName,
-    );
+    const user = await this.usersService.renamePlayerByAdmin({
+      id: Number(id),
+      email: body.email,
+      fullName: body.fullName,
+    });
 
     return {
-      message: 'User renamed successfully.',
+      message: 'User updated successfully.',
       user,
     };
   }
