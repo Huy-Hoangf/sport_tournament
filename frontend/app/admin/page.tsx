@@ -1081,7 +1081,7 @@ function parsePlayersFromRows(
     for (const row of rows.slice(headerIndex + 1)) {
       const fullName = readCell(row[nameColumn]);
 
-      if (!fullName) {
+      if (!looksLikePlayerName(fullName)) {
         continue;
       }
 
@@ -1170,10 +1170,13 @@ function isNameHeader(header: string) {
     "user name",
     "username",
     "ho ten",
+    "ho va ten",
     "hoten",
     "ten",
     "ten nguoi choi",
     "nguoi choi",
+    "ten nhan vien",
+    "nhan vien",
     "ten thanh vien",
     "thanh vien",
   ].includes(header);
@@ -1191,6 +1194,8 @@ function looksLikePlayerName(value: string) {
   }
 
   const normalized = normalizeHeader(value);
+  const wordCount = normalized.split(/\s+/).filter(Boolean).length;
+  const punctuationCount = (value.match(/[.!?:;,/\\|()[\]{}]/g) ?? []).length;
   const blockedValues = new Set([
     "name",
     "full name",
@@ -1205,9 +1210,27 @@ function looksLikePlayerName(value: string) {
     "ho ten",
     "ten",
     "nguoi choi",
+    "toan bo nhan vien",
+    "chon doi",
+    "cau thu xinh",
   ]);
 
   if (blockedValues.has(normalized) || /^\d+$/.test(normalized)) {
+    return false;
+  }
+
+  if (
+    value.length > 48 ||
+    wordCount > 6 ||
+    punctuationCount > 1 ||
+    normalized.includes("khong can biet") ||
+    normalized.includes("chon doi") ||
+    normalized.includes("du doan") ||
+    normalized.includes("minigame") ||
+    normalized.includes("world cup") ||
+    normalized.includes("cau thu xinh") ||
+    normalized.includes("hop ly")
+  ) {
     return false;
   }
 
