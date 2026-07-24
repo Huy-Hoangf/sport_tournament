@@ -869,7 +869,7 @@ export default function AdminPage() {
               Choose Excel File
             </span>
             <span className="mt-2 text-sm text-zinc-500">
-              {importFileName || ".xlsx file with name/email columns"}
+              {importFileName || ".xlsx with name/full name/ho ten/email"}
             </span>
             <input
               type="file"
@@ -1057,26 +1057,19 @@ function parsePlayersFromRows(
   const headerIndex = rows.findIndex((row) =>
     row.some((cell) => {
       const value = normalizeHeader(cell);
-      return (
-        value === "email" ||
-        value === "mail" ||
-        value === "name" ||
-        value === "full name" ||
-        value === "player" ||
-        value === "nguoi choi"
-      );
+      return isEmailHeader(value) || isNameHeader(value);
     }),
   );
   const importedPlayers: ImportedPlayer[] = [];
 
   if (headerIndex >= 0) {
     const headers = rows[headerIndex].map(normalizeHeader);
-    const nameColumn = headers.findIndex((header) =>
-      ["name", "full name", "player", "nguoi choi"].includes(header),
-    );
-    const emailColumn = headers.findIndex((header) =>
-      ["email", "mail"].includes(header),
-    );
+    const nameColumn = headers.findIndex(isNameHeader);
+    const emailColumn = headers.findIndex(isEmailHeader);
+
+    if (nameColumn < 0) {
+      return collectPlayersFromBestNameColumn(rows, usedNames, usedEmails);
+    }
 
     for (const row of rows.slice(headerIndex + 1)) {
       const fullName = readCell(row[nameColumn]);
@@ -1105,12 +1098,36 @@ function parsePlayersFromRows(
     return importedPlayers;
   }
 
-  const firstColumnRows = rows.slice(1);
+  return collectPlayersFromBestNameColumn(rows, usedNames, usedEmails);
+}
 
-  for (const row of firstColumnRows) {
-    const fullName = readCell(row[0]);
+function collectPlayersFromBestNameColumn(
+  rows: unknown[][],
+  usedNames: Set<string>,
+  usedEmails: Set<string>,
+): ImportedPlayer[] {
+  const columnCount = Math.max(0, ...rows.map((row) => row.length));
+  let bestColumn = 0;
+  let bestScore = 0;
 
-    if (!fullName || fullName.startsWith("M")) {
+  for (let column = 0; column < columnCount; column += 1) {
+    const score = rows.reduce((total, row) => {
+      const value = readCell(row[column]);
+      return total + (looksLikePlayerName(value) ? 1 : 0);
+    }, 0);
+
+    if (score > bestScore) {
+      bestColumn = column;
+      bestScore = score;
+    }
+  }
+
+  const importedPlayers: ImportedPlayer[] = [];
+
+  for (const row of rows) {
+    const fullName = readCell(row[bestColumn]);
+
+    if (!looksLikePlayerName(fullName)) {
       continue;
     }
 
@@ -1131,6 +1148,63 @@ function parsePlayersFromRows(
   }
 
   return importedPlayers;
+}
+
+function isNameHeader(header: string) {
+  return [
+    "name",
+    "full name",
+    "fullname",
+    "player",
+    "player name",
+    "member",
+    "member name",
+    "user",
+    "user name",
+    "username",
+    "ho ten",
+    "hoten",
+    "ten",
+    "ten nguoi choi",
+    "nguoi choi",
+    "ten thanh vien",
+    "thanh vien",
+  ].includes(header);
+}
+
+function isEmailHeader(header: string) {
+  return ["email", "mail", "e-mail", "gmail", "company email"].includes(
+    header,
+  );
+}
+
+function looksLikePlayerName(value: string) {
+  if (!value || value.length < 2 || value.includes("@")) {
+    return false;
+  }
+
+  const normalized = normalizeHeader(value);
+  const blockedValues = new Set([
+    "name",
+    "full name",
+    "player",
+    "email",
+    "mail",
+    "stt",
+    "no",
+    "id",
+    "ma",
+    "member id",
+    "ho ten",
+    "ten",
+    "nguoi choi",
+  ]);
+
+  if (blockedValues.has(normalized) || /^\d+$/.test(normalized)) {
+    return false;
+  }
+
+  return /[a-zA-Z\u00C0-\u1EF9]/.test(value);
 }
 
 function buildImportEmail(
