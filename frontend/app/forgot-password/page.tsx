@@ -88,7 +88,7 @@ export default function ForgotPasswordPage() {
       <NoticeBanner notice={notice} onClose={() => setNotice(null)} />
       <header className="flex h-[90px] shrink-0 items-center justify-between border-b border-white/10 px-8">
         <h1 className="text-[30px] font-black tracking-[-0.06em] text-[#9ddff2] drop-shadow-[0_0_10px_rgba(142,216,236,0.45)]">
-          GOALCRYSTAL
+          TWENTY-TECH
         </h1>
 
         <Link

@@ -2,7 +2,7 @@ import type { Metadata } from "next";
 import "./globals.css";
 
 export const metadata: Metadata = {
-  title: "GoalCrystal Auth",
+  title: "TWENTY-TECH Auth",
   description: "Authentication UI",
 };
 
