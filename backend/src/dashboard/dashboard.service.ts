@@ -54,6 +54,8 @@ export class DashboardService {
       tournamentMatches: tournamentMatches.map((row) => ({
         id: Number(row.id),
         tournamentId: Number(row.tournamentId),
+        homeName: row.homeTeam ?? 'TBD',
+        awayName: row.awayTeam ?? 'TBD',
         encounter: `${row.homeTeam ?? 'TBD'} vs ${row.awayTeam ?? 'TBD'}`,
         tournamentName: row.tournamentName,
         scheduledTime: row.scheduledTime,
@@ -63,6 +65,8 @@ export class DashboardService {
       })),
       upcomingSchedule: upcomingSchedule.map((row) => ({
         id: Number(row.id),
+        homeName: row.homeTeam ?? 'TBD',
+        awayName: row.awayTeam ?? 'TBD',
         encounter: `${row.homeTeam ?? 'TBD'} vs ${row.awayTeam ?? 'TBD'}`,
         tournamentName: row.tournamentName,
         scheduledTime: row.scheduledTime,

@@ -65,6 +65,8 @@ type TournamentForm = {
 type MatchRow = {
   id: number;
   tournamentId?: number;
+  homeName?: string;
+  awayName?: string;
   encounter: string;
   tournamentName: string;
   scheduledTime: string;
@@ -743,6 +745,8 @@ function TournamentMatchDetails({
   tournament: TournamentRow;
   matches: MatchRow[];
 }) {
+  const isF1 = tournament.sportType === "F1";
+
   return (
     <div className="px-6 py-5">
       <div className="mb-4 flex flex-wrap items-center justify-between gap-3">
@@ -766,8 +770,12 @@ function TournamentMatchDetails({
         <table className="w-full min-w-[860px] table-fixed text-left">
           <thead className="h-[54px] border-b border-[#3a4d54] bg-[#14272e] text-xs uppercase tracking-[0.08em] text-[#d5e0e3]">
             <tr>
-              <th className="px-5 py-3">Teams / Players</th>
-              <th className="w-48 px-4 py-3">Match Time</th>
+              <th className="px-5 py-3">
+                {isF1 ? "Session / Circuit" : "Teams / Players"}
+              </th>
+              <th className="w-48 px-4 py-3">
+                {isF1 ? "Session Time" : "Match Time"}
+              </th>
               <th className="w-48 px-4 py-3">Prediction Lock</th>
               <th className="w-40 px-4 py-3">Source</th>
               <th className="w-32 px-4 py-3">Status</th>
@@ -780,7 +788,16 @@ function TournamentMatchDetails({
                 className="h-[64px] border-b border-[#243c43] bg-[#0d252d] text-sm last:border-b-0"
               >
                 <td className="px-5 font-black text-white">
-                  {match.encounter}
+                  {isF1 ? (
+                    <div>
+                      <p>{match.homeName ?? match.encounter}</p>
+                      <p className="mt-1 text-xs font-bold uppercase tracking-[0.08em] text-[#9fb2b8]">
+                        Circuit: {match.awayName ?? "TBD"}
+                      </p>
+                    </div>
+                  ) : (
+                    match.encounter
+                  )}
                 </td>
                 <td className="px-4 text-white">
                   {formatDateTime(match.scheduledTime)}
