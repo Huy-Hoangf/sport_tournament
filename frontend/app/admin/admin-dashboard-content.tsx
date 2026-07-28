@@ -73,6 +73,18 @@ type FootballCompetitionOption = {
   type: string;
 };
 
+type ImportSport = "FOOTBALL" | "F1";
+
+type F1MeetingOption = {
+  id: number;
+  name: string;
+  country: string;
+  circuit: string;
+  start: string;
+  end: string;
+  current: boolean;
+};
+
 type MatchRow = {
   id: number;
   tournamentId?: number;
@@ -142,6 +154,11 @@ export default function AdminDashboardContent({
   const [selectedFootballLeagueKeys, setSelectedFootballLeagueKeys] = useState<
     string[]
   >([]);
+  const [importSport, setImportSport] = useState<ImportSport>("FOOTBALL");
+  const [f1Meetings, setF1Meetings] = useState<F1MeetingOption[]>([]);
+  const [selectedF1MeetingKeys, setSelectedF1MeetingKeys] = useState<number[]>(
+    [],
+  );
   const [isLoadingCompetitions, setIsLoadingCompetitions] = useState(false);
   const [editingTournamentId, setEditingTournamentId] = useState<number | null>(
     null,
@@ -236,16 +253,20 @@ export default function AdminDashboardContent({
     setIsLoadingCompetitions(true);
 
     try {
-      const competitions = await apiRequest<FootballCompetitionOption[]>(
-        "/dashboard/football-competitions",
-      );
+      const [competitions, meetings] = await Promise.all([
+        apiRequest<FootballCompetitionOption[]>("/dashboard/football-competitions"),
+        apiRequest<F1MeetingOption[]>("/dashboard/f1-meetings"),
+      ]);
       setFootballCompetitions(competitions);
+      setF1Meetings(meetings);
       setSelectedFootballLeagueKeys([]);
+      setSelectedF1MeetingKeys([]);
+      setImportSport("FOOTBALL");
     } catch (error) {
       showNotice(
         error instanceof Error
           ? error.message
-          : "Cannot load football competitions.",
+          : "Cannot load API competitions.",
         "error",
       );
     } finally {
@@ -263,6 +284,14 @@ export default function AdminDashboardContent({
     );
   }
 
+  function toggleF1Meeting(meeting: F1MeetingOption) {
+    setSelectedF1MeetingKeys((currentKeys) =>
+      currentKeys.includes(meeting.id)
+        ? currentKeys.filter((item) => item !== meeting.id)
+        : [...currentKeys, meeting.id],
+    );
+  }
+
   function selectOngoingFootballLeagues() {
     setSelectedFootballLeagueKeys(
       footballCompetitions
@@ -271,12 +300,34 @@ export default function AdminDashboardContent({
     );
   }
 
-  async function importSelectedFootballLeagues() {
+  function selectOngoingImportItems() {
+    if (importSport === "F1") {
+      setSelectedF1MeetingKeys(
+        f1Meetings
+          .filter((meeting) => getF1MeetingPhase(meeting) === "ongoing")
+          .map((meeting) => meeting.id),
+      );
+      return;
+    }
+
+    selectOngoingFootballLeagues();
+  }
+
+  async function importSelectedApiItems() {
     if (!isAdmin) {
       showNotice("Only admin can import API data.", "error");
       return;
     }
 
+    if (importSport === "F1") {
+      await importSelectedF1Meetings();
+      return;
+    }
+
+    await importSelectedFootballLeagues();
+  }
+
+  async function importSelectedFootballLeagues() {
     const selectedLeagues = footballCompetitions
       .filter((competition) =>
         selectedFootballLeagueKeys.includes(getFootballLeagueKey(competition)),
@@ -324,6 +375,41 @@ export default function AdminDashboardContent({
     }
   }
 
+  async function importSelectedF1Meetings() {
+    if (selectedF1MeetingKeys.length === 0) {
+      showNotice("Choose at least one F1 meeting to import.", "error");
+      return;
+    }
+
+    setIsMutating(true);
+
+    try {
+      const result = await apiRequest<{
+        meetings: number;
+        sessions: number;
+        error: string | null;
+      }>("/dashboard/sync-f1", {
+        method: "POST",
+        body: JSON.stringify({ meetingKeys: selectedF1MeetingKeys }),
+      });
+      setOpenImportApiModal(false);
+      await loadDashboard();
+      showNotice(
+        [
+          `Imported ${result.meetings} F1 meetings and ${result.sessions} sessions.`,
+          result.error ? `F1 note: ${result.error}` : "",
+        ]
+          .filter(Boolean)
+          .join("\n"),
+        result.error ? "info" : "success",
+      );
+    } catch (error) {
+      showNotice(error instanceof Error ? error.message : "F1 import failed.", "error");
+    } finally {
+      setIsMutating(false);
+    }
+  }
+
   function openCreateTournament() {
     setEditingTournamentId(null);
     setTournamentForm(emptyTournamentForm);
@@ -348,6 +434,18 @@ export default function AdminDashboardContent({
   const upcomingFootballCompetitions = footballCompetitions.filter(
     (competition) => getFootballCompetitionPhase(competition) === "upcoming",
   );
+  const ongoingF1Meetings = f1Meetings.filter(
+    (meeting) => getF1MeetingPhase(meeting) === "ongoing",
+  );
+  const upcomingF1Meetings = f1Meetings.filter(
+    (meeting) => getF1MeetingPhase(meeting) === "upcoming",
+  );
+  const selectedImportCount =
+    importSport === "F1"
+      ? selectedF1MeetingKeys.length
+      : selectedFootballLeagueKeys.length;
+  const importItemCount =
+    importSport === "F1" ? f1Meetings.length : footballCompetitions.length;
   const tournamentGroups = getTournamentGroups(dashboard.tournaments);
 
   async function saveTournament() {
@@ -576,10 +674,10 @@ export default function AdminDashboardContent({
             <div className="mb-5 flex items-start justify-between gap-4">
               <div>
                 <h3 className="text-2xl font-black text-[#84d8e8]">
-                  Import Football Competitions
+                  Import API Competitions
                 </h3>
                 <p className="mt-2 text-sm text-[#9fb2b8]">
-                  Choose competitions currently available from API-SPORTS.
+                  Choose a sport, then import ongoing or upcoming competitions.
                 </p>
               </div>
               <button
@@ -591,16 +689,30 @@ export default function AdminDashboardContent({
               </button>
             </div>
 
+            <label className="mb-4 block">
+              <span className="mb-2 block text-xs font-black uppercase tracking-[0.12em] text-[#9fb2b8]">
+                Sport
+              </span>
+              <select
+                value={importSport}
+                onChange={(event) => setImportSport(event.target.value as ImportSport)}
+                className="h-12 w-full rounded border border-[#3a4d54] bg-[#070d0d] px-4 font-black uppercase tracking-[0.08em] text-white outline-none focus:border-[#84d8e8]"
+              >
+                <option value="FOOTBALL">Football</option>
+                <option value="F1">F1</option>
+              </select>
+            </label>
+
             <div className="mb-4 flex flex-wrap items-center justify-between gap-3">
               <button
-                onClick={selectOngoingFootballLeagues}
-                disabled={isLoadingCompetitions || footballCompetitions.length === 0}
+                onClick={selectOngoingImportItems}
+                disabled={isLoadingCompetitions || importItemCount === 0}
                 className="h-11 rounded border border-[#84d8e8] px-4 text-sm font-black uppercase tracking-[0.08em] text-[#84d8e8] disabled:cursor-not-allowed disabled:opacity-50"
               >
-                Select ongoing competitions
+                Select ongoing {importSport === "F1" ? "meetings" : "competitions"}
               </button>
               <span className="text-sm font-bold text-[#9fb2b8]">
-                {selectedFootballLeagueKeys.length} selected
+                {selectedImportCount} selected
               </span>
             </div>
 
@@ -611,21 +723,40 @@ export default function AdminDashboardContent({
                 </div>
               ) : (
                 <div>
-                  <FootballCompetitionGroup
-                    title="Ongoing"
-                    competitions={ongoingFootballCompetitions}
-                    selectedKeys={selectedFootballLeagueKeys}
-                    onToggle={toggleFootballLeague}
-                  />
-                  <FootballCompetitionGroup
-                    title="Upcoming"
-                    competitions={upcomingFootballCompetitions}
-                    selectedKeys={selectedFootballLeagueKeys}
-                    onToggle={toggleFootballLeague}
-                  />
-                  {footballCompetitions.length === 0 && (
+                  {importSport === "FOOTBALL" ? (
+                    <>
+                      <FootballCompetitionGroup
+                        title="Ongoing"
+                        competitions={ongoingFootballCompetitions}
+                        selectedKeys={selectedFootballLeagueKeys}
+                        onToggle={toggleFootballLeague}
+                      />
+                      <FootballCompetitionGroup
+                        title="Upcoming"
+                        competitions={upcomingFootballCompetitions}
+                        selectedKeys={selectedFootballLeagueKeys}
+                        onToggle={toggleFootballLeague}
+                      />
+                    </>
+                  ) : (
+                    <>
+                      <F1MeetingGroup
+                        title="Ongoing"
+                        meetings={ongoingF1Meetings}
+                        selectedKeys={selectedF1MeetingKeys}
+                        onToggle={toggleF1Meeting}
+                      />
+                      <F1MeetingGroup
+                        title="Upcoming"
+                        meetings={upcomingF1Meetings}
+                        selectedKeys={selectedF1MeetingKeys}
+                        onToggle={toggleF1Meeting}
+                      />
+                    </>
+                  )}
+                  {importItemCount === 0 && (
                     <div className="flex h-[180px] items-center justify-center text-sm font-bold text-[#9fb2b8]">
-                      No ongoing or upcoming football competitions found.
+                      No ongoing or upcoming items found for this sport.
                     </div>
                   )}
                 </div>
@@ -641,8 +772,8 @@ export default function AdminDashboardContent({
                 Cancel
               </button>
               <button
-                onClick={() => void importSelectedFootballLeagues()}
-                disabled={isMutating || selectedFootballLeagueKeys.length === 0}
+                onClick={() => void importSelectedApiItems()}
+                disabled={isMutating || selectedImportCount === 0}
                 className="h-12 rounded bg-[#84d8e8] px-6 font-black text-[#06161b] disabled:cursor-not-allowed disabled:opacity-60"
               >
                 {isMutating ? "Importing..." : "Import Selected"}
@@ -1038,6 +1169,69 @@ function FootballCompetitionGroup({
   );
 }
 
+function F1MeetingGroup({
+  title,
+  meetings,
+  selectedKeys,
+  onToggle,
+}: {
+  title: "Ongoing" | "Upcoming";
+  meetings: F1MeetingOption[];
+  selectedKeys: number[];
+  onToggle: (meeting: F1MeetingOption) => void;
+}) {
+  if (meetings.length === 0) {
+    return null;
+  }
+
+  return (
+    <section>
+      <div className="sticky top-0 z-10 flex items-center justify-between border-b border-[#243c43] bg-[#14272e] px-4 py-3">
+        <h4 className="text-xs font-black uppercase tracking-[0.12em] text-[#84d8e8]">
+          {title}
+        </h4>
+        <span className="text-xs font-black uppercase text-[#9fb2b8]">
+          {meetings.length} meetings
+        </span>
+      </div>
+      <div className="divide-y divide-[#243c43]">
+        {meetings.map((meeting) => {
+          const checked = selectedKeys.includes(meeting.id);
+          const phase = getF1MeetingPhase(meeting);
+
+          return (
+            <label
+              key={meeting.id}
+              className="flex cursor-pointer items-center gap-4 px-4 py-4 transition hover:bg-[#102d35]"
+            >
+              <input
+                type="checkbox"
+                checked={checked}
+                onChange={() => onToggle(meeting)}
+                className="h-4 w-4 accent-[#84d8e8]"
+              />
+              <div className="min-w-0 flex-1">
+                <p className="truncate text-sm font-black text-white">
+                  {meeting.name}
+                </p>
+                <p className="mt-1 text-xs uppercase tracking-[0.08em] text-[#9fb2b8]">
+                  {meeting.country} / Circuit: {meeting.circuit}
+                </p>
+                <p className="mt-1 text-xs text-[#789098]">
+                  {formatDateOnly(meeting.start)} - {formatDateOnly(meeting.end)}
+                </p>
+              </div>
+              <span className="shrink-0 rounded bg-[#162b32] px-3 py-1 text-xs font-black uppercase text-[#84d8e8]">
+                {phase}
+              </span>
+            </label>
+          );
+        })}
+      </div>
+    </section>
+  );
+}
+
 function TournamentMatchDetails({
   tournament,
   matches,
@@ -1304,6 +1498,18 @@ function getFootballCompetitionPhase(competition: FootballCompetitionOption) {
   const end = competition.end ? new Date(competition.end) : null;
 
   if ((!start || start <= now) && (!end || end >= now)) {
+    return "ongoing";
+  }
+
+  return "upcoming";
+}
+
+function getF1MeetingPhase(meeting: F1MeetingOption) {
+  const now = new Date();
+  const start = new Date(meeting.start);
+  const end = new Date(meeting.end);
+
+  if (start <= now && end >= now) {
     return "ongoing";
   }
 

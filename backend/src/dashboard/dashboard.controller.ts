@@ -33,11 +33,31 @@ export class DashboardController {
   @Post('sync-football')
   async syncFootballCompetitions(
     @Headers('authorization') authorization: string | undefined,
-    @Body() body: { leagues?: Array<{ id: number; season: number }> },
+    @Body()
+    body: { leagues?: Array<{ id: number; season: number; name?: string }> },
   ) {
     await this.authService.verifyAdminToken(authorization);
     return this.sportsApiSyncService.syncSelectedFootballLeagues(
       body.leagues ?? [],
+    );
+  }
+
+  @Get('f1-meetings')
+  async getF1Meetings(
+    @Headers('authorization') authorization: string | undefined,
+  ) {
+    await this.authService.verifyAdminToken(authorization);
+    return this.sportsApiSyncService.listF1Meetings();
+  }
+
+  @Post('sync-f1')
+  async syncF1Meetings(
+    @Headers('authorization') authorization: string | undefined,
+    @Body() body: { meetingKeys?: number[] },
+  ) {
+    await this.authService.verifyAdminToken(authorization);
+    return this.sportsApiSyncService.syncSelectedF1Meetings(
+      body.meetingKeys ?? [],
     );
   }
 }

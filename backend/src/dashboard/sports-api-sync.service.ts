@@ -68,6 +68,16 @@ type OpenF1Meeting = {
   is_cancelled?: boolean;
 };
 
+export type F1MeetingOption = {
+  id: number;
+  name: string;
+  country: string;
+  circuit: string;
+  start: string;
+  end: string;
+  current: boolean;
+};
+
 type OpenF1Session = {
   session_key: number;
   meeting_key: number;
@@ -255,6 +265,95 @@ export class SportsApiSyncService {
       error:
         matchCount === 0
           ? 'No fixtures were returned by API-SPORTS for the selected competitions.'
+          : null,
+    };
+  }
+
+  async listF1Meetings() {
+    const now = new Date();
+    const years = [now.getUTCFullYear(), now.getUTCFullYear() + 1];
+    const meetingResponses = await Promise.all(
+      years.map((year) =>
+        this.fetchJson<OpenF1Meeting[]>(
+          `${OPENF1_API_BASE_URL}/meetings?year=${year}`,
+        ),
+      ),
+    );
+
+    return meetingResponses
+      .flat()
+      .filter((meeting) => this.isF1MeetingImportable(meeting))
+      .map((meeting) => this.toF1MeetingOption(meeting))
+      .sort((first, second) => {
+        const firstPhasePriority = first.current ? 1 : 0;
+        const secondPhasePriority = second.current ? 1 : 0;
+
+        if (firstPhasePriority !== secondPhasePriority) {
+          return secondPhasePriority - firstPhasePriority;
+        }
+
+        return new Date(first.start).getTime() - new Date(second.start).getTime();
+      })
+      .slice(0, 60);
+  }
+
+  async syncSelectedF1Meetings(meetingKeys: number[]) {
+    await this.ensureSportTypeConstraint();
+
+    const adminId = await this.findAdminId();
+
+    if (!adminId) {
+      throw new Error('Admin account was not found.');
+    }
+
+    const selectedKeys = new Set(
+      meetingKeys
+        .map((meetingKey) => Number(meetingKey))
+        .filter((meetingKey) => Number.isInteger(meetingKey)),
+    );
+
+    if (selectedKeys.size === 0) {
+      throw new Error('Please choose at least one F1 meeting.');
+    }
+
+    const now = new Date();
+    const years = [now.getUTCFullYear(), now.getUTCFullYear() + 1];
+    const [meetingResponses, sessionResponses] = await Promise.all([
+      Promise.all(
+        years.map((year) =>
+          this.fetchJson<OpenF1Meeting[]>(
+            `${OPENF1_API_BASE_URL}/meetings?year=${year}`,
+          ),
+        ),
+      ),
+      Promise.all(
+        years.map((year) =>
+          this.fetchJson<OpenF1Session[]>(
+            `${OPENF1_API_BASE_URL}/sessions?year=${year}`,
+          ),
+        ),
+      ),
+    ]);
+    const meetings = meetingResponses
+      .flat()
+      .filter(
+        (meeting) =>
+          selectedKeys.has(meeting.meeting_key) &&
+          this.isF1MeetingImportable(meeting),
+      );
+    const sessions = sessionResponses.flat();
+    let sessionCount = 0;
+
+    for (const meeting of meetings) {
+      sessionCount += await this.upsertF1Meeting(adminId, meeting, sessions);
+    }
+
+    return {
+      meetings: meetings.length,
+      sessions: sessionCount,
+      error:
+        sessionCount === 0
+          ? 'No sessions were returned by OpenF1 for the selected meetings.'
           : null,
     };
   }
@@ -481,49 +580,58 @@ export class SportsApiSyncService {
         continue;
       }
 
-      const tournamentId = await this.upsertTournament({
-        name:
-          meeting.meeting_name || meeting.meeting_official_name || 'Formula 1',
-        sportType: 'F1',
-        status: this.isLiveWindow(meeting.date_start, meeting.date_end)
-          ? 'ACTIVE'
-          : 'UPCOMING',
-        adminId,
-      });
-      const stageId = await this.upsertStage(tournamentId, 'Race Weekend');
-
-      for (const session of sessions.filter(
-        (item) => item.meeting_key === meeting.meeting_key,
-      )) {
-        await this.upsertMatch({
-          tournamentId,
-          stageId,
-          homeTeamId: null,
-          awayTeamId: null,
-          homePlaceholder: session.session_name,
-          awayPlaceholder:
-            session.circuit_short_name ||
-            meeting.circuit_short_name ||
-            meeting.country_name ||
-            'F1',
-          scheduledTime: session.date_start,
-          status: this.isLiveWindow(session.date_start, session.date_end)
-            ? 'LIVE'
-            : new Date(session.date_end) < now
-              ? 'FINISHED'
-              : 'PENDING',
-          source: 'OPENF1',
-          externalMatchId: String(session.session_key),
-          actualHomeScore: null,
-          actualAwayScore: null,
-        });
-        sessionCount += 1;
-      }
-
+      sessionCount += await this.upsertF1Meeting(adminId, meeting, sessions);
       meetingCount += 1;
     }
 
     return { meetings: meetingCount, sessions: sessionCount, error: null };
+  }
+
+  private async upsertF1Meeting(
+    adminId: number,
+    meeting: OpenF1Meeting,
+    sessions: OpenF1Session[],
+  ) {
+    const tournamentId = await this.upsertTournament({
+      name: meeting.meeting_name || meeting.meeting_official_name || 'Formula 1',
+      sportType: 'F1',
+      status: this.isLiveWindow(meeting.date_start, meeting.date_end)
+        ? 'ACTIVE'
+        : 'UPCOMING',
+      adminId,
+    });
+    const stageId = await this.upsertStage(tournamentId, 'Race Weekend');
+    let sessionCount = 0;
+
+    for (const session of sessions.filter(
+      (item) => item.meeting_key === meeting.meeting_key,
+    )) {
+      await this.upsertMatch({
+        tournamentId,
+        stageId,
+        homeTeamId: null,
+        awayTeamId: null,
+        homePlaceholder: session.session_name,
+        awayPlaceholder:
+          session.circuit_short_name ||
+          meeting.circuit_short_name ||
+          meeting.country_name ||
+          'F1',
+        scheduledTime: session.date_start,
+        status: this.isLiveWindow(session.date_start, session.date_end)
+          ? 'LIVE'
+          : new Date(session.date_end) < new Date()
+            ? 'FINISHED'
+            : 'PENDING',
+        source: 'OPENF1',
+        externalMatchId: String(session.session_key),
+        actualHomeScore: null,
+        actualAwayScore: null,
+      });
+      sessionCount += 1;
+    }
+
+    return sessionCount;
   }
 
   private async upsertTournament(data: {
@@ -789,6 +897,26 @@ export class SportsApiSyncService {
     }
 
     return 0;
+  }
+
+  private toF1MeetingOption(meeting: OpenF1Meeting): F1MeetingOption {
+    return {
+      id: meeting.meeting_key,
+      name: meeting.meeting_name || meeting.meeting_official_name || 'Formula 1',
+      country: meeting.country_name || 'International',
+      circuit: meeting.circuit_short_name || 'TBD',
+      start: meeting.date_start,
+      end: meeting.date_end,
+      current: this.isLiveWindow(meeting.date_start, meeting.date_end),
+    };
+  }
+
+  private isF1MeetingImportable(meeting: OpenF1Meeting) {
+    if (meeting.is_cancelled) {
+      return false;
+    }
+
+    return new Date(meeting.date_end) >= new Date();
   }
 
   private getCompetitionPriority(name: string) {
