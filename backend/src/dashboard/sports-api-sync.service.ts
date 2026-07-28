@@ -1026,29 +1026,45 @@ export class SportsApiSyncService {
         continue;
       }
 
-      const competitionName =
+      const rawCompetitionName =
         this.pickString(rawMatch, [
-          ['league', 'name'],
-          ['competition', 'name'],
           ['tournament', 'name'],
           ['serie', 'name'],
-          ['leagueName'],
-          ['competitionName'],
           ['tournamentName'],
+          ['competition', 'name'],
+          ['competitionName'],
+          ['league', 'name'],
+          ['leagueName'],
           ['league'],
         ]) || 'League of Legends';
+      const competitionSlug = this.pickString(rawMatch, [
+        ['league', 'slug'],
+        ['competition', 'slug'],
+        ['tournament', 'slug'],
+        ['serie', 'slug'],
+        ['league_slug'],
+        ['leagueSlug'],
+        ['competition_slug'],
+        ['competitionSlug'],
+        ['tournament_slug'],
+        ['tournamentSlug'],
+      ]);
       const competitionId =
+        competitionSlug ||
         this.pickString(rawMatch, [
-          ['league', 'id'],
-          ['competition', 'id'],
           ['tournament', 'id'],
           ['serie', 'id'],
-          ['leagueId'],
-          ['competitionId'],
           ['tournamentId'],
-          ['league_slug'],
-          ['leagueSlug'],
-        ]) || this.slugify(competitionName);
+          ['competition', 'id'],
+          ['competitionId'],
+          ['league', 'id'],
+          ['leagueId'],
+        ]) ||
+        this.slugify(rawCompetitionName);
+      const competitionName = this.normalizeLolCompetitionName(
+        rawCompetitionName,
+        competitionSlug || competitionId,
+      );
       const matchId =
         this.pickString(rawMatch, [
           ['id'],
@@ -1246,6 +1262,25 @@ export class SportsApiSyncService {
     }
 
     return 'PENDING' as const;
+  }
+
+  private normalizeLolCompetitionName(name: string, identifier: string) {
+    const normalizedIdentifier = identifier
+      .toLowerCase()
+      .replace(/[^a-z0-9]+/g, '_');
+
+    if (
+      normalizedIdentifier.includes('lck_challengers') ||
+      normalizedIdentifier.includes('lck_cl')
+    ) {
+      return 'LCK Challengers';
+    }
+
+    if (['lck', 'lol_lck'].includes(normalizedIdentifier)) {
+      return 'LCK';
+    }
+
+    return name;
   }
 
   private slugify(value: string) {
