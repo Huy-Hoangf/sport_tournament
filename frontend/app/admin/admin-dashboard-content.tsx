@@ -39,6 +39,7 @@ type DashboardData = {
     inactivePlayers: number;
   };
   tournaments: TournamentRow[];
+  tournamentMatches: MatchRow[];
   upcomingSchedule: MatchRow[];
   recentActivity: ActivityRow[];
 };
@@ -63,6 +64,7 @@ type TournamentForm = {
 
 type MatchRow = {
   id: number;
+  tournamentId?: number;
   encounter: string;
   tournamentName: string;
   scheduledTime: string;
@@ -103,6 +105,7 @@ const emptyDashboard: DashboardData = {
     inactivePlayers: 0,
   },
   tournaments: [],
+  tournamentMatches: [],
   upcomingSchedule: [],
   recentActivity: [],
 };
@@ -122,8 +125,20 @@ export default function AdminDashboardContent({
   const [editingTournamentId, setEditingTournamentId] = useState<number | null>(
     null,
   );
+  const [selectedTournamentId, setSelectedTournamentId] = useState<number | null>(
+    null,
+  );
   const [tournamentForm, setTournamentForm] =
     useState<TournamentForm>(emptyTournamentForm);
+
+  const selectedTournament =
+    dashboard.tournaments.find((tournament) => tournament.id === selectedTournamentId) ??
+    null;
+  const selectedTournamentMatches = selectedTournament
+    ? dashboard.tournamentMatches.filter(
+        (match) => match.tournamentId === selectedTournament.id,
+      )
+    : [];
 
   useEffect(() => {
     void loadDashboard();
@@ -291,8 +306,9 @@ export default function AdminDashboardContent({
           </p>
         </div>
 
-        {isAdmin && (
-          <div className="flex flex-wrap justify-end gap-4">
+        <div className="flex flex-wrap justify-end gap-4">
+          {isAdmin ? (
+            <>
             <DashboardActionButton
               icon={<RefreshCw size={18} />}
               label={isMutating ? "Syncing..." : "Reset API"}
@@ -310,8 +326,13 @@ export default function AdminDashboardContent({
               <Plus size={22} />
               Create Tournament
             </button>
-          </div>
-        )}
+            </>
+          ) : (
+            <div className="rounded border border-[#3a4d54] bg-[#0d252d] px-5 py-4 text-sm font-bold text-[#9fb2b8]">
+              View-only access
+            </div>
+          )}
+        </div>
       </div>
 
       <section className="mb-5 rounded border border-[#3a4d54] bg-[#0d252d] p-4">
@@ -377,7 +398,7 @@ export default function AdminDashboardContent({
             icon={<Filter size={17} />}
           />
           <div className="overflow-x-auto">
-            <table className="w-full min-w-[840px] table-fixed text-left">
+            <table className="w-full min-w-[980px] table-fixed text-left">
               <thead className="h-[65px] border-b border-[#3a4d54] bg-[#14272e] text-xs uppercase tracking-[0.08em] text-[#d5e0e3]">
                 <tr>
                   <th className="px-6 py-4">Tournament Name</th>
@@ -385,22 +406,25 @@ export default function AdminDashboardContent({
                   <th className="w-32 px-4 py-4">Status</th>
                   <th className="w-24 px-4 py-4">Players</th>
                   <th className="w-24 px-4 py-4">Matches</th>
-                  <th className="w-28 px-4 py-4">Source</th>
-                  <th className="w-32 px-4 py-4">Action</th>
+                  <th className="w-44 px-4 py-4">Source</th>
+                  <th className="w-28 px-4 py-4">Action</th>
                 </tr>
               </thead>
               <tbody>
                 {dashboard.tournaments.map((tournament) => (
                   <tr
                     key={tournament.id}
-                    className="h-[73px] border-b border-[#243c43] text-sm last:border-b-0"
+                    onClick={() => setSelectedTournamentId(tournament.id)}
+                    className={`h-[73px] cursor-pointer border-b border-[#243c43] text-sm transition last:border-b-0 hover:bg-[#102d35] ${
+                      selectedTournamentId === tournament.id ? "bg-[#12333c]" : ""
+                    }`}
                   >
                     <td className="px-6 font-black text-white">
                       <div className="flex items-center gap-3">
                         <span className="flex h-8 w-8 items-center justify-center bg-[#143942] text-[#84d8e8]">
                           <ShieldCheck size={17} />
                         </span>
-                        {tournament.name}
+                        <span className="min-w-0 truncate">{tournament.name}</span>
                       </div>
                     </td>
                     <td className="px-4 text-white">
@@ -418,7 +442,7 @@ export default function AdminDashboardContent({
                     <td className="px-4">
                       <DashboardSourceBadge source={tournament.source} />
                     </td>
-                    <td className="px-4">
+                    <td className="px-4" onClick={(event) => event.stopPropagation()}>
                       {isAdmin ? (
                         <div className="flex items-center gap-3">
                           <button
@@ -438,7 +462,7 @@ export default function AdminDashboardContent({
                         </div>
                       ) : (
                         <span className="text-xs uppercase text-[#789098]">
-                          View
+                          Details
                         </span>
                       )}
                     </td>
@@ -485,6 +509,69 @@ export default function AdminDashboardContent({
           </div>
         </aside>
       </div>
+
+      {selectedTournament && (
+        <section className="mt-5 overflow-hidden rounded border border-[#3a4d54] bg-[#0d252d]">
+          <DashboardPanelTitle
+            title={`${selectedTournament.name} Details`}
+            right={`${selectedTournamentMatches.length} matches`}
+          />
+          <div className="border-b border-[#243c43] px-6 py-4 text-sm text-[#9fb2b8]">
+            <span className="font-black uppercase text-white">
+              {selectedTournament.sportType ?? "FOOTBALL"}
+            </span>{" "}
+            / {selectedTournament.status} / Source:{" "}
+            {selectedTournament.source || "MANUAL"}
+          </div>
+          <div className="overflow-x-auto">
+            <table className="w-full min-w-[860px] table-fixed text-left">
+              <thead className="h-[54px] border-b border-[#3a4d54] bg-[#14272e] text-xs uppercase tracking-[0.08em] text-[#d5e0e3]">
+                <tr>
+                  <th className="px-6 py-3">Teams / Players</th>
+                  <th className="w-48 px-4 py-3">Date & Time</th>
+                  <th className="w-44 px-4 py-3">Deadline</th>
+                  <th className="w-40 px-4 py-3">Source</th>
+                  <th className="w-32 px-4 py-3">Status</th>
+                </tr>
+              </thead>
+              <tbody>
+                {selectedTournamentMatches.map((match) => (
+                  <tr
+                    key={match.id}
+                    className="h-[64px] border-b border-[#243c43] text-sm last:border-b-0"
+                  >
+                    <td className="px-6 font-black text-white">
+                      {match.encounter}
+                    </td>
+                    <td className="px-4 text-white">
+                      {formatDateTime(match.scheduledTime)}
+                    </td>
+                    <td className="px-4 text-white">
+                      {formatDateTime(match.deadline)}
+                    </td>
+                    <td className="px-4">
+                      <DashboardSourceBadge source={match.source} />
+                    </td>
+                    <td className="px-4">
+                      <DashboardStatusBadge status={match.status} />
+                    </td>
+                  </tr>
+                ))}
+                {selectedTournamentMatches.length === 0 && (
+                  <tr>
+                    <td
+                      colSpan={5}
+                      className="h-[96px] text-center text-[#9fb2b8]"
+                    >
+                      No matches found for this tournament.
+                    </td>
+                  </tr>
+                )}
+              </tbody>
+            </table>
+          </div>
+        </section>
+      )}
 
       <section className="mt-14 overflow-hidden rounded border border-[#3a4d54] bg-[#0d252d]">
         <DashboardPanelTitle title="Upcoming Schedule" right="View All Matches" />
@@ -785,7 +872,7 @@ function DashboardStatusBadge({ status }: { status: string }) {
 
 function DashboardSourceBadge({ source }: { source: string }) {
   return (
-    <span className="inline-flex h-6 items-center bg-[#203940] px-2 text-xs font-black uppercase text-[#dce8eb]">
+    <span className="inline-flex max-w-full items-center rounded-sm bg-[#203940] px-2 py-1 text-xs font-black uppercase text-[#dce8eb]">
       {source || "MANUAL"}
     </span>
   );
@@ -830,6 +917,26 @@ function formatDate(value: string | null) {
   }
 
   return new Intl.DateTimeFormat("en", {
+    month: "short",
+    day: "2-digit",
+    hour: "2-digit",
+    minute: "2-digit",
+  }).format(date);
+}
+
+function formatDateTime(value: string | null) {
+  if (!value) {
+    return "-";
+  }
+
+  const date = new Date(value);
+
+  if (Number.isNaN(date.getTime())) {
+    return "-";
+  }
+
+  return new Intl.DateTimeFormat("en", {
+    year: "numeric",
     month: "short",
     day: "2-digit",
     hour: "2-digit",

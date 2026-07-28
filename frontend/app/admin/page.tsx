@@ -71,7 +71,7 @@ const COMPANY_EMAIL_DOMAIN = "@twenty-tech.com";
 export default function AdminPage() {
   const router = useRouter();
   const [players, setPlayers] = useState<Player[]>([]);
-  const [activeView, setActiveView] = useState<AdminView>("players");
+  const [activeView, setActiveView] = useState<AdminView>("dashboard");
   const [dashboardRefreshKey, setDashboardRefreshKey] = useState(0);
   const [currentUser, setCurrentUser] = useState<CurrentUser | null>(null);
   const [fullName, setFullName] = useState("");
@@ -110,13 +110,17 @@ export default function AdminPage() {
   useEffect(() => {
     const currentUser = readCurrentUser() as CurrentUser | null;
 
-    if (!currentUser || currentUser.role !== "ADMIN") {
+    if (!currentUser) {
       router.push("/login");
       return;
     }
 
     setCurrentUser(currentUser);
-    void fetchPlayers();
+    setActiveView(currentUser.role === "ADMIN" ? "players" : "dashboard");
+
+    if (currentUser.role === "ADMIN") {
+      void fetchPlayers();
+    }
 
     function handleStorage(event: StorageEvent) {
       if (event.key === "logoutEvent" || event.key === "currentUser") {
@@ -527,7 +531,9 @@ export default function AdminPage() {
           <MenuItem active={activeView === "dashboard"} icon={<LayoutDashboard size={21} />} label="Dashboard" onClick={() => setActiveView("dashboard")} />
           <MenuItem icon={<Trophy size={21} />} label="Tournaments" onClick={() => showNotice("this feature is not ready")} />
           <MenuItem icon={<Gamepad2 size={21} />} label="Matches" onClick={() => showNotice("this feature is not ready")} />
-          <MenuItem active={activeView === "players"} icon={<Users size={18} />} label="Players" onClick={() => setActiveView("players")} />
+          {isAdmin && (
+            <MenuItem active={activeView === "players"} icon={<Users size={18} />} label="Players" onClick={() => setActiveView("players")} />
+          )}
           <MenuItem icon={<BarChart3 size={21} />} label="Leaderboard" onClick={() => showNotice("this feature is not ready")} />
         </nav>
 
@@ -557,7 +563,7 @@ export default function AdminPage() {
       <section className="ml-[260px] min-h-screen bg-[#06161b]">
         <header className="flex h-[88px] items-center border-b border-[#3c5056] px-8">
           <div className="w-[190px] text-[25px] font-black uppercase leading-8 text-white">
-            {activeView === "dashboard" ? "DASHBOARD" : "PLAYERS"}
+            {activeView === "dashboard" || !isAdmin ? "DASHBOARD" : "PLAYERS"}
           </div>
 
           <div className="ml-auto flex items-center gap-7">
@@ -575,7 +581,7 @@ export default function AdminPage() {
           </div>
         </header>
 
-        {activeView === "dashboard" ? (
+        {activeView === "dashboard" || !isAdmin ? (
           <AdminDashboardContent isAdmin={isAdmin} refreshKey={dashboardRefreshKey} />
         ) : (
         <div className="px-8 py-9">

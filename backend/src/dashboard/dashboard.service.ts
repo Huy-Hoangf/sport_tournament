@@ -15,10 +15,11 @@ export class DashboardService {
   async getDashboard() {
     await this.sportsApiSyncService.syncIfStale(false);
 
-    const [summaryRows, tournaments, upcomingSchedule, activities] =
+    const [summaryRows, tournaments, tournamentMatches, upcomingSchedule, activities] =
       await Promise.all([
         this.usersRepository.query(this.summaryQuery()),
         this.usersRepository.query(this.tournamentsQuery()),
+        this.usersRepository.query(this.tournamentMatchesQuery()),
         this.usersRepository.query(this.upcomingScheduleQuery()),
         this.usersRepository.query(this.activitiesQuery()),
       ]);
@@ -28,7 +29,7 @@ export class DashboardService {
     return {
       apiStatus: {
         connected: Boolean(summary.lastApiSync),
-        provider: 'Football Data API v4 + OpenF1',
+        provider: 'API-SPORTS Football + OpenF1',
         lastSync: summary.lastApiSync,
         externalId: this.buildExternalId(summary.lastApiSync),
       },
@@ -49,6 +50,16 @@ export class DashboardService {
         players: Number(row.players ?? 0),
         matches: Number(row.matches ?? 0),
         source: row.source ?? 'MANUAL',
+      })),
+      tournamentMatches: tournamentMatches.map((row) => ({
+        id: Number(row.id),
+        tournamentId: Number(row.tournamentId),
+        encounter: `${row.homeTeam ?? 'TBD'} vs ${row.awayTeam ?? 'TBD'}`,
+        tournamentName: row.tournamentName,
+        scheduledTime: row.scheduledTime,
+        deadline: row.deadline,
+        source: row.source ?? 'MANUAL',
+        status: row.status,
       })),
       upcomingSchedule: upcomingSchedule.map((row) => ({
         id: Number(row.id),
@@ -126,6 +137,27 @@ export class DashboardService {
       WHERE m.scheduled_time >= NOW()
       ORDER BY m.scheduled_time ASC
       LIMIT 8
+    `;
+  }
+
+  private tournamentMatchesQuery() {
+    return `
+      SELECT
+        m.id,
+        m.tournament_id AS "tournamentId",
+        t.name AS "tournamentName",
+        COALESCE(home.name, m.home_placeholder) AS "homeTeam",
+        COALESCE(away.name, m.away_placeholder) AS "awayTeam",
+        m.scheduled_time AS "scheduledTime",
+        m.scheduled_time - (m.lock_minutes_before_start * INTERVAL '1 minute') AS deadline,
+        COALESCE(m.external_source, 'MANUAL') AS source,
+        m.status
+      FROM matches m
+      JOIN tournaments t ON t.id = m.tournament_id
+      LEFT JOIN teams home ON home.id = m.home_team_id
+      LEFT JOIN teams away ON away.id = m.away_team_id
+      ORDER BY m.scheduled_time ASC
+      LIMIT 120
     `;
   }
 
