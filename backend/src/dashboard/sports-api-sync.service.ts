@@ -1058,7 +1058,12 @@ export class SportsApiSyncService {
     }
 
     const headers = { 'x-api-key': apiKey };
-    const [todayResponse, upcomingResponse] = await Promise.all([
+    const [
+      todayResponse,
+      upcomingResponse,
+      lckResponse,
+      lckChallengersResponse,
+    ] = await Promise.all([
       this.fetchJson<unknown>(
         `${CITO_API_BASE_URL}/lol/schedule/today`,
         headers,
@@ -1067,10 +1072,28 @@ export class SportsApiSyncService {
         `${CITO_API_BASE_URL}/lol/schedule/upcoming`,
         headers,
       ),
+      this.fetchJson<unknown>(
+        `${CITO_API_BASE_URL}/lol/leagues/lck/schedule`,
+        headers,
+      ),
+      this.fetchJson<unknown>(
+        `${CITO_API_BASE_URL}/lol/leagues/lck_challengers/schedule`,
+        headers,
+      ),
     ]);
     const rawMatches = [
       ...this.extractResponseArray(todayResponse),
       ...this.extractResponseArray(upcomingResponse),
+      ...this.withLolLeagueIdentity(
+        this.extractResponseArray(lckResponse),
+        'lck',
+        'LCK',
+      ),
+      ...this.withLolLeagueIdentity(
+        this.extractResponseArray(lckChallengersResponse),
+        'lck_challengers',
+        'LCK Challengers',
+      ),
     ];
     const snapshot = this.buildLolScheduleSnapshot(rawMatches);
 
@@ -1126,6 +1149,7 @@ export class SportsApiSyncService {
 
       const rawCompetitionName =
         this.pickString(rawMatch, [
+          ['__forcedLeagueName'],
           ['tournament', 'name'],
           ['serie', 'name'],
           ['tournamentName'],
@@ -1136,6 +1160,7 @@ export class SportsApiSyncService {
           ['league'],
         ]) || 'League of Legends';
       const competitionSlug = this.pickString(rawMatch, [
+        ['__forcedLeagueSlug'],
         ['league', 'slug'],
         ['competition', 'slug'],
         ['tournament', 'slug'],
@@ -1295,6 +1320,18 @@ export class SportsApiSyncService {
     }
 
     return [];
+  }
+
+  private withLolLeagueIdentity(
+    matches: CitoLolMatch[],
+    leagueSlug: string,
+    leagueName: string,
+  ) {
+    return matches.map((match) => ({
+      ...match,
+      __forcedLeagueSlug: leagueSlug,
+      __forcedLeagueName: leagueName,
+    }));
   }
 
   private pickString(
