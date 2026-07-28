@@ -265,7 +265,9 @@ export default function AdminDashboardContent({
 
   function selectOngoingFootballLeagues() {
     setSelectedFootballLeagueKeys(
-      footballCompetitions.map((competition) => getFootballLeagueKey(competition)),
+      footballCompetitions
+        .filter((competition) => getFootballCompetitionPhase(competition) === "ongoing")
+        .map((competition) => getFootballLeagueKey(competition)),
     );
   }
 
@@ -339,6 +341,13 @@ export default function AdminDashboardContent({
     });
     setOpenTournamentForm(true);
   }
+
+  const ongoingFootballCompetitions = footballCompetitions.filter(
+    (competition) => getFootballCompetitionPhase(competition) === "ongoing",
+  );
+  const upcomingFootballCompetitions = footballCompetitions.filter(
+    (competition) => getFootballCompetitionPhase(competition) === "upcoming",
+  );
 
   async function saveTournament() {
     if (!isAdmin) {
@@ -743,40 +752,22 @@ export default function AdminDashboardContent({
                   Loading competitions...
                 </div>
               ) : (
-                <div className="divide-y divide-[#243c43]">
-                  {footballCompetitions.map((competition) => {
-                    const key = getFootballLeagueKey(competition);
-                    const checked = selectedFootballLeagueKeys.includes(key);
-
-                    return (
-                      <label
-                        key={key}
-                        className="flex cursor-pointer items-center gap-4 px-4 py-4 transition hover:bg-[#102d35]"
-                      >
-                        <input
-                          type="checkbox"
-                          checked={checked}
-                          onChange={() => toggleFootballLeague(competition)}
-                          className="h-4 w-4 accent-[#84d8e8]"
-                        />
-                        <div className="min-w-0 flex-1">
-                          <p className="truncate text-sm font-black text-white">
-                            {competition.name}
-                          </p>
-                          <p className="mt-1 text-xs uppercase tracking-[0.08em] text-[#9fb2b8]">
-                            {competition.country} / {competition.type} / Season{" "}
-                            {competition.season}
-                          </p>
-                        </div>
-                        <span className="shrink-0 rounded bg-[#162b32] px-3 py-1 text-xs font-black uppercase text-[#84d8e8]">
-                          {competition.current ? "Current" : "Open"}
-                        </span>
-                      </label>
-                    );
-                  })}
+                <div>
+                  <FootballCompetitionGroup
+                    title="Ongoing"
+                    competitions={ongoingFootballCompetitions}
+                    selectedKeys={selectedFootballLeagueKeys}
+                    onToggle={toggleFootballLeague}
+                  />
+                  <FootballCompetitionGroup
+                    title="Upcoming"
+                    competitions={upcomingFootballCompetitions}
+                    selectedKeys={selectedFootballLeagueKeys}
+                    onToggle={toggleFootballLeague}
+                  />
                   {footballCompetitions.length === 0 && (
                     <div className="flex h-[180px] items-center justify-center text-sm font-bold text-[#9fb2b8]">
-                      No ongoing football competitions found.
+                      No ongoing or upcoming football competitions found.
                     </div>
                   )}
                 </div>
@@ -987,6 +978,72 @@ function DashboardActionButton({
       {icon}
       {label}
     </button>
+  );
+}
+
+function FootballCompetitionGroup({
+  title,
+  competitions,
+  selectedKeys,
+  onToggle,
+}: {
+  title: "Ongoing" | "Upcoming";
+  competitions: FootballCompetitionOption[];
+  selectedKeys: string[];
+  onToggle: (competition: FootballCompetitionOption) => void;
+}) {
+  if (competitions.length === 0) {
+    return null;
+  }
+
+  return (
+    <section>
+      <div className="sticky top-0 z-10 flex items-center justify-between border-b border-[#243c43] bg-[#14272e] px-4 py-3">
+        <h4 className="text-xs font-black uppercase tracking-[0.12em] text-[#84d8e8]">
+          {title}
+        </h4>
+        <span className="text-xs font-black uppercase text-[#9fb2b8]">
+          {competitions.length} competitions
+        </span>
+      </div>
+      <div className="divide-y divide-[#243c43]">
+        {competitions.map((competition) => {
+          const key = getFootballLeagueKey(competition);
+          const checked = selectedKeys.includes(key);
+          const phase = getFootballCompetitionPhase(competition);
+
+          return (
+            <label
+              key={key}
+              className="flex cursor-pointer items-center gap-4 px-4 py-4 transition hover:bg-[#102d35]"
+            >
+              <input
+                type="checkbox"
+                checked={checked}
+                onChange={() => onToggle(competition)}
+                className="h-4 w-4 accent-[#84d8e8]"
+              />
+              <div className="min-w-0 flex-1">
+                <p className="truncate text-sm font-black text-white">
+                  {competition.name}
+                </p>
+                <p className="mt-1 text-xs uppercase tracking-[0.08em] text-[#9fb2b8]">
+                  {competition.country} / {competition.type} / Season{" "}
+                  {competition.season}
+                </p>
+                <p className="mt-1 text-xs text-[#789098]">
+                  {formatDateOnly(competition.start)} -{" "}
+                  {formatDateOnly(competition.end)}
+                </p>
+              </div>
+              <span className="shrink-0 rounded bg-[#162b32] px-3 py-1 text-xs font-black uppercase text-[#84d8e8]">
+                {phase}
+              </span>
+            </label>
+          );
+        })}
+      </div>
+    </section>
   );
 }
 
@@ -1205,6 +1262,36 @@ function normalizeStatus(status: string): TournamentForm["status"] {
 
 function getFootballLeagueKey(competition: FootballCompetitionOption) {
   return `${competition.id}:${competition.season}`;
+}
+
+function getFootballCompetitionPhase(competition: FootballCompetitionOption) {
+  const now = new Date();
+  const start = competition.start ? new Date(competition.start) : null;
+  const end = competition.end ? new Date(competition.end) : null;
+
+  if ((!start || start <= now) && (!end || end >= now)) {
+    return "ongoing";
+  }
+
+  return "upcoming";
+}
+
+function formatDateOnly(value: string | null) {
+  if (!value) {
+    return "No date";
+  }
+
+  const date = new Date(value);
+
+  if (Number.isNaN(date.getTime())) {
+    return "No date";
+  }
+
+  return new Intl.DateTimeFormat("en", {
+    year: "numeric",
+    month: "short",
+    day: "2-digit",
+  }).format(date);
 }
 
 function formatDate(value: string | null) {

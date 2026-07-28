@@ -164,6 +164,13 @@ export class SportsApiSyncService {
     return Array.from(optionsByKey.values())
       .filter((option) => this.isCompetitionImportable(option))
       .sort((first, second) => {
+        const firstPhasePriority = this.getCompetitionPhasePriority(first);
+        const secondPhasePriority = this.getCompetitionPhasePriority(second);
+
+        if (firstPhasePriority !== secondPhasePriority) {
+          return secondPhasePriority - firstPhasePriority;
+        }
+
         const firstPriority = this.getCompetitionPriority(first.name);
         const secondPriority = this.getCompetitionPriority(second.name);
 
@@ -758,9 +765,6 @@ export class SportsApiSyncService {
 
   private isCompetitionImportable(option: FootballCompetitionOption) {
     const now = new Date();
-    const futureWindow = new Date(
-      now.getTime() + 180 * 24 * 60 * 60 * 1000,
-    );
     const start = option.start ? new Date(option.start) : null;
     const end = option.end ? new Date(option.end) : null;
 
@@ -768,11 +772,23 @@ export class SportsApiSyncService {
       return false;
     }
 
-    if (start && start > futureWindow) {
-      return false;
+    return Boolean(start || end);
+  }
+
+  private getCompetitionPhasePriority(option: FootballCompetitionOption) {
+    const now = new Date();
+    const start = option.start ? new Date(option.start) : null;
+    const end = option.end ? new Date(option.end) : null;
+
+    if ((!start || start <= now) && (!end || end >= now)) {
+      return 2;
     }
 
-    return option.current || Boolean(start || end);
+    if (start && start > now) {
+      return 1;
+    }
+
+    return 0;
   }
 
   private getCompetitionPriority(name: string) {
