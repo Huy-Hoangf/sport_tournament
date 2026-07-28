@@ -264,33 +264,23 @@ export class SportsApiSyncService {
     let matchCount = 0;
 
     for (const league of selectedLeagues) {
-      const competitionResponse = await this.fetchJson<{
-        response?: FootballCompetition[];
-      }>(
-        `${FOOTBALL_API_BASE_URL}/leagues?id=${league.id}&season=${league.season}`,
-        headers,
-      );
       const fixtures = await this.fetchFootballFixturesForLeague(
         league.id,
         league.season,
         headers,
       );
-      const competition = competitionResponse.response?.[0];
-      const competitionName =
-        competition?.league?.name || fixtures[0]?.league?.name || league.name;
+      const competitionName = fixtures[0]?.league?.name || league.name;
 
-      if (!competitionName) {
+      if (!competitionName || fixtures.length === 0) {
         continue;
       }
 
-      await this.upsertTournament({
-        name: competitionName,
-        sportType: 'FOOTBALL',
-        status: 'ACTIVE',
-        adminId,
-      });
-      competitionCount += 1;
-      matchCount += await this.syncFootballMatches(adminId, fixtures);
+      const importedMatches = await this.syncFootballMatches(adminId, fixtures);
+
+      if (importedMatches > 0) {
+        competitionCount += 1;
+        matchCount += importedMatches;
+      }
     }
 
     return {
@@ -530,66 +520,46 @@ export class SportsApiSyncService {
     }
 
     const headers = { 'x-apisports-key': apiKey };
-    const season = new Date().getUTCFullYear();
-    const [competitionsResponse, liveMatchesResponse, upcomingMatchesResponse] =
-      await Promise.all([
-        this.fetchJson<{ response?: FootballCompetition[] }>(
-          `${FOOTBALL_API_BASE_URL}/leagues?current=true`,
-          headers,
-        ),
-        this.fetchJson<{ response?: FootballMatch[] }>(
-          `${FOOTBALL_API_BASE_URL}/fixtures?live=all`,
-          headers,
-        ),
-        this.fetchJson<{ response?: FootballMatch[] }>(
-          `${FOOTBALL_API_BASE_URL}/fixtures?next=30`,
-          headers,
-        ),
-      ]);
-    const now = new Date();
+    const today = this.formatApiDate(new Date());
+    const [liveMatchesResponse, todayMatchesResponse] = await Promise.all([
+      this.fetchJson<{ response?: FootballMatch[] }>(
+        `${FOOTBALL_API_BASE_URL}/fixtures?live=all`,
+        headers,
+      ),
+      this.fetchJson<{ response?: FootballMatch[] }>(
+        `${FOOTBALL_API_BASE_URL}/fixtures?date=${today}`,
+        headers,
+      ),
+    ]);
     const matchesById = new Map<number, FootballMatch>();
-    let competitionCount = 0;
-    let matchCount = 0;
-
-    for (const competition of (competitionsResponse.response ?? []).slice(
-      0,
-      80,
-    )) {
-      if (!competition.league?.name) {
-        continue;
-      }
-
-      const currentSeason =
-        competition.seasons?.find((item) => item.current) ??
-        competition.seasons?.find((item) => item.year === season);
-      const start = currentSeason?.start ? new Date(currentSeason.start) : null;
-      const end = currentSeason?.end ? new Date(currentSeason.end) : null;
-
-      if ((start && start > now) || (end && end < now)) {
-        continue;
-      }
-
-      await this.upsertTournament({
-        name: competition.league.name,
-        sportType: 'FOOTBALL',
-        status: 'ACTIVE',
-        adminId,
-      });
-      competitionCount += 1;
-    }
 
     for (const match of [
       ...(liveMatchesResponse.response ?? []),
-      ...(upcomingMatchesResponse.response ?? []),
+      ...(todayMatchesResponse.response ?? []),
     ]) {
-      if (match.fixture?.id) {
+      if (match.fixture?.id && this.isFootballFixtureCurrentOrFuture(match)) {
         matchesById.set(match.fixture.id, match);
       }
     }
 
-    matchCount = await this.syncFootballMatches(adminId, matchesById.values());
+    const competitionNames = new Set(
+      Array.from(matchesById.values())
+        .map((match) => match.league?.name?.trim())
+        .filter((name): name is string => Boolean(name)),
+    );
+    const matchCount = await this.syncFootballMatches(
+      adminId,
+      matchesById.values(),
+    );
 
-    return { competitions: competitionCount, matches: matchCount, error: null };
+    return {
+      competitions: competitionNames.size,
+      matches: matchCount,
+      error:
+        matchCount === 0
+          ? 'No live or scheduled football fixtures were returned for today.'
+          : null,
+    };
   }
 
   private async syncFootballMatches(
@@ -644,7 +614,7 @@ export class SportsApiSyncService {
   ) {
     const now = new Date();
     const shortFrom = this.formatApiDate(
-      new Date(now.getTime() - 7 * 24 * 60 * 60 * 1000),
+      new Date(now.getTime() - 3 * 60 * 60 * 1000),
     );
     const shortTo = this.formatApiDate(
       new Date(now.getTime() + 45 * 24 * 60 * 60 * 1000),
@@ -652,8 +622,6 @@ export class SportsApiSyncService {
     const queries = [
       `league=${leagueId}&season=${season}&from=${shortFrom}&to=${shortTo}`,
       `league=${leagueId}&season=${season}&next=50`,
-      `league=${leagueId}&season=${season}&from=${season}-01-01&to=${season}-12-31`,
-      `league=${leagueId}&season=${season}`,
     ];
     const fixturesById = new Map<number, FootballMatch>();
 
@@ -664,7 +632,7 @@ export class SportsApiSyncService {
       );
 
       for (const match of response.response ?? []) {
-        if (match.fixture?.id) {
+        if (match.fixture?.id && this.isFootballFixtureCurrentOrFuture(match)) {
           fixturesById.set(match.fixture.id, match);
         }
       }
@@ -675,6 +643,22 @@ export class SportsApiSyncService {
     }
 
     return Array.from(fixturesById.values());
+  }
+
+  private isFootballFixtureCurrentOrFuture(match: FootballMatch) {
+    const mappedStatus = this.mapMatchStatus(match.fixture.status?.short ?? '');
+
+    if (mappedStatus === 'LIVE') {
+      return true;
+    }
+
+    if (mappedStatus === 'FINISHED' || mappedStatus === 'CANCELLED') {
+      return false;
+    }
+
+    const scheduledTime = new Date(match.fixture.date).getTime();
+
+    return Number.isFinite(scheduledTime) && scheduledTime >= Date.now();
   }
 
   private async syncF1(adminId: number) {
