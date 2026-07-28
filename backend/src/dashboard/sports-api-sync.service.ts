@@ -1072,11 +1072,11 @@ export class SportsApiSyncService {
         `${CITO_API_BASE_URL}/lol/schedule/upcoming`,
         headers,
       ),
-      this.fetchJson<unknown>(
+      this.fetchOptionalJson<unknown>(
         `${CITO_API_BASE_URL}/lol/leagues/lck/schedule`,
         headers,
       ),
-      this.fetchJson<unknown>(
+      this.fetchOptionalJson<unknown>(
         `${CITO_API_BASE_URL}/lol/leagues/lck_challengers/schedule`,
         headers,
       ),
@@ -1193,6 +1193,7 @@ export class SportsApiSyncService {
           ['id'],
           ['matchId'],
           ['match_id'],
+          ['match', 'id'],
           ['gameId'],
           ['game_id'],
         ]) || `${competitionId}:${scheduledTime}`;
@@ -1204,6 +1205,7 @@ export class SportsApiSyncService {
           ['blueTeam', 'name'],
           ['opponents', 0, 'name'],
           ['teams', 0, 'name'],
+          ['match', 'teams', 0, 'name'],
           ['participants', 0, 'name'],
         ]) || 'Team 1';
       const awayName =
@@ -1214,6 +1216,7 @@ export class SportsApiSyncService {
           ['redTeam', 'name'],
           ['opponents', 1, 'name'],
           ['teams', 1, 'name'],
+          ['match', 'teams', 1, 'name'],
           ['participants', 1, 'name'],
         ]) || 'Team 2';
       const region =
@@ -1299,27 +1302,81 @@ export class SportsApiSyncService {
   }
 
   private extractResponseArray(payload: unknown): CitoLolMatch[] {
-    if (Array.isArray(payload)) {
-      return payload.filter((item): item is CitoLolMatch =>
-        this.isRecord(item),
-      );
-    }
+    const matches: CitoLolMatch[] = [];
+    const visited = new Set<unknown>();
+    const envelopeKeys = [
+      'data',
+      'response',
+      'schedule',
+      'events',
+      'matches',
+      'items',
+      'results',
+      'sections',
+    ];
 
-    if (!this.isRecord(payload)) {
-      return [];
-    }
+    const visit = (value: unknown, depth: number) => {
+      if (depth > 5 || value === null || visited.has(value)) {
+        return;
+      }
 
-    for (const key of ['data', 'response', 'matches', 'items', 'results']) {
-      const value = payload[key];
+      if (typeof value === 'object') {
+        visited.add(value);
+      }
 
       if (Array.isArray(value)) {
-        return value.filter((item): item is CitoLolMatch =>
-          this.isRecord(item),
-        );
+        for (const item of value) {
+          if (this.isRecord(item) && this.isLolMatchCandidate(item)) {
+            matches.push(item);
+          } else {
+            visit(item, depth + 1);
+          }
+        }
+        return;
       }
-    }
 
-    return [];
+      if (!this.isRecord(value)) {
+        return;
+      }
+
+      if (this.isLolMatchCandidate(value)) {
+        matches.push(value);
+        return;
+      }
+
+      for (const key of envelopeKeys) {
+        if (key in value) {
+          visit(value[key], depth + 1);
+        }
+      }
+    };
+
+    visit(payload, 0);
+    return matches;
+  }
+
+  private isLolMatchCandidate(value: CitoLolMatch) {
+    const scheduledTime = this.pickString(value, [
+      ['scheduled_at'],
+      ['scheduledAt'],
+      ['start_time'],
+      ['startTime'],
+      ['begin_at'],
+      ['beginAt'],
+      ['date'],
+      ['matchDate'],
+      ['time'],
+    ]);
+    const matchId = this.pickString(value, [
+      ['id'],
+      ['matchId'],
+      ['match_id'],
+      ['match', 'id'],
+      ['gameId'],
+      ['game_id'],
+    ]);
+
+    return Boolean(scheduledTime && matchId);
   }
 
   private withLolLeagueIdentity(
@@ -1438,6 +1495,17 @@ export class SportsApiSyncService {
     }
 
     return (await response.json()) as T;
+  }
+
+  private async fetchOptionalJson<T>(
+    url: string,
+    headers?: Record<string, string>,
+  ) {
+    try {
+      return await this.fetchJson<T>(url, headers);
+    } catch {
+      return null;
+    }
   }
 
   private toFootballCompetitionOptions(
