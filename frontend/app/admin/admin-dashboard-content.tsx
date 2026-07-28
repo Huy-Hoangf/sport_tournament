@@ -62,6 +62,17 @@ type TournamentForm = {
   visibility: "PUBLIC" | "PRIVATE";
 };
 
+type FootballCompetitionOption = {
+  id: number;
+  name: string;
+  country: string;
+  season: number;
+  start: string | null;
+  end: string | null;
+  current: boolean;
+  type: string;
+};
+
 type MatchRow = {
   id: number;
   tournamentId?: number;
@@ -124,6 +135,14 @@ export default function AdminDashboardContent({
   const [isMutating, setIsMutating] = useState(false);
   const [notice, setNotice] = useState<Notice | null>(null);
   const [openTournamentForm, setOpenTournamentForm] = useState(false);
+  const [openImportApiModal, setOpenImportApiModal] = useState(false);
+  const [footballCompetitions, setFootballCompetitions] = useState<
+    FootballCompetitionOption[]
+  >([]);
+  const [selectedFootballLeagueKeys, setSelectedFootballLeagueKeys] = useState<
+    string[]
+  >([]);
+  const [isLoadingCompetitions, setIsLoadingCompetitions] = useState(false);
   const [editingTournamentId, setEditingTournamentId] = useState<number | null>(
     null,
   );
@@ -202,6 +221,96 @@ export default function AdminDashboardContent({
       );
     } catch (error) {
       showNotice(error instanceof Error ? error.message : "API sync failed.", "error");
+    } finally {
+      setIsMutating(false);
+    }
+  }
+
+  async function openImportApi() {
+    if (!isAdmin) {
+      showNotice("Only admin can import API data.", "error");
+      return;
+    }
+
+    setOpenImportApiModal(true);
+    setIsLoadingCompetitions(true);
+
+    try {
+      const competitions = await apiRequest<FootballCompetitionOption[]>(
+        "/dashboard/football-competitions",
+      );
+      setFootballCompetitions(competitions);
+      setSelectedFootballLeagueKeys([]);
+    } catch (error) {
+      showNotice(
+        error instanceof Error
+          ? error.message
+          : "Cannot load football competitions.",
+        "error",
+      );
+    } finally {
+      setIsLoadingCompetitions(false);
+    }
+  }
+
+  function toggleFootballLeague(competition: FootballCompetitionOption) {
+    const key = getFootballLeagueKey(competition);
+
+    setSelectedFootballLeagueKeys((currentKeys) =>
+      currentKeys.includes(key)
+        ? currentKeys.filter((item) => item !== key)
+        : [...currentKeys, key],
+    );
+  }
+
+  function selectOngoingFootballLeagues() {
+    setSelectedFootballLeagueKeys(
+      footballCompetitions.map((competition) => getFootballLeagueKey(competition)),
+    );
+  }
+
+  async function importSelectedFootballLeagues() {
+    if (!isAdmin) {
+      showNotice("Only admin can import API data.", "error");
+      return;
+    }
+
+    const selectedLeagues = footballCompetitions
+      .filter((competition) =>
+        selectedFootballLeagueKeys.includes(getFootballLeagueKey(competition)),
+      )
+      .map((competition) => ({
+        id: competition.id,
+        season: competition.season,
+      }));
+
+    if (selectedLeagues.length === 0) {
+      showNotice("Choose at least one ongoing competition to import.", "error");
+      return;
+    }
+
+    setIsMutating(true);
+
+    try {
+      const result = await apiRequest<{
+        competitions: number;
+        matches: number;
+        error: string | null;
+      }>("/dashboard/sync-football", {
+        method: "POST",
+        body: JSON.stringify({ leagues: selectedLeagues }),
+      });
+      setOpenImportApiModal(false);
+      await loadDashboard();
+      showNotice(
+        `Imported ${result.competitions} football competitions and ${result.matches} matches.`,
+        result.error ? "info" : "success",
+      );
+    } catch (error) {
+      showNotice(
+        error instanceof Error ? error.message : "Football import failed.",
+        "error",
+      );
     } finally {
       setIsMutating(false);
     }
@@ -315,7 +424,7 @@ export default function AdminDashboardContent({
             <DashboardActionButton
               icon={<FileDown size={18} />}
               label={isMutating ? "Importing..." : "Import API"}
-              onClick={syncSportsApi}
+              onClick={() => void openImportApi()}
             />
             <button
               onClick={openCreateTournament}
@@ -587,6 +696,106 @@ export default function AdminDashboardContent({
           </table>
         </div>
       </section>
+
+      {openImportApiModal && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/70 px-4">
+          <div className="w-full max-w-[760px] rounded border border-[#3a4d54] bg-[#0d252d] p-7 shadow-2xl">
+            <div className="mb-5 flex items-start justify-between gap-4">
+              <div>
+                <h3 className="text-2xl font-black text-[#84d8e8]">
+                  Import Football Competitions
+                </h3>
+                <p className="mt-2 text-sm text-[#9fb2b8]">
+                  Choose competitions currently available from API-SPORTS.
+                </p>
+              </div>
+              <button
+                onClick={() => setOpenImportApiModal(false)}
+                className="text-2xl leading-none text-[#9fb2b8] transition hover:text-white"
+                title="Close import modal"
+              >
+                ×
+              </button>
+            </div>
+
+            <div className="mb-4 flex flex-wrap items-center justify-between gap-3">
+              <button
+                onClick={selectOngoingFootballLeagues}
+                disabled={isLoadingCompetitions || footballCompetitions.length === 0}
+                className="h-11 rounded border border-[#84d8e8] px-4 text-sm font-black uppercase tracking-[0.08em] text-[#84d8e8] disabled:cursor-not-allowed disabled:opacity-50"
+              >
+                Select ongoing competitions
+              </button>
+              <span className="text-sm font-bold text-[#9fb2b8]">
+                {selectedFootballLeagueKeys.length} selected
+              </span>
+            </div>
+
+            <div className="max-h-[390px] overflow-y-auto rounded border border-[#243c43]">
+              {isLoadingCompetitions ? (
+                <div className="flex h-[180px] items-center justify-center text-sm font-bold text-[#9fb2b8]">
+                  Loading competitions...
+                </div>
+              ) : (
+                <div className="divide-y divide-[#243c43]">
+                  {footballCompetitions.map((competition) => {
+                    const key = getFootballLeagueKey(competition);
+                    const checked = selectedFootballLeagueKeys.includes(key);
+
+                    return (
+                      <label
+                        key={key}
+                        className="flex cursor-pointer items-center gap-4 px-4 py-4 transition hover:bg-[#102d35]"
+                      >
+                        <input
+                          type="checkbox"
+                          checked={checked}
+                          onChange={() => toggleFootballLeague(competition)}
+                          className="h-4 w-4 accent-[#84d8e8]"
+                        />
+                        <div className="min-w-0 flex-1">
+                          <p className="truncate text-sm font-black text-white">
+                            {competition.name}
+                          </p>
+                          <p className="mt-1 text-xs uppercase tracking-[0.08em] text-[#9fb2b8]">
+                            {competition.country} / {competition.type} / Season{" "}
+                            {competition.season}
+                          </p>
+                        </div>
+                        <span className="shrink-0 rounded bg-[#162b32] px-3 py-1 text-xs font-black uppercase text-[#84d8e8]">
+                          {competition.current ? "Current" : "Open"}
+                        </span>
+                      </label>
+                    );
+                  })}
+                  {footballCompetitions.length === 0 && (
+                    <div className="flex h-[180px] items-center justify-center text-sm font-bold text-[#9fb2b8]">
+                      No ongoing football competitions found.
+                    </div>
+                  )}
+                </div>
+              )}
+            </div>
+
+            <div className="mt-7 flex justify-end gap-3">
+              <button
+                onClick={() => setOpenImportApiModal(false)}
+                disabled={isMutating}
+                className="h-12 rounded border border-white/10 px-6 font-bold text-zinc-200 disabled:opacity-60"
+              >
+                Cancel
+              </button>
+              <button
+                onClick={() => void importSelectedFootballLeagues()}
+                disabled={isMutating || selectedFootballLeagueKeys.length === 0}
+                className="h-12 rounded bg-[#84d8e8] px-6 font-black text-[#06161b] disabled:cursor-not-allowed disabled:opacity-60"
+              >
+                {isMutating ? "Importing..." : "Import Selected"}
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
 
       {openTournamentForm && (
         <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/70 px-4">
@@ -986,6 +1195,10 @@ function normalizeStatus(status: string): TournamentForm["status"] {
   }
 
   return "UPCOMING";
+}
+
+function getFootballLeagueKey(competition: FootballCompetitionOption) {
+  return `${competition.id}:${competition.season}`;
 }
 
 function formatDate(value: string | null) {

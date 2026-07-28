@@ -1,4 +1,4 @@
-import { Controller, Get, Headers, Post } from '@nestjs/common';
+import { Body, Controller, Get, Headers, Post } from '@nestjs/common';
 import { AuthService } from '../auth/auth.service';
 import { DashboardService } from './dashboard.service';
 import { SportsApiSyncService } from './sports-api-sync.service';
@@ -20,5 +20,24 @@ export class DashboardController {
   async syncNow(@Headers('authorization') authorization: string | undefined) {
     await this.authService.verifyAdminToken(authorization);
     return this.sportsApiSyncService.syncIfStale(true);
+  }
+
+  @Get('football-competitions')
+  async getFootballCompetitions(
+    @Headers('authorization') authorization: string | undefined,
+  ) {
+    await this.authService.verifyAdminToken(authorization);
+    return this.sportsApiSyncService.listFootballCompetitions();
+  }
+
+  @Post('sync-football')
+  async syncFootballCompetitions(
+    @Headers('authorization') authorization: string | undefined,
+    @Body() body: { leagues?: Array<{ id: number; season: number }> },
+  ) {
+    await this.authService.verifyAdminToken(authorization);
+    return this.sportsApiSyncService.syncSelectedFootballLeagues(
+      body.leagues ?? [],
+    );
   }
 }

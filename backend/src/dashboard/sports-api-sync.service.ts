@@ -24,6 +24,17 @@ type FootballCompetition = {
   }>;
 };
 
+export type FootballCompetitionOption = {
+  id: number;
+  name: string;
+  country: string;
+  season: number;
+  start: string | null;
+  end: string | null;
+  current: boolean;
+  type: string;
+};
+
 type FootballMatch = {
   fixture: {
     id: number;
@@ -116,6 +127,126 @@ export class SportsApiSyncService {
     });
 
     return this.inFlight;
+  }
+
+  async listFootballCompetitions() {
+    const apiKey = process.env.FOOTBALL_DATA_API_KEY?.trim();
+
+    if (!apiKey) {
+      throw new Error('FOOTBALL_DATA_API_KEY is not configured.');
+    }
+
+    const headers = { 'x-apisports-key': apiKey };
+    const responses = await Promise.all([
+      this.fetchJson<{ response?: FootballCompetition[] }>(
+        `${FOOTBALL_API_BASE_URL}/leagues?current=true`,
+        headers,
+      ),
+      this.fetchJson<{ response?: FootballCompetition[] }>(
+        `${FOOTBALL_API_BASE_URL}/leagues?search=ASEAN`,
+        headers,
+      ),
+      this.fetchJson<{ response?: FootballCompetition[] }>(
+        `${FOOTBALL_API_BASE_URL}/leagues?search=AFF`,
+        headers,
+      ),
+    ]);
+    const optionsByKey = new Map<string, FootballCompetitionOption>();
+
+    for (const competition of responses.flatMap(
+      (response) => response.response ?? [],
+    )) {
+      const option = this.toFootballCompetitionOption(competition);
+
+      if (!option) {
+        continue;
+      }
+
+      optionsByKey.set(`${option.id}:${option.season}`, option);
+    }
+
+    return Array.from(optionsByKey.values())
+      .filter((option) => this.isCompetitionImportable(option))
+      .sort((first, second) => {
+        const firstPriority = this.getCompetitionPriority(first.name);
+        const secondPriority = this.getCompetitionPriority(second.name);
+
+        if (firstPriority !== secondPriority) {
+          return secondPriority - firstPriority;
+        }
+
+        return first.name.localeCompare(second.name);
+      })
+      .slice(0, 120);
+  }
+
+  async syncSelectedFootballLeagues(
+    leagues: Array<{ id: number; season: number }>,
+  ) {
+    await this.ensureSportTypeConstraint();
+
+    const adminId = await this.findAdminId();
+
+    if (!adminId) {
+      throw new Error('Admin account was not found.');
+    }
+
+    const apiKey = process.env.FOOTBALL_DATA_API_KEY?.trim();
+
+    if (!apiKey) {
+      throw new Error('FOOTBALL_DATA_API_KEY is not configured.');
+    }
+
+    const selectedLeagues = leagues
+      .map((league) => ({
+        id: Number(league.id),
+        season: Number(league.season),
+      }))
+      .filter((league) => Number.isInteger(league.id) && Number.isInteger(league.season));
+
+    if (selectedLeagues.length === 0) {
+      throw new Error('Please choose at least one football competition.');
+    }
+
+    const headers = { 'x-apisports-key': apiKey };
+    const from = this.formatApiDate(new Date(Date.now() - 7 * 24 * 60 * 60 * 1000));
+    const to = this.formatApiDate(new Date(Date.now() + 45 * 24 * 60 * 60 * 1000));
+    let competitionCount = 0;
+    let matchCount = 0;
+
+    for (const league of selectedLeagues) {
+      const [competitionResponse, fixturesResponse] = await Promise.all([
+        this.fetchJson<{ response?: FootballCompetition[] }>(
+          `${FOOTBALL_API_BASE_URL}/leagues?id=${league.id}&season=${league.season}`,
+          headers,
+        ),
+        this.fetchJson<{ response?: FootballMatch[] }>(
+          `${FOOTBALL_API_BASE_URL}/fixtures?league=${league.id}&season=${league.season}&from=${from}&to=${to}`,
+          headers,
+        ),
+      ]);
+      const competition = competitionResponse.response?.[0];
+      const competitionName =
+        competition?.league?.name || fixturesResponse.response?.[0]?.league?.name;
+
+      if (!competitionName) {
+        continue;
+      }
+
+      await this.upsertTournament({
+        name: competitionName,
+        sportType: 'FOOTBALL',
+        status: 'ACTIVE',
+        adminId,
+      });
+      competitionCount += 1;
+      matchCount += await this.syncFootballMatches(
+        adminId,
+        fixturesResponse.response ?? [],
+      );
+    }
+
+    return { competitions: competitionCount, matches: matchCount, error: null };
   }
 
   private async syncExternalData(): Promise<SyncResult> {
@@ -229,7 +360,18 @@ export class SportsApiSyncService {
       }
     }
 
-    for (const match of matchesById.values()) {
+    matchCount = await this.syncFootballMatches(adminId, matchesById.values());
+
+    return { competitions: competitionCount, matches: matchCount, error: null };
+  }
+
+  private async syncFootballMatches(
+    adminId: number,
+    matches: Iterable<FootballMatch>,
+  ) {
+    let matchCount = 0;
+
+    for (const match of matches) {
       if (!match.league?.name) {
         continue;
       }
@@ -263,7 +405,7 @@ export class SportsApiSyncService {
       matchCount += 1;
     }
 
-    return { competitions: competitionCount, matches: matchCount, error: null };
+    return matchCount;
   }
 
   private async syncF1(adminId: number) {
@@ -548,6 +690,67 @@ export class SportsApiSyncService {
     }
 
     return (await response.json()) as T;
+  }
+
+  private toFootballCompetitionOption(
+    competition: FootballCompetition,
+  ): FootballCompetitionOption | null {
+    if (!competition.league?.id || !competition.league.name) {
+      return null;
+    }
+
+    const currentSeason =
+      competition.seasons?.find((season) => season.current) ??
+      competition.seasons?.at(-1);
+
+    if (!currentSeason?.year) {
+      return null;
+    }
+
+    return {
+      id: competition.league.id,
+      name: competition.league.name,
+      country: competition.country?.name || 'International',
+      season: currentSeason.year,
+      start: currentSeason.start ?? null,
+      end: currentSeason.end ?? null,
+      current: Boolean(currentSeason.current),
+      type: competition.league.type || 'League',
+    };
+  }
+
+  private isCompetitionImportable(option: FootballCompetitionOption) {
+    if (option.current) {
+      return true;
+    }
+
+    const now = new Date();
+    const start = option.start ? new Date(option.start) : null;
+    const end = option.end ? new Date(option.end) : null;
+
+    return (!start || start <= now) && (!end || end >= now);
+  }
+
+  private getCompetitionPriority(name: string) {
+    const normalized = name.toLowerCase();
+
+    if (normalized.includes('asean') || normalized.includes('aff')) {
+      return 3;
+    }
+
+    if (
+      normalized.includes('world cup') ||
+      normalized.includes('championship') ||
+      normalized.includes('cup')
+    ) {
+      return 2;
+    }
+
+    return 1;
+  }
+
+  private formatApiDate(date: Date) {
+    return date.toISOString().slice(0, 10);
   }
 
   private async findAdminId() {
