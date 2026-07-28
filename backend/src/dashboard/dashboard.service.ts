@@ -148,21 +148,40 @@ export class DashboardService {
   private tournamentMatchesQuery() {
     return `
       SELECT
-        m.id,
-        m.tournament_id AS "tournamentId",
-        t.name AS "tournamentName",
-        COALESCE(home.name, m.home_placeholder) AS "homeTeam",
-        COALESCE(away.name, m.away_placeholder) AS "awayTeam",
-        m.scheduled_time AS "scheduledTime",
-        m.scheduled_time - (m.lock_minutes_before_start * INTERVAL '1 minute') AS deadline,
-        COALESCE(m.external_source, 'MANUAL') AS source,
-        m.status
-      FROM matches m
-      JOIN tournaments t ON t.id = m.tournament_id
-      LEFT JOIN teams home ON home.id = m.home_team_id
-      LEFT JOIN teams away ON away.id = m.away_team_id
-      ORDER BY m.scheduled_time ASC
-      LIMIT 120
+        ranked.id,
+        ranked."tournamentId",
+        ranked."tournamentName",
+        ranked."homeTeam",
+        ranked."awayTeam",
+        ranked."scheduledTime",
+        ranked.deadline,
+        ranked.source,
+        ranked.status
+      FROM (
+        SELECT
+          m.id,
+          m.tournament_id AS "tournamentId",
+          t.name AS "tournamentName",
+          COALESCE(home.name, m.home_placeholder) AS "homeTeam",
+          COALESCE(away.name, m.away_placeholder) AS "awayTeam",
+          m.scheduled_time AS "scheduledTime",
+          m.scheduled_time - (m.lock_minutes_before_start * INTERVAL '1 minute') AS deadline,
+          COALESCE(m.external_source, 'MANUAL') AS source,
+          m.status,
+          ROW_NUMBER() OVER (
+            PARTITION BY m.tournament_id
+            ORDER BY
+              CASE WHEN m.scheduled_time >= NOW() THEN 0 ELSE 1 END,
+              CASE WHEN m.scheduled_time >= NOW() THEN m.scheduled_time END ASC,
+              CASE WHEN m.scheduled_time < NOW() THEN m.scheduled_time END DESC
+          ) AS row_number
+        FROM matches m
+        JOIN tournaments t ON t.id = m.tournament_id
+        LEFT JOIN teams home ON home.id = m.home_team_id
+        LEFT JOIN teams away ON away.id = m.away_team_id
+      ) ranked
+      WHERE ranked.row_number <= 20
+      ORDER BY ranked."tournamentId", ranked."scheduledTime" ASC
     `;
   }
 
