@@ -48,7 +48,7 @@ export class DashboardService {
         name: row.name,
         sportType: row.sportType,
         status: row.status,
-        players: Number(row.players ?? 0),
+        teams: Number(row.teams ?? 0),
         matches: Number(row.matches ?? 0),
         source: row.source ?? 'MANUAL',
       })),
@@ -104,11 +104,11 @@ export class DashboardService {
         t.name,
         t.sport_type AS "sportType",
         t.status,
-        COUNT(DISTINCT tp.user_id) AS players,
+        COUNT(DISTINCT team.id) AS teams,
         COUNT(DISTINCT m.id) AS matches,
         COALESCE(MAX(m.external_source), 'MANUAL') AS source
       FROM tournaments t
-      LEFT JOIN tournament_participants tp ON tp.tournament_id = t.id
+      LEFT JOIN teams team ON team.tournament_id = t.id
       LEFT JOIN matches m ON m.tournament_id = t.id
       GROUP BY t.id, t.name, t.sport_type, t.status, t.updated_at, t.created_at
       ORDER BY

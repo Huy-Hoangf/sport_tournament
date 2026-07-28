@@ -49,7 +49,7 @@ type TournamentRow = {
   name: string;
   sportType?: string;
   status: string;
-  players: number;
+  teams: number;
   matches: number;
   source: string;
 };
@@ -1223,7 +1223,7 @@ function TournamentManagementTable({
               <th className="px-6 py-4">Tournament Name</th>
               <th className="w-28 px-4 py-4">Sport</th>
               <th className="w-32 px-4 py-4">Status</th>
-              <th className="w-24 px-4 py-4">Players</th>
+              <th className="w-24 px-4 py-4">Teams</th>
               <th className="w-24 px-4 py-4">Matches</th>
               <th className="w-44 px-4 py-4">Source</th>
               <th className="w-28 px-4 py-4">Action</th>
@@ -1265,7 +1265,7 @@ function TournamentManagementTable({
                       <DashboardStatusBadge status={tournament.status} />
                     </td>
                     <td className="px-4 text-white">
-                      {tournament.players.toLocaleString()}
+                      {tournament.teams.toLocaleString()}
                     </td>
                     <td className="px-4 text-white">
                       {tournament.matches.toLocaleString()}
@@ -1557,7 +1557,7 @@ function TournamentMatchDetails({
           <thead className="h-[54px] border-b border-[#3a4d54] bg-[#14272e] text-xs uppercase tracking-[0.08em] text-[#d5e0e3]">
             <tr>
               <th className="px-5 py-3">
-                {isF1 ? "Session / Circuit" : "Teams / Players"}
+                {isF1 ? "Session / Circuit" : "Teams"}
               </th>
               <th className="w-48 px-4 py-3">
                 {isF1 ? "Session Time" : "Match Time"}
