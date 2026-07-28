@@ -1,9 +1,9 @@
-"use client";
+﻿"use client";
 
 import { apiRequest } from "../api";
 import NoticeBanner, { type Notice } from "../notice-banner";
 import type React from "react";
-import { Fragment, useEffect, useState } from "react";
+import { Fragment, useCallback, useEffect, useState } from "react";
 import {
   AlertTriangle,
   CalendarDays,
@@ -135,19 +135,11 @@ export default function AdminDashboardContent({
   const [tournamentForm, setTournamentForm] =
     useState<TournamentForm>(emptyTournamentForm);
 
-  useEffect(() => {
-    void loadDashboard();
-  }, [refreshKey]);
-
-  useEffect(() => {
-    const interval = window.setInterval(() => {
-      void loadDashboard();
-    }, DASHBOARD_REFRESH_MS);
-
-    return () => window.clearInterval(interval);
+  const showNotice = useCallback((message: string, tone: Notice["tone"] = "info") => {
+    setNotice({ message, tone });
   }, []);
 
-  async function loadDashboard() {
+  const loadDashboard = useCallback(async () => {
     setIsLoading(true);
 
     try {
@@ -161,11 +153,21 @@ export default function AdminDashboardContent({
     } finally {
       setIsLoading(false);
     }
-  }
+  }, [showNotice]);
 
-  function showNotice(message: string, tone: Notice["tone"] = "info") {
-    setNotice({ message, tone });
-  }
+  useEffect(() => {
+    queueMicrotask(() => {
+      void loadDashboard();
+    });
+  }, [loadDashboard, refreshKey]);
+
+  useEffect(() => {
+    const interval = window.setInterval(() => {
+      void loadDashboard();
+    }, DASHBOARD_REFRESH_MS);
+
+    return () => window.clearInterval(interval);
+  }, [loadDashboard]);
 
   async function syncSportsApi() {
     if (!isAdmin) {
@@ -671,7 +673,7 @@ export default function AdminDashboardContent({
               Delete Tournament
             </h3>
             <p className="mt-4 text-base font-bold text-white">
-              do u want to delete this tournament
+              Delete This Tournament
             </p>
             <p className="mt-2 text-sm text-[#9fb2b8]">
               {tournamentToDelete.name}

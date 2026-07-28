@@ -4,7 +4,7 @@ import { apiRequest, type CurrentUser } from "../api";
 import { logoutAll, readCurrentUser } from "../auth-sync";
 import NoticeBanner, { type Notice } from "../notice-banner";
 import AdminDashboardContent from "./admin-dashboard-content";
-import { useEffect, useMemo, useState } from "react";
+import { useCallback, useEffect, useMemo, useState } from "react";
 import { useRouter } from "next/navigation";
 import * as XLSX from "xlsx";
 import {
@@ -101,9 +101,18 @@ export default function AdminPage() {
   const [notice, setNotice] = useState<Notice | null>(null);
   const isAdmin = currentUser?.role === "ADMIN";
 
-  function showNotice(message: string, tone: Notice["tone"] = "info") {
+  const showNotice = useCallback((message: string, tone: Notice["tone"] = "info") => {
     setNotice({ message, tone });
-  }
+  }, []);
+
+  const fetchPlayers = useCallback(async () => {
+    try {
+      const users = await apiRequest<BackendUser[]>("/users");
+      setPlayers(users.map(mapUserToPlayer));
+    } catch (error) {
+      showNotice(error instanceof Error ? error.message : "Cannot load users.");
+    }
+  }, [showNotice]);
 
   function refreshDashboard() {
     setDashboardRefreshKey((key) => key + 1);
@@ -117,12 +126,14 @@ export default function AdminPage() {
       return;
     }
 
-    setCurrentUser(currentUser);
-    setActiveView(currentUser.role === "ADMIN" ? "players" : "dashboard");
+    queueMicrotask(() => {
+      setCurrentUser(currentUser);
+      setActiveView(currentUser.role === "ADMIN" ? "players" : "dashboard");
 
-    if (currentUser.role === "ADMIN") {
-      void fetchPlayers();
-    }
+      if (currentUser.role === "ADMIN") {
+        void fetchPlayers();
+      }
+    });
 
     function handleStorage(event: StorageEvent) {
       if (event.key === "logoutEvent" || event.key === "currentUser") {
@@ -137,7 +148,7 @@ export default function AdminPage() {
     return () => {
       window.removeEventListener("storage", handleStorage);
     };
-  }, [router]);
+  }, [fetchPlayers, router]);
 
   const activeCount = useMemo(
     () => players.filter((player) => player.status === "ACTIVE").length,
@@ -176,15 +187,6 @@ export default function AdminPage() {
     (currentSafePage - 1) * PLAYERS_PER_PAGE,
     currentSafePage * PLAYERS_PER_PAGE,
   );
-
-  async function fetchPlayers() {
-    try {
-      const users = await apiRequest<BackendUser[]>("/users");
-      setPlayers(users.map(mapUserToPlayer));
-    } catch (error) {
-      showNotice(error instanceof Error ? error.message : "Cannot load users.");
-    }
-  }
 
   async function createPlayer() {
     if (!isAdmin) {
