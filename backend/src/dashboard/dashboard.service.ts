@@ -30,7 +30,7 @@ export class DashboardService {
     return {
       apiStatus: {
         connected: Boolean(summary.lastApiSync),
-        provider: 'API-SPORTS Football + OpenF1 + Cito LoL',
+        provider: 'API-SPORTS Football + ESPN ASEAN + OpenF1 + Cito LoL',
         lastSync: summary.lastApiSync,
         externalId: this.buildExternalId(summary.lastApiSync),
       },

@@ -7,6 +7,8 @@ const LOL_CACHE_MS = 24 * 60 * 60 * 1000;
 const FOOTBALL_API_BASE_URL = 'https://v3.football.api-sports.io';
 const OPENF1_API_BASE_URL = 'https://api.openf1.org/v1';
 const CITO_API_BASE_URL = 'https://api.citoapi.com/api/v1';
+const ESPN_SOCCER_API_BASE_URL =
+  'https://site.api.espn.com/apis/site/v2/sports/soccer';
 
 type FootballCompetition = {
   league: {
@@ -38,7 +40,7 @@ export type FootballCompetitionOption = {
 
 type FootballMatch = {
   fixture: {
-    id: number;
+    id: number | string;
     date: string;
     status?: {
       short?: string;
@@ -56,6 +58,27 @@ type FootballMatch = {
     home?: number | null;
     away?: number | null;
   };
+};
+
+type EspnSoccerEvent = {
+  id?: string;
+  date?: string;
+  status?: {
+    type?: {
+      state?: string;
+      name?: string;
+      completed?: boolean;
+    };
+  };
+  competitions?: Array<{
+    competitors?: Array<{
+      homeAway?: string;
+      score?: string;
+      team?: {
+        displayName?: string;
+      };
+    }>;
+  }>;
 };
 
 type OpenF1Meeting = {
@@ -264,18 +287,26 @@ export class SportsApiSyncService {
     let matchCount = 0;
 
     for (const league of selectedLeagues) {
-      const fixtures = await this.fetchFootballFixturesForLeague(
-        league.id,
-        league.season,
-        headers,
-      );
+      const isAseanChampionship =
+        league.name.trim().toLowerCase() === 'asean championship';
+      const fixtures = isAseanChampionship
+        ? await this.fetchAseanChampionshipFixtures(league.season)
+        : await this.fetchFootballFixturesForLeague(
+            league.id,
+            league.season,
+            headers,
+          );
       const competitionName = fixtures[0]?.league?.name || league.name;
 
       if (!competitionName || fixtures.length === 0) {
         continue;
       }
 
-      const importedMatches = await this.syncFootballMatches(adminId, fixtures);
+      const importedMatches = await this.syncFootballMatches(
+        adminId,
+        fixtures,
+        isAseanChampionship ? 'ESPN_ASEAN' : 'FOOTBALL_DATA',
+      );
 
       if (importedMatches > 0) {
         competitionCount += 1;
@@ -531,14 +562,14 @@ export class SportsApiSyncService {
         headers,
       ),
     ]);
-    const matchesById = new Map<number, FootballMatch>();
+    const matchesById = new Map<string, FootballMatch>();
 
     for (const match of [
       ...(liveMatchesResponse.response ?? []),
       ...(todayMatchesResponse.response ?? []),
     ]) {
       if (match.fixture?.id && this.isFootballFixtureCurrentOrFuture(match)) {
-        matchesById.set(match.fixture.id, match);
+        matchesById.set(String(match.fixture.id), match);
       }
     }
 
@@ -565,6 +596,7 @@ export class SportsApiSyncService {
   private async syncFootballMatches(
     adminId: number,
     matches: Iterable<FootballMatch>,
+    source: 'FOOTBALL_DATA' | 'ESPN_ASEAN' = 'FOOTBALL_DATA',
   ) {
     let matchCount = 0;
 
@@ -596,7 +628,7 @@ export class SportsApiSyncService {
         awayPlaceholder: awayName,
         scheduledTime: match.fixture.date,
         status: this.mapMatchStatus(match.fixture.status?.short ?? ''),
-        source: 'FOOTBALL_DATA',
+        source,
         externalMatchId: String(match.fixture.id),
         actualHomeScore: match.goals?.home ?? null,
         actualAwayScore: match.goals?.away ?? null,
@@ -605,6 +637,72 @@ export class SportsApiSyncService {
     }
 
     return matchCount;
+  }
+
+  private async fetchAseanChampionshipFixtures(season: number) {
+    const response = await this.fetchJson<{ events?: EspnSoccerEvent[] }>(
+      `${ESPN_SOCCER_API_BASE_URL}/aff.championship/scoreboard?dates=${season}0101-${season}1231`,
+    );
+
+    return (response.events ?? [])
+      .map((event) => this.mapEspnAseanEvent(event))
+      .filter(
+        (match): match is FootballMatch =>
+          match !== null && this.isFootballFixtureCurrentOrFuture(match),
+      );
+  }
+
+  private mapEspnAseanEvent(event: EspnSoccerEvent): FootballMatch | null {
+    if (!event.id || !event.date) {
+      return null;
+    }
+
+    const competitors = event.competitions?.[0]?.competitors ?? [];
+    const home = competitors.find(
+      (competitor) => competitor.homeAway === 'home',
+    );
+    const away = competitors.find(
+      (competitor) => competitor.homeAway === 'away',
+    );
+
+    if (!home?.team?.displayName || !away?.team?.displayName) {
+      return null;
+    }
+
+    const state = event.status?.type?.state?.toLowerCase();
+    const status = event.status?.type?.completed
+      ? 'FT'
+      : state === 'in'
+        ? 'LIVE'
+        : event.status?.type?.name === 'STATUS_CANCELED'
+          ? 'CANC'
+          : 'NS';
+
+    return {
+      fixture: {
+        id: `espn-${event.id}`,
+        date: event.date,
+        status: { short: status },
+      },
+      league: { name: 'ASEAN Championship' },
+      teams: {
+        home: { name: home.team.displayName },
+        away: { name: away.team.displayName },
+      },
+      goals: {
+        home: this.parseOptionalScore(home.score),
+        away: this.parseOptionalScore(away.score),
+      },
+    };
+  }
+
+  private parseOptionalScore(score?: string) {
+    if (typeof score !== 'string' || score.trim() === '') {
+      return null;
+    }
+
+    const parsed = Number(score);
+    return Number.isFinite(parsed) ? parsed : null;
   }
 
   private async fetchFootballFixturesForLeague(
@@ -623,7 +721,7 @@ export class SportsApiSyncService {
       `league=${leagueId}&season=${season}&from=${shortFrom}&to=${shortTo}`,
       `league=${leagueId}&season=${season}&next=50`,
     ];
-    const fixturesById = new Map<number, FootballMatch>();
+    const fixturesById = new Map<string, FootballMatch>();
 
     for (const query of queries) {
       const response = await this.fetchJson<{ response?: FootballMatch[] }>(
@@ -633,7 +731,7 @@ export class SportsApiSyncService {
 
       for (const match of response.response ?? []) {
         if (match.fixture?.id && this.isFootballFixtureCurrentOrFuture(match)) {
-          fixturesById.set(match.fixture.id, match);
+          fixturesById.set(String(match.fixture.id), match);
         }
       }
 
@@ -854,7 +952,7 @@ export class SportsApiSyncService {
     awayPlaceholder: string;
     scheduledTime: string;
     status: 'PENDING' | 'LIVE' | 'FINISHED' | 'CANCELLED';
-    source: 'FOOTBALL_DATA' | 'OPENF1' | 'CITO_LOL';
+    source: 'FOOTBALL_DATA' | 'ESPN_ASEAN' | 'OPENF1' | 'CITO_LOL';
     externalMatchId: string;
     actualHomeScore: number | null;
     actualAwayScore: number | null;
