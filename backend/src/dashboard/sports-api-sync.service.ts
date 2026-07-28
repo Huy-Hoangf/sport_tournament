@@ -394,14 +394,14 @@ export class SportsApiSyncService {
     const years = [now.getUTCFullYear(), now.getUTCFullYear() + 1];
     const meetingResponses = await Promise.all(
       years.map((year) =>
-        this.fetchJson<OpenF1Meeting[]>(
+        this.fetchOptionalJson<OpenF1Meeting[]>(
           `${OPENF1_API_BASE_URL}/meetings?year=${year}`,
         ),
       ),
     );
 
     return meetingResponses
-      .flat()
+      .flatMap((meetings) => meetings ?? [])
       .filter((meeting) => this.isF1MeetingImportable(meeting))
       .map((meeting) => this.toF1MeetingOption(meeting))
       .sort((first, second) => {
@@ -443,27 +443,29 @@ export class SportsApiSyncService {
     const [meetingResponses, sessionResponses] = await Promise.all([
       Promise.all(
         years.map((year) =>
-          this.fetchJson<OpenF1Meeting[]>(
+          this.fetchOptionalJson<OpenF1Meeting[]>(
             `${OPENF1_API_BASE_URL}/meetings?year=${year}`,
           ),
         ),
       ),
       Promise.all(
         years.map((year) =>
-          this.fetchJson<OpenF1Session[]>(
+          this.fetchOptionalJson<OpenF1Session[]>(
             `${OPENF1_API_BASE_URL}/sessions?year=${year}`,
           ),
         ),
       ),
     ]);
     const meetings = meetingResponses
-      .flat()
+      .flatMap((yearMeetings) => yearMeetings ?? [])
       .filter(
         (meeting) =>
           selectedKeys.has(meeting.meeting_key) &&
           this.isF1MeetingImportable(meeting),
       );
-    const sessions = sessionResponses.flat();
+    const sessions = sessionResponses.flatMap(
+      (yearSessions) => yearSessions ?? [],
+    );
     let sessionCount = 0;
 
     for (const meeting of meetings) {
@@ -1237,7 +1239,7 @@ export class SportsApiSyncService {
         ['tournament_slug'],
         ['tournamentSlug'],
       ]);
-      const competitionId =
+      let competitionId =
         competitionSlug ||
         this.pickString(rawMatch, [
           ['tournament', 'id'],
@@ -1249,19 +1251,10 @@ export class SportsApiSyncService {
           ['leagueId'],
         ]) ||
         this.slugify(rawCompetitionName);
-      const competitionName = this.normalizeLolCompetitionName(
+      let competitionName = this.normalizeLolCompetitionName(
         rawCompetitionName,
         competitionSlug || competitionId,
       );
-      const matchId =
-        this.pickString(rawMatch, [
-          ['id'],
-          ['matchId'],
-          ['match_id'],
-          ['match', 'id'],
-          ['gameId'],
-          ['game_id'],
-        ]) || `${competitionId}:${scheduledTime}`;
       const homeName =
         this.pickString(rawMatch, [
           ['homeTeam', 'name'],
@@ -1284,6 +1277,24 @@ export class SportsApiSyncService {
           ['match', 'teams', 1, 'name'],
           ['participants', 1, 'name'],
         ]) || 'Team 2';
+      const resolvedCompetition = this.resolveLolCompetitionIdentity(
+        rawMatch,
+        String(competitionId),
+        competitionName,
+        homeName,
+        awayName,
+      );
+      competitionId = resolvedCompetition.id;
+      competitionName = resolvedCompetition.name;
+      const matchId =
+        this.pickString(rawMatch, [
+          ['id'],
+          ['matchId'],
+          ['match_id'],
+          ['match', 'id'],
+          ['gameId'],
+          ['game_id'],
+        ]) || `${competitionId}:${scheduledTime}`;
       const region =
         this.pickString(rawMatch, [
           ['region'],
@@ -1538,6 +1549,54 @@ export class SportsApiSyncService {
     }
 
     return name;
+  }
+
+  private resolveLolCompetitionIdentity(
+    rawMatch: CitoLolMatch,
+    fallbackId: string,
+    fallbackName: string,
+    homeName: string,
+    awayName: string,
+  ) {
+    const rawLeagueIdentity =
+      this.pickString(rawMatch, [
+        ['league', 'slug'],
+        ['competition', 'slug'],
+        ['tournament', 'slug'],
+        ['serie', 'slug'],
+        ['league_slug'],
+        ['leagueSlug'],
+        ['competition_slug'],
+        ['competitionSlug'],
+        ['tournament_slug'],
+        ['tournamentSlug'],
+        ['league', 'name'],
+        ['competition', 'name'],
+        ['tournament', 'name'],
+        ['serie', 'name'],
+        ['leagueName'],
+        ['competitionName'],
+        ['tournamentName'],
+      ]) || '';
+    const leagueIdentity = `${rawLeagueIdentity} ${fallbackId} ${fallbackName}`
+      .toLowerCase()
+      .replace(/[^a-z0-9]+/g, '_');
+
+    if (!leagueIdentity.includes('lck')) {
+      return { id: fallbackId, name: fallbackName };
+    }
+
+    const teams = `${homeName} ${awayName}`.toLowerCase();
+    const isChallengers =
+      leagueIdentity.includes('lck_challenger') ||
+      leagueIdentity.includes('lck_cl') ||
+      /\b(challengers?|academy|global academy)\b/i.test(teams);
+
+    if (isChallengers) {
+      return { id: 'lck_challengers', name: 'LCK Challengers' };
+    }
+
+    return { id: 'lck', name: 'LCK' };
   }
 
   private slugify(value: string) {
