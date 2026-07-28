@@ -2,15 +2,19 @@
 import { InjectRepository } from '@nestjs/typeorm';
 import { Repository } from 'typeorm';
 import { User } from '../users/user.entity';
+import { SportsApiSyncService } from './sports-api-sync.service';
 
 @Injectable()
 export class DashboardService {
   constructor(
     @InjectRepository(User)
     private readonly usersRepository: Repository<User>,
+    private readonly sportsApiSyncService: SportsApiSyncService,
   ) {}
 
   async getDashboard() {
+    await this.sportsApiSyncService.syncIfStale(false);
+
     const [summaryRows, tournaments, upcomingSchedule, activities] =
       await Promise.all([
         this.usersRepository.query(this.summaryQuery()),
@@ -24,7 +28,7 @@ export class DashboardService {
     return {
       apiStatus: {
         connected: Boolean(summary.lastApiSync),
-        provider: 'Football Data API v4',
+        provider: 'Football Data API v4 + OpenF1',
         lastSync: summary.lastApiSync,
         externalId: this.buildExternalId(summary.lastApiSync),
       },
@@ -40,6 +44,7 @@ export class DashboardService {
       tournaments: tournaments.map((row) => ({
         id: Number(row.id),
         name: row.name,
+        sportType: row.sportType,
         status: row.status,
         players: Number(row.players ?? 0),
         matches: Number(row.matches ?? 0),
@@ -81,6 +86,7 @@ export class DashboardService {
       SELECT
         t.id,
         t.name,
+        t.sport_type AS "sportType",
         t.status,
         COUNT(DISTINCT tp.user_id) AS players,
         COUNT(DISTINCT m.id) AS matches,
@@ -88,7 +94,7 @@ export class DashboardService {
       FROM tournaments t
       LEFT JOIN tournament_participants tp ON tp.tournament_id = t.id
       LEFT JOIN matches m ON m.tournament_id = t.id
-      GROUP BY t.id, t.name, t.status, t.updated_at, t.created_at
+      GROUP BY t.id, t.name, t.sport_type, t.status, t.updated_at, t.created_at
       ORDER BY
         CASE t.status
           WHEN 'ACTIVE' THEN 0

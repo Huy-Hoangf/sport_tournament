@@ -41,7 +41,7 @@ CREATE TABLE tournaments (
     created_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
     updated_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
 
-    CONSTRAINT chk_tournaments_sport_type CHECK (sport_type IN ('FOOTBALL', 'BASKETBALL', 'ESPORTS')),
+    CONSTRAINT chk_tournaments_sport_type CHECK (sport_type IN ('FOOTBALL', 'F1', 'BASKETBALL', 'ESPORTS')),
     CONSTRAINT chk_tournaments_format CHECK (format IN ('GROUP_AND_KNOCKOUT', 'ROUND_ROBIN', 'KNOCKOUT')),
     CONSTRAINT chk_tournaments_status CHECK (status IN ('UPCOMING', 'ACTIVE', 'COMPLETED', 'CANCELLED')),
     CONSTRAINT chk_tournaments_visibility CHECK (visibility IN ('PUBLIC', 'PRIVATE'))

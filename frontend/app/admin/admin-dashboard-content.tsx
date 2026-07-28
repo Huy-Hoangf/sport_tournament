@@ -1,7 +1,8 @@
-﻿"use client";
+"use client";
 
 import { apiRequest } from "../api";
 import NoticeBanner, { type Notice } from "../notice-banner";
+import type React from "react";
 import { useEffect, useState } from "react";
 import {
   AlertTriangle,
@@ -9,13 +10,17 @@ import {
   Cloud,
   FileDown,
   Filter,
+  Pencil,
   Plus,
   RefreshCw,
   ShieldCheck,
+  Trash2,
   Trophy,
   Users,
   Zap,
 } from "lucide-react";
+
+const DASHBOARD_REFRESH_MS = 14.4 * 60 * 1000;
 
 type DashboardData = {
   apiStatus: {
@@ -41,10 +46,19 @@ type DashboardData = {
 type TournamentRow = {
   id: number;
   name: string;
+  sportType?: string;
   status: string;
   players: number;
   matches: number;
   source: string;
+};
+
+type TournamentForm = {
+  name: string;
+  sportType: "FOOTBALL" | "F1";
+  format: "ROUND_ROBIN" | "GROUP_AND_KNOCKOUT" | "KNOCKOUT";
+  status: "UPCOMING" | "ACTIVE" | "COMPLETED" | "CANCELLED";
+  visibility: "PUBLIC" | "PRIVATE";
 };
 
 type MatchRow = {
@@ -64,10 +78,18 @@ type ActivityRow = {
   createdAt: string;
 };
 
+const emptyTournamentForm: TournamentForm = {
+  name: "",
+  sportType: "FOOTBALL",
+  format: "ROUND_ROBIN",
+  status: "UPCOMING",
+  visibility: "PUBLIC",
+};
+
 const emptyDashboard: DashboardData = {
   apiStatus: {
     connected: false,
-    provider: "Football Data API v4",
+    provider: "Football Data API v4 + OpenF1",
     lastSync: null,
     externalId: "LOCAL",
   },
@@ -94,11 +116,26 @@ export default function AdminDashboardContent({
 }) {
   const [dashboard, setDashboard] = useState<DashboardData>(emptyDashboard);
   const [isLoading, setIsLoading] = useState(true);
+  const [isMutating, setIsMutating] = useState(false);
   const [notice, setNotice] = useState<Notice | null>(null);
+  const [openTournamentForm, setOpenTournamentForm] = useState(false);
+  const [editingTournamentId, setEditingTournamentId] = useState<number | null>(
+    null,
+  );
+  const [tournamentForm, setTournamentForm] =
+    useState<TournamentForm>(emptyTournamentForm);
 
   useEffect(() => {
     void loadDashboard();
   }, [refreshKey]);
+
+  useEffect(() => {
+    const interval = window.setInterval(() => {
+      void loadDashboard();
+    }, DASHBOARD_REFRESH_MS);
+
+    return () => window.clearInterval(interval);
+  }, []);
 
   async function loadDashboard() {
     setIsLoading(true);
@@ -120,8 +157,125 @@ export default function AdminDashboardContent({
     setNotice({ message, tone });
   }
 
-  function showNotReady() {
-    showNotice("this feature is not ready");
+  async function syncSportsApi() {
+    if (!isAdmin) {
+      showNotice("Only admin can sync API data.", "error");
+      return;
+    }
+
+    setIsMutating(true);
+
+    try {
+      const result = await apiRequest<{
+        football?: { competitions: number; matches: number; error: string | null };
+        f1?: { meetings: number; sessions: number; error: string | null };
+      }>("/dashboard/sync", {
+        method: "POST",
+      });
+      await loadDashboard();
+      showNotice(
+        [
+          `Football: ${result.football?.competitions ?? 0} competitions, ${
+            result.football?.matches ?? 0
+          } matches`,
+          `F1: ${result.f1?.meetings ?? 0} meetings, ${
+            result.f1?.sessions ?? 0
+          } sessions`,
+          result.football?.error ? `Football note: ${result.football.error}` : "",
+          result.f1?.error ? `F1 note: ${result.f1.error}` : "",
+        ]
+          .filter(Boolean)
+          .join("\n"),
+        "success",
+      );
+    } catch (error) {
+      showNotice(error instanceof Error ? error.message : "API sync failed.", "error");
+    } finally {
+      setIsMutating(false);
+    }
+  }
+
+  function openCreateTournament() {
+    setEditingTournamentId(null);
+    setTournamentForm(emptyTournamentForm);
+    setOpenTournamentForm(true);
+  }
+
+  function openEditTournament(tournament: TournamentRow) {
+    setEditingTournamentId(tournament.id);
+    setTournamentForm({
+      name: tournament.name,
+      sportType: tournament.sportType === "F1" ? "F1" : "FOOTBALL",
+      format: "ROUND_ROBIN",
+      status: normalizeStatus(tournament.status),
+      visibility: "PUBLIC",
+    });
+    setOpenTournamentForm(true);
+  }
+
+  async function saveTournament() {
+    if (!isAdmin) {
+      showNotice("Only admin can save tournaments.", "error");
+      return;
+    }
+
+    if (!tournamentForm.name.trim()) {
+      showNotice("Tournament name is required.", "error");
+      return;
+    }
+
+    setIsMutating(true);
+
+    try {
+      if (editingTournamentId) {
+        await apiRequest(`/tournaments/admin/${editingTournamentId}`, {
+          method: "PATCH",
+          body: JSON.stringify(tournamentForm),
+        });
+        showNotice("Tournament updated successfully.", "success");
+      } else {
+        await apiRequest("/tournaments/admin", {
+          method: "POST",
+          body: JSON.stringify(tournamentForm),
+        });
+        showNotice("Tournament created successfully.", "success");
+      }
+
+      setOpenTournamentForm(false);
+      setEditingTournamentId(null);
+      await loadDashboard();
+    } catch (error) {
+      showNotice(
+        error instanceof Error ? error.message : "Cannot save tournament.",
+        "error",
+      );
+    } finally {
+      setIsMutating(false);
+    }
+  }
+
+  async function deleteTournament(tournament: TournamentRow) {
+    if (!isAdmin) {
+      showNotice("Only admin can delete tournaments.", "error");
+      return;
+    }
+
+    setIsMutating(true);
+
+    try {
+      await apiRequest(`/tournaments/admin/${tournament.id}`, {
+        method: "DELETE",
+      });
+      showNotice(`${tournament.name} deleted successfully.`, "success");
+      await loadDashboard();
+    } catch (error) {
+      showNotice(
+        error instanceof Error ? error.message : "Cannot delete tournament.",
+        "error",
+      );
+    } finally {
+      setIsMutating(false);
+    }
   }
 
   return (
@@ -139,10 +293,18 @@ export default function AdminDashboardContent({
 
         {isAdmin && (
           <div className="flex flex-wrap justify-end gap-4">
-            <DashboardActionButton icon={<RefreshCw size={18} />} label="Reset API" onClick={showNotReady} />
-            <DashboardActionButton icon={<FileDown size={18} />} label="Import API" onClick={showNotReady} />
+            <DashboardActionButton
+              icon={<RefreshCw size={18} />}
+              label={isMutating ? "Syncing..." : "Reset API"}
+              onClick={syncSportsApi}
+            />
+            <DashboardActionButton
+              icon={<FileDown size={18} />}
+              label={isMutating ? "Importing..." : "Import API"}
+              onClick={syncSportsApi}
+            />
             <button
-              onClick={showNotReady}
+              onClick={openCreateTournament}
               className="flex h-[62px] items-center gap-3 rounded bg-[#84d8e8] px-8 text-lg font-black text-[#06161b]"
             >
               <Plus size={22} />
@@ -159,46 +321,80 @@ export default function AdminDashboardContent({
           </div>
           <div className="flex-1">
             <p className="text-sm font-black uppercase text-[#84d8e8]">
-              API Status: {dashboard.apiStatus.connected ? "Connected" : "Offline"}
+              API Status:{" "}
+              {dashboard.apiStatus.connected ? "Connected" : "Offline"}
             </p>
             <p className="mt-1 text-sm text-[#9fb2b8]">
-              {dashboard.apiStatus.provider} - Last sync: {formatRelative(dashboard.apiStatus.lastSync)}
+              {dashboard.apiStatus.provider} - Last sync:{" "}
+              {formatRelative(dashboard.apiStatus.lastSync)}
             </p>
           </div>
           <div className="bg-[#14272e] px-4 py-2 text-xs font-black uppercase text-[#c4d3d8]">
             ID: {dashboard.apiStatus.externalId}
           </div>
-          <button onClick={() => void loadDashboard()} title="Refresh dashboard" className="text-[#dce8eb]">
+          <button
+            onClick={() => void loadDashboard()}
+            title="Refresh dashboard"
+            className="text-[#dce8eb]"
+          >
             <RefreshCw size={20} className={isLoading ? "animate-spin" : ""} />
           </button>
         </div>
       </section>
 
       <section className="mb-5 grid grid-cols-4 gap-6">
-        <DashboardStatCard title="Active Tournaments" value={dashboard.stats.activeTournaments} note="Live in database" icon={<Trophy size={22} />} />
-        <DashboardStatCard title="Total Players" value={dashboard.stats.totalPlayers} note="Registered players" icon={<Users size={22} />} />
-        <DashboardStatCard title="Upcoming Matches" value={dashboard.stats.upcomingMatches} note="From now onward" icon={<CalendarDays size={22} />} />
-        <DashboardStatCard tone="danger" title="Attention Needed" value={dashboard.stats.attentionNeeded} note={`${dashboard.stats.inactivePlayers} inactive, ${dashboard.stats.pendingPredictions} pending`} icon={<AlertTriangle size={24} />} />
+        <DashboardStatCard
+          title="Active Tournaments"
+          value={dashboard.stats.activeTournaments}
+          note="Live in database"
+          icon={<Trophy size={22} />}
+        />
+        <DashboardStatCard
+          title="Total Players"
+          value={dashboard.stats.totalPlayers}
+          note="Registered players"
+          icon={<Users size={22} />}
+        />
+        <DashboardStatCard
+          title="Upcoming Matches"
+          value={dashboard.stats.upcomingMatches}
+          note="From now onward"
+          icon={<CalendarDays size={22} />}
+        />
+        <DashboardStatCard
+          tone="danger"
+          title="Attention Needed"
+          value={dashboard.stats.attentionNeeded}
+          note={`${dashboard.stats.inactivePlayers} inactive, ${dashboard.stats.pendingPredictions} pending`}
+          icon={<AlertTriangle size={24} />}
+        />
       </section>
 
       <div className="grid gap-5 xl:grid-cols-[minmax(0,1fr)_390px]">
         <section className="overflow-hidden rounded border border-[#3a4d54] bg-[#0d252d]">
-          <DashboardPanelTitle title="Tournament Management" icon={<Filter size={17} />} />
+          <DashboardPanelTitle
+            title="Tournament Management"
+            icon={<Filter size={17} />}
+          />
           <div className="overflow-x-auto">
-            <table className="w-full min-w-[760px] table-fixed text-left">
+            <table className="w-full min-w-[840px] table-fixed text-left">
               <thead className="h-[65px] border-b border-[#3a4d54] bg-[#14272e] text-xs uppercase tracking-[0.08em] text-[#d5e0e3]">
                 <tr>
                   <th className="px-6 py-4">Tournament Name</th>
+                  <th className="w-28 px-4 py-4">Sport</th>
                   <th className="w-32 px-4 py-4">Status</th>
-                  <th className="w-28 px-4 py-4">Players</th>
-                  <th className="w-28 px-4 py-4">Matches</th>
+                  <th className="w-24 px-4 py-4">Players</th>
+                  <th className="w-24 px-4 py-4">Matches</th>
                   <th className="w-28 px-4 py-4">Source</th>
-                  <th className="w-28 px-4 py-4">Action</th>
+                  <th className="w-32 px-4 py-4">Action</th>
                 </tr>
               </thead>
               <tbody>
                 {dashboard.tournaments.map((tournament) => (
-                  <tr key={tournament.id} className="h-[73px] border-b border-[#243c43] text-sm last:border-b-0">
+                  <tr
+                    key={tournament.id}
+                    className="h-[73px] border-b border-[#243c43] text-sm last:border-b-0"
+                  >
                     <td className="px-6 font-black text-white">
                       <div className="flex items-center gap-3">
                         <span className="flex h-8 w-8 items-center justify-center bg-[#143942] text-[#84d8e8]">
@@ -207,20 +403,53 @@ export default function AdminDashboardContent({
                         {tournament.name}
                       </div>
                     </td>
-                    <td className="px-4"><DashboardStatusBadge status={tournament.status} /></td>
-                    <td className="px-4 text-white">{tournament.players.toLocaleString()}</td>
-                    <td className="px-4 text-white">{tournament.matches.toLocaleString()}</td>
-                    <td className="px-4"><DashboardSourceBadge source={tournament.source} /></td>
+                    <td className="px-4 text-white">
+                      {tournament.sportType ?? "FOOTBALL"}
+                    </td>
                     <td className="px-4">
-                      <button onClick={showNotReady} className="text-sm font-black uppercase text-[#84d8e8]">
-                        Manage
-                      </button>
+                      <DashboardStatusBadge status={tournament.status} />
+                    </td>
+                    <td className="px-4 text-white">
+                      {tournament.players.toLocaleString()}
+                    </td>
+                    <td className="px-4 text-white">
+                      {tournament.matches.toLocaleString()}
+                    </td>
+                    <td className="px-4">
+                      <DashboardSourceBadge source={tournament.source} />
+                    </td>
+                    <td className="px-4">
+                      {isAdmin ? (
+                        <div className="flex items-center gap-3">
+                          <button
+                            onClick={() => openEditTournament(tournament)}
+                            className="text-[#84d8e8] transition hover:text-white"
+                            title="Edit tournament"
+                          >
+                            <Pencil size={17} />
+                          </button>
+                          <button
+                            onClick={() => void deleteTournament(tournament)}
+                            className="text-[#ffab9e] transition hover:text-white"
+                            title="Delete tournament"
+                          >
+                            <Trash2 size={17} />
+                          </button>
+                        </div>
+                      ) : (
+                        <span className="text-xs uppercase text-[#789098]">
+                          View
+                        </span>
+                      )}
                     </td>
                   </tr>
                 ))}
                 {dashboard.tournaments.length === 0 && (
                   <tr>
-                    <td colSpan={6} className="h-[120px] text-center text-[#9fb2b8]">
+                    <td
+                      colSpan={7}
+                      className="h-[120px] text-center text-[#9fb2b8]"
+                    >
                       No tournaments found in database.
                     </td>
                   </tr>
@@ -239,19 +468,20 @@ export default function AdminDashboardContent({
                   <DashboardActivityIcon type={activity.type} />
                 </span>
                 <div>
-                  <p className="text-sm font-bold text-[#dce8eb]">{activity.message}</p>
-                  <p className="mt-2 text-xs uppercase text-[#789098]">{formatRelative(activity.createdAt)}</p>
+                  <p className="text-sm font-bold text-[#dce8eb]">
+                    {activity.message}
+                  </p>
+                  <p className="mt-2 text-xs uppercase text-[#789098]">
+                    {formatRelative(activity.createdAt)}
+                  </p>
                 </div>
               </div>
             ))}
             {dashboard.recentActivity.length === 0 && (
-              <p className="pt-12 text-center text-[#9fb2b8]">No recent activity in database.</p>
+              <p className="pt-12 text-center text-[#9fb2b8]">
+                No recent activity in database.
+              </p>
             )}
-          </div>
-          <div className="border-t border-[#3a4d54] p-5">
-            <button onClick={showNotReady} className="h-12 w-full bg-[#14272e] text-sm font-black uppercase text-[#dce8eb]">
-              View Full Audit Log
-            </button>
           </div>
         </aside>
       </div>
@@ -272,18 +502,34 @@ export default function AdminDashboardContent({
             </thead>
             <tbody>
               {dashboard.upcomingSchedule.map((match) => (
-                <tr key={match.id} className="h-[65px] border-b border-[#243c43] text-sm last:border-b-0">
-                  <td className="px-6 font-black text-white">{match.encounter}</td>
+                <tr
+                  key={match.id}
+                  className="h-[65px] border-b border-[#243c43] text-sm last:border-b-0"
+                >
+                  <td className="px-6 font-black text-white">
+                    {match.encounter}
+                  </td>
                   <td className="px-4 text-white">{match.tournamentName}</td>
-                  <td className="px-4 text-white">{formatDate(match.scheduledTime)}</td>
-                  <td className="px-4"><DashboardSourceBadge source={match.source} /></td>
-                  <td className="px-4 text-white">{formatDate(match.deadline)}</td>
-                  <td className="px-4"><DashboardStatusBadge status={match.status} /></td>
+                  <td className="px-4 text-white">
+                    {formatDate(match.scheduledTime)}
+                  </td>
+                  <td className="px-4">
+                    <DashboardSourceBadge source={match.source} />
+                  </td>
+                  <td className="px-4 text-white">
+                    {formatDate(match.deadline)}
+                  </td>
+                  <td className="px-4">
+                    <DashboardStatusBadge status={match.status} />
+                  </td>
                 </tr>
               ))}
               {dashboard.upcomingSchedule.length === 0 && (
                 <tr>
-                  <td colSpan={6} className="h-[110px] text-center text-[#9fb2b8]">
+                  <td
+                    colSpan={6}
+                    className="h-[110px] text-center text-[#9fb2b8]"
+                  >
                     No upcoming matches found in database.
                   </td>
                 </tr>
@@ -292,26 +538,197 @@ export default function AdminDashboardContent({
           </table>
         </div>
       </section>
+
+      {openTournamentForm && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/70 px-4">
+          <div className="w-full max-w-[560px] rounded border border-[#3a4d54] bg-[#0d252d] p-7 shadow-2xl">
+            <h3 className="mb-5 text-2xl font-black text-[#84d8e8]">
+              {editingTournamentId ? "Edit Tournament" : "Create Tournament"}
+            </h3>
+            <TournamentInput
+              label="Tournament Name"
+              value={tournamentForm.name}
+              onChange={(value) =>
+                setTournamentForm((form) => ({ ...form, name: value }))
+              }
+            />
+            <div className="grid gap-4 sm:grid-cols-2">
+              <TournamentSelect
+                label="Sport"
+                value={tournamentForm.sportType}
+                options={["FOOTBALL", "F1"]}
+                onChange={(value) =>
+                  setTournamentForm((form) => ({
+                    ...form,
+                    sportType: value as TournamentForm["sportType"],
+                  }))
+                }
+              />
+              <TournamentSelect
+                label="Status"
+                value={tournamentForm.status}
+                options={["UPCOMING", "ACTIVE", "COMPLETED", "CANCELLED"]}
+                onChange={(value) =>
+                  setTournamentForm((form) => ({
+                    ...form,
+                    status: value as TournamentForm["status"],
+                  }))
+                }
+              />
+              <TournamentSelect
+                label="Format"
+                value={tournamentForm.format}
+                options={["ROUND_ROBIN", "GROUP_AND_KNOCKOUT", "KNOCKOUT"]}
+                onChange={(value) =>
+                  setTournamentForm((form) => ({
+                    ...form,
+                    format: value as TournamentForm["format"],
+                  }))
+                }
+              />
+              <TournamentSelect
+                label="Visibility"
+                value={tournamentForm.visibility}
+                options={["PUBLIC", "PRIVATE"]}
+                onChange={(value) =>
+                  setTournamentForm((form) => ({
+                    ...form,
+                    visibility: value as TournamentForm["visibility"],
+                  }))
+                }
+              />
+            </div>
+            <div className="mt-7 flex justify-end gap-3">
+              <button
+                onClick={() => setOpenTournamentForm(false)}
+                className="h-12 rounded border border-white/10 px-6 font-bold text-zinc-200"
+              >
+                Cancel
+              </button>
+              <button
+                onClick={() => void saveTournament()}
+                disabled={isMutating}
+                className="h-12 rounded bg-[#84d8e8] px-6 font-black text-[#06161b] disabled:opacity-60"
+              >
+                {isMutating ? "Saving..." : "Save Tournament"}
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
     </div>
   );
 }
 
-function DashboardActionButton({ icon, label, onClick }: { icon: React.ReactNode; label: string; onClick: () => void }) {
+function TournamentInput({
+  label,
+  value,
+  onChange,
+}: {
+  label: string;
+  value: string;
+  onChange: (value: string) => void;
+}) {
   return (
-    <button onClick={onClick} className="flex h-[62px] items-center gap-3 rounded border border-[#3a4d54] bg-[#0d252d] px-7 text-lg font-black text-[#dce8eb] transition hover:border-[#84d8e8] hover:text-[#84d8e8]">
+    <label className="mb-4 block">
+      <span className="mb-2 block text-xs font-black uppercase tracking-[0.12em] text-[#9fb2b8]">
+        {label}
+      </span>
+      <input
+        value={value}
+        onChange={(event) => onChange(event.target.value)}
+        className="h-12 w-full rounded border border-white/10 bg-[#070d0d] px-4 font-bold text-white outline-none focus:border-[#84d8e8]"
+      />
+    </label>
+  );
+}
+
+function TournamentSelect({
+  label,
+  value,
+  options,
+  onChange,
+}: {
+  label: string;
+  value: string;
+  options: string[];
+  onChange: (value: string) => void;
+}) {
+  return (
+    <label className="mb-4 block">
+      <span className="mb-2 block text-xs font-black uppercase tracking-[0.12em] text-[#9fb2b8]">
+        {label}
+      </span>
+      <select
+        value={value}
+        onChange={(event) => onChange(event.target.value)}
+        className="h-12 w-full rounded border border-white/10 bg-[#070d0d] px-4 font-bold text-white outline-none focus:border-[#84d8e8]"
+      >
+        {options.map((option) => (
+          <option key={option} value={option}>
+            {option}
+          </option>
+        ))}
+      </select>
+    </label>
+  );
+}
+
+function DashboardActionButton({
+  icon,
+  label,
+  onClick,
+}: {
+  icon: React.ReactNode;
+  label: string;
+  onClick: () => void;
+}) {
+  return (
+    <button
+      onClick={onClick}
+      className="flex h-[62px] items-center gap-3 rounded border border-[#3a4d54] bg-[#0d252d] px-7 text-lg font-black text-[#dce8eb] transition hover:border-[#84d8e8] hover:text-[#84d8e8]"
+    >
       {icon}
       {label}
     </button>
   );
 }
 
-function DashboardStatCard({ title, value, note, icon, tone = "normal" }: { title: string; value: number; note: string; icon: React.ReactNode; tone?: "normal" | "danger" }) {
+function DashboardStatCard({
+  title,
+  value,
+  note,
+  icon,
+  tone = "normal",
+}: {
+  title: string;
+  value: number;
+  note: string;
+  icon: React.ReactNode;
+  tone?: "normal" | "danger";
+}) {
   return (
-    <div className={`h-[144px] rounded border bg-[#0d252d] px-6 py-6 shadow-[0_2px_0_rgba(255,255,255,0.08)] ${tone === "danger" ? "border-[#6b4440]" : "border-[#3a4d54]"}`}>
+    <div
+      className={`h-[144px] rounded border bg-[#0d252d] px-6 py-6 shadow-[0_2px_0_rgba(255,255,255,0.08)] ${
+        tone === "danger" ? "border-[#6b4440]" : "border-[#3a4d54]"
+      }`}
+    >
       <div className="flex items-start justify-between gap-4">
         <div>
-          <h3 className={`text-sm font-black uppercase tracking-[0.1em] ${tone === "danger" ? "text-[#ffab9e]" : "text-[#c8d6db]"}`}>{title}</h3>
-          <p className={`mt-2 text-[36px] font-black leading-none ${tone === "danger" ? "text-[#ffab9e]" : "text-white"}`}>{value.toLocaleString()}</p>
+          <h3
+            className={`text-sm font-black uppercase tracking-[0.1em] ${
+              tone === "danger" ? "text-[#ffab9e]" : "text-[#c8d6db]"
+            }`}
+          >
+            {title}
+          </h3>
+          <p
+            className={`mt-2 text-[36px] font-black leading-none ${
+              tone === "danger" ? "text-[#ffab9e]" : "text-white"
+            }`}
+          >
+            {value.toLocaleString()}
+          </p>
           <p className="mt-4 text-xs font-bold text-white">{note}</p>
         </div>
         <div className="flex h-[54px] w-[49px] items-center justify-center rounded bg-[#213740] text-white">
@@ -322,12 +739,26 @@ function DashboardStatCard({ title, value, note, icon, tone = "normal" }: { titl
   );
 }
 
-function DashboardPanelTitle({ title, icon, right }: { title: string; icon?: React.ReactNode; right?: string }) {
+function DashboardPanelTitle({
+  title,
+  icon,
+  right,
+}: {
+  title: string;
+  icon?: React.ReactNode;
+  right?: string;
+}) {
   return (
     <div className="flex h-[65px] items-center justify-between border-b border-[#3a4d54] bg-[#14272e] px-6">
-      <h2 className="text-sm font-black uppercase tracking-[0.08em] text-[#d5e0e3]">{title}</h2>
+      <h2 className="text-sm font-black uppercase tracking-[0.08em] text-[#d5e0e3]">
+        {title}
+      </h2>
       {icon && <div className="text-[#dce8eb]">{icon}</div>}
-      {right && <button className="text-xs font-black uppercase text-[#84d8e8]">{right}</button>}
+      {right && (
+        <button className="text-xs font-black uppercase text-[#84d8e8]">
+          {right}
+        </button>
+      )}
     </div>
   );
 }
@@ -343,11 +774,21 @@ function DashboardStatusBadge({ status }: { status: string }) {
           ? "bg-[#183229] text-[#a7e8c0]"
           : "bg-[#2b1414] text-[#ffab9e]";
 
-  return <span className={`inline-flex h-[27px] items-center px-3 text-xs font-black uppercase ${className}`}>{normalized}</span>;
+  return (
+    <span
+      className={`inline-flex h-[27px] items-center px-3 text-xs font-black uppercase ${className}`}
+    >
+      {normalized}
+    </span>
+  );
 }
 
 function DashboardSourceBadge({ source }: { source: string }) {
-  return <span className="inline-flex h-6 items-center bg-[#203940] px-2 text-xs font-black uppercase text-[#dce8eb]">{source || "MANUAL"}</span>;
+  return (
+    <span className="inline-flex h-6 items-center bg-[#203940] px-2 text-xs font-black uppercase text-[#dce8eb]">
+      {source || "MANUAL"}
+    </span>
+  );
 }
 
 function DashboardActivityIcon({ type }: { type: string }) {
@@ -360,6 +801,21 @@ function DashboardActivityIcon({ type }: { type: string }) {
   }
 
   return <Trophy size={14} />;
+}
+
+function normalizeStatus(status: string): TournamentForm["status"] {
+  const normalized = status.toUpperCase();
+
+  if (
+    normalized === "UPCOMING" ||
+    normalized === "ACTIVE" ||
+    normalized === "COMPLETED" ||
+    normalized === "CANCELLED"
+  ) {
+    return normalized;
+  }
+
+  return "UPCOMING";
 }
 
 function formatDate(value: string | null) {
@@ -407,7 +863,3 @@ function formatRelative(value: string | null) {
 
   return `${Math.round(hours / 24)} days ago`;
 }
-
-
-
-

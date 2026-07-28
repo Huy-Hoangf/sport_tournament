@@ -18,6 +18,7 @@ import NoticeBanner, { type Notice } from "../notice-banner";
 type LoginResponse = {
   message: string;
   user: CurrentUser;
+  accessToken: string;
 };
 
 export default function LoginPage() {
@@ -54,6 +55,7 @@ export default function LoginPage() {
       });
 
       localStorage.setItem("currentUser", JSON.stringify(data.user));
+      localStorage.setItem("accessToken", data.accessToken);
       router.push(data.user.role === "ADMIN" ? "/admin" : "/player");
     } catch (error) {
       showNotice(
