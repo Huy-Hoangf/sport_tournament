@@ -659,59 +659,6 @@ export default function AdminDashboardContent({
         </aside>
       </div>
 
-      <section className="mt-14 overflow-hidden rounded border border-[#3a4d54] bg-[#0d252d]">
-        <DashboardPanelTitle title="Upcoming Schedule" right="View All Matches" />
-        <div className="overflow-x-auto">
-          <table className="w-full min-w-[920px] table-fixed text-left">
-            <thead className="h-[65px] border-b border-[#3a4d54] bg-[#14272e] text-xs uppercase tracking-[0.08em] text-[#d5e0e3]">
-              <tr>
-                <th className="px-6 py-4">Match Encounter</th>
-                <th className="px-4 py-4">Tournament</th>
-                <th className="px-4 py-4">Kick-off Time</th>
-                <th className="px-4 py-4">Source</th>
-                <th className="px-4 py-4">Deadline</th>
-                <th className="px-4 py-4">Status</th>
-              </tr>
-            </thead>
-            <tbody>
-              {dashboard.upcomingSchedule.map((match) => (
-                <tr
-                  key={match.id}
-                  className="h-[65px] border-b border-[#243c43] text-sm last:border-b-0"
-                >
-                  <td className="px-6 font-black text-white">
-                    {match.encounter}
-                  </td>
-                  <td className="px-4 text-white">{match.tournamentName}</td>
-                  <td className="px-4 text-white">
-                    {formatDate(match.scheduledTime)}
-                  </td>
-                  <td className="px-4">
-                    <DashboardSourceBadge source={match.source} />
-                  </td>
-                  <td className="px-4 text-white">
-                    {formatDate(match.deadline)}
-                  </td>
-                  <td className="px-4">
-                    <DashboardStatusBadge status={match.status} />
-                  </td>
-                </tr>
-              ))}
-              {dashboard.upcomingSchedule.length === 0 && (
-                <tr>
-                  <td
-                    colSpan={6}
-                    className="h-[110px] text-center text-[#9fb2b8]"
-                  >
-                    No upcoming matches found in database.
-                  </td>
-                </tr>
-              )}
-            </tbody>
-          </table>
-        </div>
-      </section>
-
       {openImportApiModal && (
         <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/70 px-4">
           <div className="w-full max-w-[760px] rounded border border-[#3a4d54] bg-[#0d252d] p-7 shadow-2xl">
