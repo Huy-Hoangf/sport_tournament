@@ -4,30 +4,45 @@ import { Repository } from 'typeorm';
 import { User } from '../users/user.entity';
 
 const SYNC_INTERVAL_MS = 14.4 * 60 * 1000;
-const FOOTBALL_API_BASE_URL = 'https://api.football-data.org/v4';
+const FOOTBALL_API_BASE_URL = 'https://v3.football.api-sports.io';
 const OPENF1_API_BASE_URL = 'https://api.openf1.org/v1';
 
 type FootballCompetition = {
-  id: number;
-  name: string;
-  currentSeason?: {
-    startDate?: string;
-    endDate?: string;
-  } | null;
+  league: {
+    id: number;
+    name: string;
+    type?: string;
+  };
+  country?: {
+    name?: string;
+  };
+  seasons?: Array<{
+    year: number;
+    start?: string;
+    end?: string;
+    current?: boolean;
+  }>;
 };
 
 type FootballMatch = {
-  id: number;
-  utcDate: string;
-  status: string;
-  competition?: { name: string };
+  fixture: {
+    id: number;
+    date: string;
+    status?: {
+      short?: string;
+      long?: string;
+    };
+  };
+  league?: { name: string };
   homeTeam?: { name?: string };
   awayTeam?: { name?: string };
-  score?: {
-    fullTime?: {
-      home?: number | null;
-      away?: number | null;
-    };
+  teams?: {
+    home?: { name?: string };
+    away?: { name?: string };
+  };
+  goals?: {
+    home?: number | null;
+    away?: number | null;
   };
 };
 
@@ -152,14 +167,15 @@ export class SportsApiSyncService {
       };
     }
 
-    const headers = { 'X-Auth-Token': apiKey };
+    const headers = { 'x-apisports-key': apiKey };
+    const season = new Date().getUTCFullYear();
     const [competitionsResponse, matchesResponse] = await Promise.all([
-      this.fetchJson<{ competitions?: FootballCompetition[] }>(
-        `${FOOTBALL_API_BASE_URL}/competitions`,
+      this.fetchJson<{ response?: FootballCompetition[] }>(
+        `${FOOTBALL_API_BASE_URL}/leagues?current=true`,
         headers,
       ),
-      this.fetchJson<{ matches?: FootballMatch[] }>(
-        `${FOOTBALL_API_BASE_URL}/matches`,
+      this.fetchJson<{ response?: FootballMatch[] }>(
+        `${FOOTBALL_API_BASE_URL}/fixtures?live=all`,
         headers,
       ),
     ]);
@@ -167,15 +183,18 @@ export class SportsApiSyncService {
     let competitionCount = 0;
     let matchCount = 0;
 
-    for (const competition of (competitionsResponse.competitions ?? []).slice(
+    for (const competition of (competitionsResponse.response ?? []).slice(
       0,
       40,
     )) {
-      const start = competition.currentSeason?.startDate
-        ? new Date(competition.currentSeason.startDate)
+      const currentSeason =
+        competition.seasons?.find((item) => item.current) ??
+        competition.seasons?.find((item) => item.year === season);
+      const start = currentSeason?.start
+        ? new Date(currentSeason.start)
         : null;
-      const end = competition.currentSeason?.endDate
-        ? new Date(competition.currentSeason.endDate)
+      const end = currentSeason?.end
+        ? new Date(currentSeason.end)
         : null;
 
       if ((start && start > now) || (end && end < now)) {
@@ -183,7 +202,7 @@ export class SportsApiSyncService {
       }
 
       await this.upsertTournament({
-        name: competition.name,
+        name: competition.league.name,
         sportType: 'FOOTBALL',
         status: 'ACTIVE',
         adminId,
@@ -191,20 +210,20 @@ export class SportsApiSyncService {
       competitionCount += 1;
     }
 
-    for (const match of matchesResponse.matches ?? []) {
-      if (!match.competition?.name) {
+    for (const match of matchesResponse.response ?? []) {
+      if (!match.league?.name) {
         continue;
       }
 
       const tournamentId = await this.upsertTournament({
-        name: match.competition.name,
+        name: match.league.name,
         sportType: 'FOOTBALL',
-        status: this.mapTournamentStatus(match.status),
+        status: this.mapTournamentStatus(match.fixture.status?.short ?? ''),
         adminId,
       });
       const stageId = await this.upsertStage(tournamentId, 'API Feed');
-      const homeName = match.homeTeam?.name || 'Home team';
-      const awayName = match.awayTeam?.name || 'Away team';
+      const homeName = match.teams?.home?.name || match.homeTeam?.name || 'Home team';
+      const awayName = match.teams?.away?.name || match.awayTeam?.name || 'Away team';
       const homeTeamId = await this.upsertTeam(tournamentId, homeName);
       const awayTeamId = await this.upsertTeam(tournamentId, awayName);
 
@@ -215,12 +234,12 @@ export class SportsApiSyncService {
         awayTeamId,
         homePlaceholder: homeName,
         awayPlaceholder: awayName,
-        scheduledTime: match.utcDate,
-        status: this.mapMatchStatus(match.status),
+        scheduledTime: match.fixture.date,
+        status: this.mapMatchStatus(match.fixture.status?.short ?? ''),
         source: 'FOOTBALL_DATA',
-        externalMatchId: String(match.id),
-        actualHomeScore: match.score?.fullTime?.home ?? null,
-        actualAwayScore: match.score?.fullTime?.away ?? null,
+        externalMatchId: String(match.fixture.id),
+        actualHomeScore: match.goals?.home ?? null,
+        actualAwayScore: match.goals?.away ?? null,
       });
       matchCount += 1;
     }
@@ -525,15 +544,15 @@ export class SportsApiSyncService {
   }
 
   private mapMatchStatus(status: string) {
-    if (['IN_PLAY', 'PAUSED', 'LIVE'].includes(status)) {
+    if (['1H', 'HT', '2H', 'ET', 'BT', 'P', 'LIVE', 'INT'].includes(status)) {
       return 'LIVE' as const;
     }
 
-    if (status === 'FINISHED') {
+    if (['FT', 'AET', 'PEN', 'FINISHED'].includes(status)) {
       return 'FINISHED' as const;
     }
 
-    if (['CANCELLED', 'POSTPONED', 'SUSPENDED'].includes(status)) {
+    if (['CANC', 'PST', 'SUSP', 'ABD', 'AWD', 'WO', 'CANCELLED', 'POSTPONED', 'SUSPENDED'].includes(status)) {
       return 'CANCELLED' as const;
     }
 
@@ -541,15 +560,15 @@ export class SportsApiSyncService {
   }
 
   private mapTournamentStatus(status: string) {
-    if (['IN_PLAY', 'PAUSED', 'LIVE'].includes(status)) {
+    if (['1H', 'HT', '2H', 'ET', 'BT', 'P', 'LIVE', 'INT'].includes(status)) {
       return 'ACTIVE' as const;
     }
 
-    if (status === 'FINISHED') {
+    if (['FT', 'AET', 'PEN', 'FINISHED'].includes(status)) {
       return 'COMPLETED' as const;
     }
 
-    if (['CANCELLED', 'POSTPONED', 'SUSPENDED'].includes(status)) {
+    if (['CANC', 'PST', 'SUSP', 'ABD', 'AWD', 'WO', 'CANCELLED', 'POSTPONED', 'SUSPENDED'].includes(status)) {
       return 'CANCELLED' as const;
     }
 
