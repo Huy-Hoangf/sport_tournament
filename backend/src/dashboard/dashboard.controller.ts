@@ -1,4 +1,11 @@
-import { Body, Controller, Get, Headers, Post } from '@nestjs/common';
+import {
+  BadRequestException,
+  Body,
+  Controller,
+  Get,
+  Headers,
+  Post,
+} from '@nestjs/common';
 import { AuthService } from '../auth/auth.service';
 import { DashboardService } from './dashboard.service';
 import { SportsApiSyncService } from './sports-api-sync.service';
@@ -59,5 +66,38 @@ export class DashboardController {
     return this.sportsApiSyncService.syncSelectedF1Meetings(
       body.meetingKeys ?? [],
     );
+  }
+
+  @Get('lol-competitions')
+  async getLolCompetitions(
+    @Headers('authorization') authorization: string | undefined,
+  ) {
+    await this.authService.verifyAdminToken(authorization);
+    try {
+      return await this.sportsApiSyncService.listLolCompetitions();
+    } catch (error) {
+      throw new BadRequestException(
+        error instanceof Error
+          ? error.message
+          : 'Cannot load LoL competitions.',
+      );
+    }
+  }
+
+  @Post('sync-lol')
+  async syncLolCompetitions(
+    @Headers('authorization') authorization: string | undefined,
+    @Body() body: { competitionIds?: string[] },
+  ) {
+    await this.authService.verifyAdminToken(authorization);
+    try {
+      return await this.sportsApiSyncService.syncSelectedLolCompetitions(
+        body.competitionIds ?? [],
+      );
+    } catch (error) {
+      throw new BadRequestException(
+        error instanceof Error ? error.message : 'LoL import failed.',
+      );
+    }
   }
 }

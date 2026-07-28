@@ -29,7 +29,7 @@ export class DashboardService {
     return {
       apiStatus: {
         connected: Boolean(summary.lastApiSync),
-        provider: 'API-SPORTS Football + OpenF1',
+        provider: 'API-SPORTS Football + OpenF1 + Cito LoL',
         lastSync: summary.lastApiSync,
         externalId: this.buildExternalId(summary.lastApiSync),
       },
@@ -119,7 +119,7 @@ export class DashboardService {
         END,
         t.updated_at DESC,
         t.created_at DESC
-      LIMIT 10
+      LIMIT 80
     `;
   }
 

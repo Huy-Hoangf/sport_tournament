@@ -56,7 +56,7 @@ type TournamentRow = {
 
 type TournamentForm = {
   name: string;
-  sportType: "FOOTBALL" | "F1";
+  sportType: "FOOTBALL" | "F1" | "ESPORTS";
   format: "ROUND_ROBIN" | "GROUP_AND_KNOCKOUT" | "KNOCKOUT";
   status: "UPCOMING" | "ACTIVE" | "COMPLETED" | "CANCELLED";
   visibility: "PUBLIC" | "PRIVATE";
@@ -73,7 +73,7 @@ type FootballCompetitionOption = {
   type: string;
 };
 
-type ImportSport = "FOOTBALL" | "F1";
+type ImportSport = "FOOTBALL" | "F1" | "LOL";
 
 type F1MeetingOption = {
   id: number;
@@ -83,6 +83,16 @@ type F1MeetingOption = {
   start: string;
   end: string;
   current: boolean;
+};
+
+type LolCompetitionOption = {
+  id: string;
+  name: string;
+  region: string;
+  start: string | null;
+  nextMatchAt: string | null;
+  current: boolean;
+  matches: number;
 };
 
 type MatchRow = {
@@ -159,21 +169,30 @@ export default function AdminDashboardContent({
   const [selectedF1MeetingKeys, setSelectedF1MeetingKeys] = useState<number[]>(
     [],
   );
+  const [lolCompetitions, setLolCompetitions] = useState<
+    LolCompetitionOption[]
+  >([]);
+  const [selectedLolCompetitionKeys, setSelectedLolCompetitionKeys] = useState<
+    string[]
+  >([]);
   const [isLoadingCompetitions, setIsLoadingCompetitions] = useState(false);
   const [editingTournamentId, setEditingTournamentId] = useState<number | null>(
     null,
   );
   const [tournamentToDelete, setTournamentToDelete] =
     useState<TournamentRow | null>(null);
-  const [selectedTournamentId, setSelectedTournamentId] = useState<number | null>(
-    null,
-  );
+  const [selectedTournamentId, setSelectedTournamentId] = useState<
+    number | null
+  >(null);
   const [tournamentForm, setTournamentForm] =
     useState<TournamentForm>(emptyTournamentForm);
 
-  const showNotice = useCallback((message: string, tone: Notice["tone"] = "info") => {
-    setNotice({ message, tone });
-  }, []);
+  const showNotice = useCallback(
+    (message: string, tone: Notice["tone"] = "info") => {
+      setNotice({ message, tone });
+    },
+    [],
+  );
 
   const loadDashboard = useCallback(async () => {
     setIsLoading(true);
@@ -215,7 +234,11 @@ export default function AdminDashboardContent({
 
     try {
       const result = await apiRequest<{
-        football?: { competitions: number; matches: number; error: string | null };
+        football?: {
+          competitions: number;
+          matches: number;
+          error: string | null;
+        };
         f1?: { meetings: number; sessions: number; error: string | null };
       }>("/dashboard/sync", {
         method: "POST",
@@ -229,7 +252,9 @@ export default function AdminDashboardContent({
           `F1: ${result.f1?.meetings ?? 0} meetings, ${
             result.f1?.sessions ?? 0
           } sessions`,
-          result.football?.error ? `Football note: ${result.football.error}` : "",
+          result.football?.error
+            ? `Football note: ${result.football.error}`
+            : "",
           result.f1?.error ? `F1 note: ${result.f1.error}` : "",
         ]
           .filter(Boolean)
@@ -237,7 +262,10 @@ export default function AdminDashboardContent({
         "success",
       );
     } catch (error) {
-      showNotice(error instanceof Error ? error.message : "API sync failed.", "error");
+      showNotice(
+        error instanceof Error ? error.message : "API sync failed.",
+        "error",
+      );
     } finally {
       setIsMutating(false);
     }
@@ -250,23 +278,42 @@ export default function AdminDashboardContent({
     }
 
     setOpenImportApiModal(true);
+    setSelectedFootballLeagueKeys([]);
+    setSelectedF1MeetingKeys([]);
+    setSelectedLolCompetitionKeys([]);
+    setImportSport("FOOTBALL");
+    await loadImportOptions("FOOTBALL");
+  }
+
+  async function loadImportOptions(sport: ImportSport) {
     setIsLoadingCompetitions(true);
 
     try {
-      const [competitions, meetings] = await Promise.all([
-        apiRequest<FootballCompetitionOption[]>("/dashboard/football-competitions"),
-        apiRequest<F1MeetingOption[]>("/dashboard/f1-meetings"),
-      ]);
+      if (sport === "F1") {
+        const meetings = await apiRequest<F1MeetingOption[]>(
+          "/dashboard/f1-meetings",
+        );
+        setF1Meetings(meetings);
+        return;
+      }
+
+      if (sport === "LOL") {
+        const competitions = await apiRequest<LolCompetitionOption[]>(
+          "/dashboard/lol-competitions",
+        );
+        setLolCompetitions(competitions);
+        return;
+      }
+
+      const competitions = await apiRequest<FootballCompetitionOption[]>(
+        "/dashboard/football-competitions",
+      );
       setFootballCompetitions(competitions);
-      setF1Meetings(meetings);
-      setSelectedFootballLeagueKeys([]);
-      setSelectedF1MeetingKeys([]);
-      setImportSport("FOOTBALL");
     } catch (error) {
       showNotice(
         error instanceof Error
           ? error.message
-          : "Cannot load API competitions.",
+          : `Cannot load ${getImportSportLabel(sport)} competitions.`,
         "error",
       );
     } finally {
@@ -292,10 +339,21 @@ export default function AdminDashboardContent({
     );
   }
 
+  function toggleLolCompetition(competition: LolCompetitionOption) {
+    setSelectedLolCompetitionKeys((currentKeys) =>
+      currentKeys.includes(competition.id)
+        ? currentKeys.filter((item) => item !== competition.id)
+        : [...currentKeys, competition.id],
+    );
+  }
+
   function selectOngoingFootballLeagues() {
     setSelectedFootballLeagueKeys(
       footballCompetitions
-        .filter((competition) => getFootballCompetitionPhase(competition) === "ongoing")
+        .filter(
+          (competition) =>
+            getFootballCompetitionPhase(competition) === "ongoing",
+        )
         .map((competition) => getFootballLeagueKey(competition)),
     );
   }
@@ -306,6 +364,17 @@ export default function AdminDashboardContent({
         f1Meetings
           .filter((meeting) => getF1MeetingPhase(meeting) === "ongoing")
           .map((meeting) => meeting.id),
+      );
+      return;
+    }
+
+    if (importSport === "LOL") {
+      setSelectedLolCompetitionKeys(
+        lolCompetitions
+          .filter(
+            (competition) => getLolCompetitionPhase(competition) === "ongoing",
+          )
+          .map((competition) => competition.id),
       );
       return;
     }
@@ -321,6 +390,11 @@ export default function AdminDashboardContent({
 
     if (importSport === "F1") {
       await importSelectedF1Meetings();
+      return;
+    }
+
+    if (importSport === "LOL") {
+      await importSelectedLolCompetitions();
       return;
     }
 
@@ -404,7 +478,51 @@ export default function AdminDashboardContent({
         result.error ? "info" : "success",
       );
     } catch (error) {
-      showNotice(error instanceof Error ? error.message : "F1 import failed.", "error");
+      showNotice(
+        error instanceof Error ? error.message : "F1 import failed.",
+        "error",
+      );
+    } finally {
+      setIsMutating(false);
+    }
+  }
+
+  async function importSelectedLolCompetitions() {
+    if (selectedLolCompetitionKeys.length === 0) {
+      showNotice(
+        "Choose at least one League of Legends competition to import.",
+        "error",
+      );
+      return;
+    }
+
+    setIsMutating(true);
+
+    try {
+      const result = await apiRequest<{
+        competitions: number;
+        matches: number;
+        error: string | null;
+      }>("/dashboard/sync-lol", {
+        method: "POST",
+        body: JSON.stringify({ competitionIds: selectedLolCompetitionKeys }),
+      });
+      setOpenImportApiModal(false);
+      await loadDashboard();
+      showNotice(
+        [
+          `Imported ${result.competitions} LoL competitions and ${result.matches} matches.`,
+          result.error ? `LoL note: ${result.error}` : "",
+        ]
+          .filter(Boolean)
+          .join("\n"),
+        result.error ? "info" : "success",
+      );
+    } catch (error) {
+      showNotice(
+        error instanceof Error ? error.message : "LoL import failed.",
+        "error",
+      );
     } finally {
       setIsMutating(false);
     }
@@ -420,7 +538,12 @@ export default function AdminDashboardContent({
     setEditingTournamentId(tournament.id);
     setTournamentForm({
       name: tournament.name,
-      sportType: tournament.sportType === "F1" ? "F1" : "FOOTBALL",
+      sportType:
+        tournament.sportType === "F1"
+          ? "F1"
+          : normalizeSportType(tournament.sportType) === "ESPORTS"
+            ? "ESPORTS"
+            : "FOOTBALL",
       format: "ROUND_ROBIN",
       status: normalizeStatus(tournament.status),
       visibility: "PUBLIC",
@@ -440,12 +563,24 @@ export default function AdminDashboardContent({
   const upcomingF1Meetings = f1Meetings.filter(
     (meeting) => getF1MeetingPhase(meeting) === "upcoming",
   );
+  const ongoingLolCompetitions = lolCompetitions.filter(
+    (competition) => getLolCompetitionPhase(competition) === "ongoing",
+  );
+  const upcomingLolCompetitions = lolCompetitions.filter(
+    (competition) => getLolCompetitionPhase(competition) === "upcoming",
+  );
   const selectedImportCount =
     importSport === "F1"
       ? selectedF1MeetingKeys.length
-      : selectedFootballLeagueKeys.length;
+      : importSport === "LOL"
+        ? selectedLolCompetitionKeys.length
+        : selectedFootballLeagueKeys.length;
   const importItemCount =
-    importSport === "F1" ? f1Meetings.length : footballCompetitions.length;
+    importSport === "F1"
+      ? f1Meetings.length
+      : importSport === "LOL"
+        ? lolCompetitions.length
+        : footballCompetitions.length;
   const tournamentGroups = getTournamentGroups(dashboard.tournaments);
 
   async function saveTournament() {
@@ -530,23 +665,23 @@ export default function AdminDashboardContent({
         <div className="flex flex-wrap justify-end gap-4">
           {isAdmin ? (
             <>
-            <DashboardActionButton
-              icon={<RefreshCw size={18} />}
-              label={isMutating ? "Syncing..." : "Reset API"}
-              onClick={syncSportsApi}
-            />
-            <DashboardActionButton
-              icon={<FileDown size={18} />}
-              label={isMutating ? "Importing..." : "Import API"}
-              onClick={() => void openImportApi()}
-            />
-            <button
-              onClick={openCreateTournament}
-              className="flex h-[62px] items-center gap-3 rounded bg-[#84d8e8] px-8 text-lg font-black text-[#06161b]"
-            >
-              <Plus size={22} />
-              Create Tournament
-            </button>
+              <DashboardActionButton
+                icon={<RefreshCw size={18} />}
+                label={isMutating ? "Syncing..." : "Reset API"}
+                onClick={syncSportsApi}
+              />
+              <DashboardActionButton
+                icon={<FileDown size={18} />}
+                label={isMutating ? "Importing..." : "Import API"}
+                onClick={() => void openImportApi()}
+              />
+              <button
+                onClick={openCreateTournament}
+                className="flex h-[62px] items-center gap-3 rounded bg-[#84d8e8] px-8 text-lg font-black text-[#06161b]"
+              >
+                <Plus size={22} />
+                Create Tournament
+              </button>
             </>
           ) : (
             <div className="rounded border border-[#3a4d54] bg-[#0d252d] px-5 py-4 text-sm font-bold text-[#9fb2b8]">
@@ -685,11 +820,16 @@ export default function AdminDashboardContent({
               </span>
               <select
                 value={importSport}
-                onChange={(event) => setImportSport(event.target.value as ImportSport)}
+                onChange={(event) => {
+                  const nextSport = event.target.value as ImportSport;
+                  setImportSport(nextSport);
+                  void loadImportOptions(nextSport);
+                }}
                 className="h-12 w-full rounded border border-[#3a4d54] bg-[#070d0d] px-4 font-black uppercase tracking-[0.08em] text-white outline-none focus:border-[#84d8e8]"
               >
                 <option value="FOOTBALL">Football</option>
                 <option value="F1">F1</option>
+                <option value="LOL">League of Legends</option>
               </select>
             </label>
 
@@ -699,7 +839,8 @@ export default function AdminDashboardContent({
                 disabled={isLoadingCompetitions || importItemCount === 0}
                 className="h-11 rounded border border-[#84d8e8] px-4 text-sm font-black uppercase tracking-[0.08em] text-[#84d8e8] disabled:cursor-not-allowed disabled:opacity-50"
               >
-                Select ongoing {importSport === "F1" ? "meetings" : "competitions"}
+                Select ongoing{" "}
+                {importSport === "F1" ? "meetings" : "competitions"}
               </button>
               <span className="text-sm font-bold text-[#9fb2b8]">
                 {selectedImportCount} selected
@@ -728,7 +869,7 @@ export default function AdminDashboardContent({
                         onToggle={toggleFootballLeague}
                       />
                     </>
-                  ) : (
+                  ) : importSport === "F1" ? (
                     <>
                       <F1MeetingGroup
                         title="Ongoing"
@@ -741,6 +882,21 @@ export default function AdminDashboardContent({
                         meetings={upcomingF1Meetings}
                         selectedKeys={selectedF1MeetingKeys}
                         onToggle={toggleF1Meeting}
+                      />
+                    </>
+                  ) : (
+                    <>
+                      <LolCompetitionGroup
+                        title="Ongoing"
+                        competitions={ongoingLolCompetitions}
+                        selectedKeys={selectedLolCompetitionKeys}
+                        onToggle={toggleLolCompetition}
+                      />
+                      <LolCompetitionGroup
+                        title="Upcoming"
+                        competitions={upcomingLolCompetitions}
+                        selectedKeys={selectedLolCompetitionKeys}
+                        onToggle={toggleLolCompetition}
                       />
                     </>
                   )}
@@ -790,7 +946,7 @@ export default function AdminDashboardContent({
               <TournamentSelect
                 label="Sport"
                 value={tournamentForm.sportType}
-                options={["FOOTBALL", "F1"]}
+                options={["FOOTBALL", "F1", "ESPORTS"]}
                 onChange={(value) =>
                   setTournamentForm((form) => ({
                     ...form,
@@ -1220,7 +1376,71 @@ function F1MeetingGroup({
                   {meeting.country} / Circuit: {meeting.circuit}
                 </p>
                 <p className="mt-1 text-xs text-[#789098]">
-                  {formatDateOnly(meeting.start)} - {formatDateOnly(meeting.end)}
+                  {formatDateOnly(meeting.start)} -{" "}
+                  {formatDateOnly(meeting.end)}
+                </p>
+              </div>
+              <span className="shrink-0 rounded bg-[#162b32] px-3 py-1 text-xs font-black uppercase text-[#84d8e8]">
+                {phase}
+              </span>
+            </label>
+          );
+        })}
+      </div>
+    </section>
+  );
+}
+
+function LolCompetitionGroup({
+  title,
+  competitions,
+  selectedKeys,
+  onToggle,
+}: {
+  title: "Ongoing" | "Upcoming";
+  competitions: LolCompetitionOption[];
+  selectedKeys: string[];
+  onToggle: (competition: LolCompetitionOption) => void;
+}) {
+  if (competitions.length === 0) {
+    return null;
+  }
+
+  return (
+    <section>
+      <div className="sticky top-0 z-10 flex items-center justify-between border-b border-[#243c43] bg-[#14272e] px-4 py-3">
+        <h4 className="text-xs font-black uppercase tracking-[0.12em] text-[#84d8e8]">
+          {title}
+        </h4>
+        <span className="text-xs font-black uppercase text-[#9fb2b8]">
+          {competitions.length} competitions
+        </span>
+      </div>
+      <div className="divide-y divide-[#243c43]">
+        {competitions.map((competition) => {
+          const checked = selectedKeys.includes(competition.id);
+          const phase = getLolCompetitionPhase(competition);
+
+          return (
+            <label
+              key={competition.id}
+              className="flex cursor-pointer items-center gap-4 px-4 py-4 transition hover:bg-[#102d35]"
+            >
+              <input
+                type="checkbox"
+                checked={checked}
+                onChange={() => onToggle(competition)}
+                className="h-4 w-4 accent-[#84d8e8]"
+              />
+              <div className="min-w-0 flex-1">
+                <p className="truncate text-sm font-black text-white">
+                  {competition.name}
+                </p>
+                <p className="mt-1 text-xs uppercase tracking-[0.08em] text-[#9fb2b8]">
+                  {competition.region} / {competition.matches} matches
+                </p>
+                <p className="mt-1 text-xs text-[#789098]">
+                  Next match: {formatDateTime(competition.nextMatchAt)}
                 </p>
               </div>
               <span className="shrink-0 rounded bg-[#162b32] px-3 py-1 text-xs font-black uppercase text-[#84d8e8]">
@@ -1311,7 +1531,10 @@ function TournamentMatchDetails({
             ))}
             {matches.length === 0 && (
               <tr>
-                <td colSpan={5} className="h-[96px] bg-[#0d252d] text-center text-[#9fb2b8]">
+                <td
+                  colSpan={5}
+                  className="h-[96px] bg-[#0d252d] text-center text-[#9fb2b8]"
+                >
                   No matches found for this tournament.
                 </td>
               </tr>
@@ -1449,15 +1672,22 @@ function normalizeStatus(status: string): TournamentForm["status"] {
 
 function getTournamentGroups(tournaments: TournamentRow[]) {
   const football = tournaments.filter(
-    (tournament) => normalizeSportType(tournament.sportType) === "FOOTBALL",
+    (tournament) =>
+      normalizeSportType(tournament.sportType) === "FOOTBALL" &&
+      !isLolTournament(tournament),
   );
   const f1 = tournaments.filter(
     (tournament) => normalizeSportType(tournament.sportType) === "F1",
   );
+  const lol = tournaments.filter(isLolTournament);
   const otherSports = tournaments.filter((tournament) => {
     const sportType = normalizeSportType(tournament.sportType);
 
-    return sportType !== "FOOTBALL" && sportType !== "F1";
+    return (
+      sportType !== "FOOTBALL" &&
+      sportType !== "F1" &&
+      !isLolTournament(tournament)
+    );
   });
 
   return [
@@ -1476,6 +1706,13 @@ function getTournamentGroups(tournaments: TournamentRow[]) {
       emptyMessage: "No F1 tournaments found in database.",
     },
     {
+      sportType: "LOL",
+      title: "League of Legends Tournaments",
+      total: lol.length,
+      tournaments: lol.slice(0, 5),
+      emptyMessage: "No League of Legends tournaments found in database.",
+    },
+    {
       sportType: "OTHER",
       title: "Other Sports Tournaments",
       total: otherSports.length,
@@ -1487,6 +1724,13 @@ function getTournamentGroups(tournaments: TournamentRow[]) {
 
 function normalizeSportType(sportType: string | undefined) {
   return (sportType || "FOOTBALL").toUpperCase();
+}
+
+function isLolTournament(tournament: TournamentRow) {
+  return (
+    tournament.source?.toUpperCase() === "CITO_LOL" ||
+    normalizeSportType(tournament.sportType) === "LOL"
+  );
 }
 
 function getFootballLeagueKey(competition: FootballCompetitionOption) {
@@ -1515,6 +1759,26 @@ function getF1MeetingPhase(meeting: F1MeetingOption) {
   }
 
   return "upcoming";
+}
+
+function getLolCompetitionPhase(competition: LolCompetitionOption) {
+  if (competition.current) {
+    return "ongoing";
+  }
+
+  return "upcoming";
+}
+
+function getImportSportLabel(sport: ImportSport) {
+  if (sport === "F1") {
+    return "F1";
+  }
+
+  if (sport === "LOL") {
+    return "League of Legends";
+  }
+
+  return "football";
 }
 
 function formatDateOnly(value: string | null) {

@@ -4,8 +4,10 @@ import { Repository } from 'typeorm';
 import { User } from '../users/user.entity';
 
 const SYNC_INTERVAL_MS = 14.4 * 60 * 1000;
+const LOL_CACHE_MS = 24 * 60 * 60 * 1000;
 const FOOTBALL_API_BASE_URL = 'https://v3.football.api-sports.io';
 const OPENF1_API_BASE_URL = 'https://api.openf1.org/v1';
+const CITO_API_BASE_URL = 'https://api.citoapi.com/api/v1';
 
 type FootballCompetition = {
   league: {
@@ -78,6 +80,16 @@ export type F1MeetingOption = {
   current: boolean;
 };
 
+export type LolCompetitionOption = {
+  id: string;
+  name: string;
+  region: string;
+  start: string | null;
+  nextMatchAt: string | null;
+  current: boolean;
+  matches: number;
+};
+
 type OpenF1Session = {
   session_key: number;
   meeting_key: number;
@@ -106,10 +118,32 @@ type SyncResult = {
   };
 };
 
+type CitoLolMatch = Record<string, unknown>;
+
+type LolScheduleSnapshot = {
+  competitions: LolCompetitionOption[];
+  matches: Array<
+    CitoLolMatch & {
+      __competitionId: string;
+      __competitionName: string;
+      __region: string;
+      __matchId: string;
+      __homeName: string;
+      __awayName: string;
+      __scheduledTime: string;
+      __status: 'PENDING' | 'LIVE' | 'FINISHED' | 'CANCELLED';
+    }
+  >;
+};
+
 @Injectable()
 export class SportsApiSyncService {
   private lastSyncAttempt = 0;
   private inFlight: Promise<SyncResult> | null = null;
+  private lolScheduleCache: {
+    expiresAt: number;
+    snapshot: LolScheduleSnapshot;
+  } | null = null;
 
   constructor(
     @InjectRepository(User)
@@ -292,7 +326,9 @@ export class SportsApiSyncService {
           return secondPhasePriority - firstPhasePriority;
         }
 
-        return new Date(first.start).getTime() - new Date(second.start).getTime();
+        return (
+          new Date(first.start).getTime() - new Date(second.start).getTime()
+        );
       })
       .slice(0, 60);
   }
@@ -358,6 +394,92 @@ export class SportsApiSyncService {
     };
   }
 
+  async listLolCompetitions() {
+    const snapshot = await this.getLolScheduleSnapshot(false);
+
+    return snapshot.competitions.slice(0, 80);
+  }
+
+  async syncSelectedLolCompetitions(competitionIds: string[]) {
+    await this.ensureSportTypeConstraint();
+
+    const adminId = await this.findAdminId();
+
+    if (!adminId) {
+      throw new Error('Admin account was not found.');
+    }
+
+    const selectedIds = new Set(
+      competitionIds
+        .map((competitionId) => String(competitionId).trim())
+        .filter(Boolean),
+    );
+
+    if (selectedIds.size === 0) {
+      throw new Error(
+        'Please choose at least one League of Legends competition.',
+      );
+    }
+
+    const snapshot = await this.getLolScheduleSnapshot(false);
+    const selectedMatches = snapshot.matches.filter((match) =>
+      selectedIds.has(match.__competitionId),
+    );
+    const selectedCompetitions = snapshot.competitions.filter((competition) =>
+      selectedIds.has(competition.id),
+    );
+    let matchCount = 0;
+
+    for (const competition of selectedCompetitions) {
+      const tournamentMatches = selectedMatches.filter(
+        (match) => match.__competitionId === competition.id,
+      );
+      const tournamentId = await this.upsertTournament({
+        name: competition.name,
+        sportType: 'ESPORTS',
+        status: competition.current ? 'ACTIVE' : 'UPCOMING',
+        adminId,
+      });
+      const stageId = await this.upsertStage(tournamentId, 'League Schedule');
+
+      for (const match of tournamentMatches) {
+        const homeTeamId = await this.upsertTeam(
+          tournamentId,
+          match.__homeName,
+        );
+        const awayTeamId = await this.upsertTeam(
+          tournamentId,
+          match.__awayName,
+        );
+
+        await this.upsertMatch({
+          tournamentId,
+          stageId,
+          homeTeamId,
+          awayTeamId,
+          homePlaceholder: match.__homeName,
+          awayPlaceholder: match.__awayName,
+          scheduledTime: match.__scheduledTime,
+          status: match.__status,
+          source: 'CITO_LOL',
+          externalMatchId: match.__matchId,
+          actualHomeScore: null,
+          actualAwayScore: null,
+        });
+        matchCount += 1;
+      }
+    }
+
+    return {
+      competitions: selectedCompetitions.length,
+      matches: matchCount,
+      error:
+        matchCount === 0
+          ? 'No League of Legends matches were returned by Cito API for the selected competitions.'
+          : null,
+    };
+  }
+
   private async syncExternalData(): Promise<SyncResult> {
     await this.ensureSportTypeConstraint();
 
@@ -411,19 +533,19 @@ export class SportsApiSyncService {
     const season = new Date().getUTCFullYear();
     const [competitionsResponse, liveMatchesResponse, upcomingMatchesResponse] =
       await Promise.all([
-      this.fetchJson<{ response?: FootballCompetition[] }>(
-        `${FOOTBALL_API_BASE_URL}/leagues?current=true`,
-        headers,
-      ),
-      this.fetchJson<{ response?: FootballMatch[] }>(
-        `${FOOTBALL_API_BASE_URL}/fixtures?live=all`,
-        headers,
-      ),
-      this.fetchJson<{ response?: FootballMatch[] }>(
-        `${FOOTBALL_API_BASE_URL}/fixtures?next=30`,
-        headers,
-      ),
-    ]);
+        this.fetchJson<{ response?: FootballCompetition[] }>(
+          `${FOOTBALL_API_BASE_URL}/leagues?current=true`,
+          headers,
+        ),
+        this.fetchJson<{ response?: FootballMatch[] }>(
+          `${FOOTBALL_API_BASE_URL}/fixtures?live=all`,
+          headers,
+        ),
+        this.fetchJson<{ response?: FootballMatch[] }>(
+          `${FOOTBALL_API_BASE_URL}/fixtures?next=30`,
+          headers,
+        ),
+      ]);
     const now = new Date();
     const matchesById = new Map<number, FootballMatch>();
     let competitionCount = 0;
@@ -440,12 +562,8 @@ export class SportsApiSyncService {
       const currentSeason =
         competition.seasons?.find((item) => item.current) ??
         competition.seasons?.find((item) => item.year === season);
-      const start = currentSeason?.start
-        ? new Date(currentSeason.start)
-        : null;
-      const end = currentSeason?.end
-        ? new Date(currentSeason.end)
-        : null;
+      const start = currentSeason?.start ? new Date(currentSeason.start) : null;
+      const end = currentSeason?.end ? new Date(currentSeason.end) : null;
 
       if ((start && start > now) || (end && end < now)) {
         continue;
@@ -492,8 +610,10 @@ export class SportsApiSyncService {
         adminId,
       });
       const stageId = await this.upsertStage(tournamentId, 'API Feed');
-      const homeName = match.teams?.home?.name || match.homeTeam?.name || 'Home team';
-      const awayName = match.teams?.away?.name || match.awayTeam?.name || 'Away team';
+      const homeName =
+        match.teams?.home?.name || match.homeTeam?.name || 'Home team';
+      const awayName =
+        match.teams?.away?.name || match.awayTeam?.name || 'Away team';
       const homeTeamId = await this.upsertTeam(tournamentId, homeName);
       const awayTeamId = await this.upsertTeam(tournamentId, awayName);
 
@@ -593,7 +713,8 @@ export class SportsApiSyncService {
     sessions: OpenF1Session[],
   ) {
     const tournamentId = await this.upsertTournament({
-      name: meeting.meeting_name || meeting.meeting_official_name || 'Formula 1',
+      name:
+        meeting.meeting_name || meeting.meeting_official_name || 'Formula 1',
       sportType: 'F1',
       status: this.isLiveWindow(meeting.date_start, meeting.date_end)
         ? 'ACTIVE'
@@ -636,7 +757,7 @@ export class SportsApiSyncService {
 
   private async upsertTournament(data: {
     name: string;
-    sportType: 'FOOTBALL' | 'F1';
+    sportType: 'FOOTBALL' | 'F1' | 'ESPORTS';
     status: 'UPCOMING' | 'ACTIVE' | 'COMPLETED' | 'CANCELLED';
     adminId: number;
   }) {
@@ -749,7 +870,7 @@ export class SportsApiSyncService {
     awayPlaceholder: string;
     scheduledTime: string;
     status: 'PENDING' | 'LIVE' | 'FINISHED' | 'CANCELLED';
-    source: 'FOOTBALL_DATA' | 'OPENF1';
+    source: 'FOOTBALL_DATA' | 'OPENF1' | 'CITO_LOL';
     externalMatchId: string;
     actualHomeScore: number | null;
     actualAwayScore: number | null;
@@ -839,6 +960,321 @@ export class SportsApiSyncService {
     );
   }
 
+  private async getLolScheduleSnapshot(force: boolean) {
+    if (
+      !force &&
+      this.lolScheduleCache &&
+      this.lolScheduleCache.expiresAt > Date.now()
+    ) {
+      return this.lolScheduleCache.snapshot;
+    }
+
+    const apiKey = process.env.CITO_API_KEY?.trim();
+
+    if (!apiKey) {
+      throw new Error('CITO_API_KEY is not configured.');
+    }
+
+    const headers = { 'x-api-key': apiKey };
+    const [todayResponse, upcomingResponse] = await Promise.all([
+      this.fetchJson<unknown>(
+        `${CITO_API_BASE_URL}/lol/schedule/today`,
+        headers,
+      ),
+      this.fetchJson<unknown>(
+        `${CITO_API_BASE_URL}/lol/schedule/upcoming`,
+        headers,
+      ),
+    ]);
+    const rawMatches = [
+      ...this.extractResponseArray(todayResponse),
+      ...this.extractResponseArray(upcomingResponse),
+    ];
+    const snapshot = this.buildLolScheduleSnapshot(rawMatches);
+
+    this.lolScheduleCache = {
+      expiresAt: Date.now() + LOL_CACHE_MS,
+      snapshot,
+    };
+
+    return snapshot;
+  }
+
+  private buildLolScheduleSnapshot(
+    rawMatches: CitoLolMatch[],
+  ): LolScheduleSnapshot {
+    const now = new Date();
+    const matchesById = new Map<
+      string,
+      LolScheduleSnapshot['matches'][number]
+    >();
+
+    for (const rawMatch of rawMatches) {
+      const scheduledTime = this.normalizeDateString(
+        this.pickString(rawMatch, [
+          ['scheduled_at'],
+          ['scheduledAt'],
+          ['start_time'],
+          ['startTime'],
+          ['begin_at'],
+          ['beginAt'],
+          ['date'],
+          ['matchDate'],
+          ['time'],
+        ]),
+      );
+      const status = this.mapLolStatus(
+        this.pickString(rawMatch, [
+          ['status'],
+          ['state'],
+          ['match_status'],
+          ['matchStatus'],
+        ]),
+      );
+
+      if (!scheduledTime) {
+        continue;
+      }
+
+      const scheduledDate = new Date(scheduledTime);
+
+      if (status !== 'LIVE' && scheduledDate < now) {
+        continue;
+      }
+
+      const competitionName =
+        this.pickString(rawMatch, [
+          ['league', 'name'],
+          ['competition', 'name'],
+          ['tournament', 'name'],
+          ['serie', 'name'],
+          ['leagueName'],
+          ['competitionName'],
+          ['tournamentName'],
+          ['league'],
+        ]) || 'League of Legends';
+      const competitionId =
+        this.pickString(rawMatch, [
+          ['league', 'id'],
+          ['competition', 'id'],
+          ['tournament', 'id'],
+          ['serie', 'id'],
+          ['leagueId'],
+          ['competitionId'],
+          ['tournamentId'],
+          ['league_slug'],
+          ['leagueSlug'],
+        ]) || this.slugify(competitionName);
+      const matchId =
+        this.pickString(rawMatch, [
+          ['id'],
+          ['matchId'],
+          ['match_id'],
+          ['gameId'],
+          ['game_id'],
+        ]) || `${competitionId}:${scheduledTime}`;
+      const homeName =
+        this.pickString(rawMatch, [
+          ['homeTeam', 'name'],
+          ['home_team', 'name'],
+          ['team1', 'name'],
+          ['blueTeam', 'name'],
+          ['opponents', 0, 'name'],
+          ['teams', 0, 'name'],
+          ['participants', 0, 'name'],
+        ]) || 'Team 1';
+      const awayName =
+        this.pickString(rawMatch, [
+          ['awayTeam', 'name'],
+          ['away_team', 'name'],
+          ['team2', 'name'],
+          ['redTeam', 'name'],
+          ['opponents', 1, 'name'],
+          ['teams', 1, 'name'],
+          ['participants', 1, 'name'],
+        ]) || 'Team 2';
+      const region =
+        this.pickString(rawMatch, [
+          ['region'],
+          ['country'],
+          ['league', 'region'],
+          ['competition', 'region'],
+          ['tournament', 'region'],
+        ]) || 'International';
+
+      matchesById.set(String(matchId), {
+        ...rawMatch,
+        __competitionId: String(competitionId),
+        __competitionName: competitionName,
+        __region: region,
+        __matchId: String(matchId),
+        __homeName: homeName,
+        __awayName: awayName,
+        __scheduledTime: scheduledTime,
+        __status: status,
+      });
+    }
+
+    const matches = Array.from(matchesById.values()).sort(
+      (first, second) =>
+        new Date(first.__scheduledTime).getTime() -
+        new Date(second.__scheduledTime).getTime(),
+    );
+    const competitionsById = new Map<string, LolCompetitionOption>();
+
+    for (const match of matches) {
+      const existing = competitionsById.get(match.__competitionId);
+      const current = match.__status === 'LIVE';
+
+      if (!existing) {
+        competitionsById.set(match.__competitionId, {
+          id: match.__competitionId,
+          name: match.__competitionName,
+          region: match.__region,
+          start: match.__scheduledTime,
+          nextMatchAt: match.__scheduledTime,
+          current,
+          matches: 1,
+        });
+        continue;
+      }
+
+      const existingStartTime = new Date(existing.start ?? 0).getTime();
+      const existingNextTime = new Date(existing.nextMatchAt ?? 0).getTime();
+      const matchTime = new Date(match.__scheduledTime).getTime();
+
+      competitionsById.set(match.__competitionId, {
+        ...existing,
+        start:
+          existingStartTime <= matchTime
+            ? existing.start
+            : match.__scheduledTime,
+        nextMatchAt:
+          existingNextTime <= matchTime
+            ? existing.nextMatchAt
+            : match.__scheduledTime,
+        current: existing.current || current,
+        matches: existing.matches + 1,
+      });
+    }
+
+    return {
+      competitions: Array.from(competitionsById.values()).sort(
+        (first, second) => {
+          if (first.current !== second.current) {
+            return first.current ? -1 : 1;
+          }
+
+          return (
+            new Date(first.nextMatchAt ?? first.start ?? 0).getTime() -
+            new Date(second.nextMatchAt ?? second.start ?? 0).getTime()
+          );
+        },
+      ),
+      matches,
+    };
+  }
+
+  private extractResponseArray(payload: unknown): CitoLolMatch[] {
+    if (Array.isArray(payload)) {
+      return payload.filter((item): item is CitoLolMatch =>
+        this.isRecord(item),
+      );
+    }
+
+    if (!this.isRecord(payload)) {
+      return [];
+    }
+
+    for (const key of ['data', 'response', 'matches', 'items', 'results']) {
+      const value = payload[key];
+
+      if (Array.isArray(value)) {
+        return value.filter((item): item is CitoLolMatch =>
+          this.isRecord(item),
+        );
+      }
+    }
+
+    return [];
+  }
+
+  private pickString(
+    source: unknown,
+    paths: Array<Array<string | number>>,
+  ): string | null {
+    for (const path of paths) {
+      let value = source;
+
+      for (const segment of path) {
+        if (typeof segment === 'number') {
+          value = Array.isArray(value) ? value[segment] : undefined;
+        } else {
+          value = this.isRecord(value) ? value[segment] : undefined;
+        }
+      }
+
+      if (typeof value === 'string' && value.trim()) {
+        return value.trim();
+      }
+
+      if (typeof value === 'number' && Number.isFinite(value)) {
+        return String(value);
+      }
+    }
+
+    return null;
+  }
+
+  private normalizeDateString(value: string | null) {
+    if (!value) {
+      return null;
+    }
+
+    const parsed = new Date(value);
+
+    if (Number.isNaN(parsed.getTime())) {
+      return null;
+    }
+
+    return parsed.toISOString();
+  }
+
+  private mapLolStatus(status: string | null) {
+    const normalized = (status || '').toUpperCase();
+
+    if (
+      ['LIVE', 'RUNNING', 'IN_PROGRESS', 'IN PROGRESS', 'STARTED'].includes(
+        normalized,
+      )
+    ) {
+      return 'LIVE' as const;
+    }
+
+    if (['FINISHED', 'COMPLETED', 'ENDED', 'CLOSED'].includes(normalized)) {
+      return 'FINISHED' as const;
+    }
+
+    if (
+      ['CANCELLED', 'CANCELED', 'POSTPONED', 'DELAYED'].includes(normalized)
+    ) {
+      return 'CANCELLED' as const;
+    }
+
+    return 'PENDING' as const;
+  }
+
+  private slugify(value: string) {
+    return value
+      .toLowerCase()
+      .replace(/[^a-z0-9]+/g, '-')
+      .replace(/(^-|-$)/g, '');
+  }
+
+  private isRecord(value: unknown): value is Record<string, unknown> {
+    return Boolean(value) && typeof value === 'object' && !Array.isArray(value);
+  }
+
   private async fetchJson<T>(url: string, headers?: Record<string, string>) {
     const response = await fetch(url, { headers });
 
@@ -902,7 +1338,8 @@ export class SportsApiSyncService {
   private toF1MeetingOption(meeting: OpenF1Meeting): F1MeetingOption {
     return {
       id: meeting.meeting_key,
-      name: meeting.meeting_name || meeting.meeting_official_name || 'Formula 1',
+      name:
+        meeting.meeting_name || meeting.meeting_official_name || 'Formula 1',
       country: meeting.country_name || 'International',
       circuit: meeting.circuit_short_name || 'TBD',
       start: meeting.date_start,
@@ -962,7 +1399,19 @@ export class SportsApiSyncService {
       return 'FINISHED' as const;
     }
 
-    if (['CANC', 'PST', 'SUSP', 'ABD', 'AWD', 'WO', 'CANCELLED', 'POSTPONED', 'SUSPENDED'].includes(status)) {
+    if (
+      [
+        'CANC',
+        'PST',
+        'SUSP',
+        'ABD',
+        'AWD',
+        'WO',
+        'CANCELLED',
+        'POSTPONED',
+        'SUSPENDED',
+      ].includes(status)
+    ) {
       return 'CANCELLED' as const;
     }
 
@@ -978,7 +1427,19 @@ export class SportsApiSyncService {
       return 'COMPLETED' as const;
     }
 
-    if (['CANC', 'PST', 'SUSP', 'ABD', 'AWD', 'WO', 'CANCELLED', 'POSTPONED', 'SUSPENDED'].includes(status)) {
+    if (
+      [
+        'CANC',
+        'PST',
+        'SUSP',
+        'ABD',
+        'AWD',
+        'WO',
+        'CANCELLED',
+        'POSTPONED',
+        'SUSPENDED',
+      ].includes(status)
+    ) {
       return 'CANCELLED' as const;
     }
 
