@@ -56,7 +56,7 @@ export default function LoginPage() {
 
       localStorage.setItem("currentUser", JSON.stringify(data.user));
       localStorage.setItem("accessToken", data.accessToken);
-      router.push(data.user.role === "ADMIN" ? "/admin" : "/player");
+      router.push("/admin");
     } catch (error) {
       showNotice(
         error instanceof Error ? error.message : "Login failed.",
