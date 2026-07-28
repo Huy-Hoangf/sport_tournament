@@ -282,6 +282,7 @@ export default function AdminDashboardContent({
       .map((competition) => ({
         id: competition.id,
         season: competition.season,
+        name: competition.name,
       }));
 
     if (selectedLeagues.length === 0) {
@@ -303,7 +304,12 @@ export default function AdminDashboardContent({
       setOpenImportApiModal(false);
       await loadDashboard();
       showNotice(
-        `Imported ${result.competitions} football competitions and ${result.matches} matches.`,
+        [
+          `Imported ${result.competitions} football competitions and ${result.matches} matches.`,
+          result.error ? `Football note: ${result.error}` : "",
+        ]
+          .filter(Boolean)
+          .join("\n"),
         result.error ? "info" : "success",
       );
     } catch (error) {

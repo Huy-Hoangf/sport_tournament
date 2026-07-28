@@ -181,7 +181,7 @@ export class SportsApiSyncService {
   }
 
   async syncSelectedFootballLeagues(
-    leagues: Array<{ id: number; season: number }>,
+    leagues: Array<{ id: number; season: number; name?: string }>,
   ) {
     await this.ensureSportTypeConstraint();
 
@@ -201,33 +201,36 @@ export class SportsApiSyncService {
       .map((league) => ({
         id: Number(league.id),
         season: Number(league.season),
+        name: typeof league.name === 'string' ? league.name.trim() : '',
       }))
-      .filter((league) => Number.isInteger(league.id) && Number.isInteger(league.season));
+      .filter(
+        (league) =>
+          Number.isInteger(league.id) && Number.isInteger(league.season),
+      );
 
     if (selectedLeagues.length === 0) {
       throw new Error('Please choose at least one football competition.');
     }
 
     const headers = { 'x-apisports-key': apiKey };
-    const from = this.formatApiDate(new Date(Date.now() - 7 * 24 * 60 * 60 * 1000));
-    const to = this.formatApiDate(new Date(Date.now() + 45 * 24 * 60 * 60 * 1000));
     let competitionCount = 0;
     let matchCount = 0;
 
     for (const league of selectedLeagues) {
-      const [competitionResponse, fixturesResponse] = await Promise.all([
-        this.fetchJson<{ response?: FootballCompetition[] }>(
-          `${FOOTBALL_API_BASE_URL}/leagues?id=${league.id}&season=${league.season}`,
-          headers,
-        ),
-        this.fetchJson<{ response?: FootballMatch[] }>(
-          `${FOOTBALL_API_BASE_URL}/fixtures?league=${league.id}&season=${league.season}&from=${from}&to=${to}`,
-          headers,
-        ),
-      ]);
+      const competitionResponse = await this.fetchJson<{
+        response?: FootballCompetition[];
+      }>(
+        `${FOOTBALL_API_BASE_URL}/leagues?id=${league.id}&season=${league.season}`,
+        headers,
+      );
+      const fixtures = await this.fetchFootballFixturesForLeague(
+        league.id,
+        league.season,
+        headers,
+      );
       const competition = competitionResponse.response?.[0];
       const competitionName =
-        competition?.league?.name || fixturesResponse.response?.[0]?.league?.name;
+        competition?.league?.name || fixtures[0]?.league?.name || league.name;
 
       if (!competitionName) {
         continue;
@@ -240,13 +243,17 @@ export class SportsApiSyncService {
         adminId,
       });
       competitionCount += 1;
-      matchCount += await this.syncFootballMatches(
-        adminId,
-        fixturesResponse.response ?? [],
-      );
+      matchCount += await this.syncFootballMatches(adminId, fixtures);
     }
 
-    return { competitions: competitionCount, matches: matchCount, error: null };
+    return {
+      competitions: competitionCount,
+      matches: matchCount,
+      error:
+        matchCount === 0
+          ? 'No fixtures were returned by API-SPORTS for the selected competitions.'
+          : null,
+    };
   }
 
   private async syncExternalData(): Promise<SyncResult> {
@@ -406,6 +413,46 @@ export class SportsApiSyncService {
     }
 
     return matchCount;
+  }
+
+  private async fetchFootballFixturesForLeague(
+    leagueId: number,
+    season: number,
+    headers: Record<string, string>,
+  ) {
+    const now = new Date();
+    const shortFrom = this.formatApiDate(
+      new Date(now.getTime() - 7 * 24 * 60 * 60 * 1000),
+    );
+    const shortTo = this.formatApiDate(
+      new Date(now.getTime() + 45 * 24 * 60 * 60 * 1000),
+    );
+    const queries = [
+      `league=${leagueId}&season=${season}&from=${shortFrom}&to=${shortTo}`,
+      `league=${leagueId}&season=${season}&next=50`,
+      `league=${leagueId}&season=${season}&from=${season}-01-01&to=${season}-12-31`,
+      `league=${leagueId}&season=${season}`,
+    ];
+    const fixturesById = new Map<number, FootballMatch>();
+
+    for (const query of queries) {
+      const response = await this.fetchJson<{ response?: FootballMatch[] }>(
+        `${FOOTBALL_API_BASE_URL}/fixtures?${query}`,
+        headers,
+      );
+
+      for (const match of response.response ?? []) {
+        if (match.fixture?.id) {
+          fixturesById.set(match.fixture.id, match);
+        }
+      }
+
+      if (fixturesById.size > 0) {
+        break;
+      }
+    }
+
+    return Array.from(fixturesById.values());
   }
 
   private async syncF1(adminId: number) {
