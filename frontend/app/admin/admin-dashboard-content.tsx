@@ -127,6 +127,8 @@ export default function AdminDashboardContent({
   const [editingTournamentId, setEditingTournamentId] = useState<number | null>(
     null,
   );
+  const [tournamentToDelete, setTournamentToDelete] =
+    useState<TournamentRow | null>(null);
   const [selectedTournamentId, setSelectedTournamentId] = useState<number | null>(
     null,
   );
@@ -275,6 +277,7 @@ export default function AdminDashboardContent({
         method: "DELETE",
       });
       showNotice(`${tournament.name} deleted successfully.`, "success");
+      setTournamentToDelete(null);
       await loadDashboard();
     } catch (error) {
       showNotice(
@@ -461,7 +464,7 @@ export default function AdminDashboardContent({
                                 <Pencil size={17} />
                               </button>
                               <button
-                                onClick={() => void deleteTournament(tournament)}
+                                onClick={() => setTournamentToDelete(tournament)}
                                 className="text-[#ffab9e] transition hover:text-white"
                                 title="Delete tournament"
                               >
@@ -655,6 +658,38 @@ export default function AdminDashboardContent({
                 className="h-12 rounded bg-[#84d8e8] px-6 font-black text-[#06161b] disabled:opacity-60"
               >
                 {isMutating ? "Saving..." : "Save Tournament"}
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {tournamentToDelete && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/70 px-4">
+          <div className="w-full max-w-[460px] rounded border border-[#6b4440] bg-[#0d252d] p-7 shadow-2xl">
+            <h3 className="text-2xl font-black text-[#ffab9e]">
+              Delete Tournament
+            </h3>
+            <p className="mt-4 text-base font-bold text-white">
+              do u want to delete this tournament
+            </p>
+            <p className="mt-2 text-sm text-[#9fb2b8]">
+              {tournamentToDelete.name}
+            </p>
+            <div className="mt-7 flex justify-end gap-3">
+              <button
+                onClick={() => setTournamentToDelete(null)}
+                disabled={isMutating}
+                className="h-12 rounded border border-white/10 px-6 font-bold text-zinc-200 disabled:opacity-60"
+              >
+                Cancel
+              </button>
+              <button
+                onClick={() => void deleteTournament(tournamentToDelete)}
+                disabled={isMutating}
+                className="h-12 rounded bg-[#ffab9e] px-6 font-black text-[#2b1414] disabled:opacity-60"
+              >
+                {isMutating ? "Deleting..." : "Delete"}
               </button>
             </div>
           </div>

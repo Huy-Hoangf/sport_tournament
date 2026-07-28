@@ -169,7 +169,8 @@ export class SportsApiSyncService {
 
     const headers = { 'x-apisports-key': apiKey };
     const season = new Date().getUTCFullYear();
-    const [competitionsResponse, matchesResponse] = await Promise.all([
+    const [competitionsResponse, liveMatchesResponse, upcomingMatchesResponse] =
+      await Promise.all([
       this.fetchJson<{ response?: FootballCompetition[] }>(
         `${FOOTBALL_API_BASE_URL}/leagues?current=true`,
         headers,
@@ -178,15 +179,24 @@ export class SportsApiSyncService {
         `${FOOTBALL_API_BASE_URL}/fixtures?live=all`,
         headers,
       ),
+      this.fetchJson<{ response?: FootballMatch[] }>(
+        `${FOOTBALL_API_BASE_URL}/fixtures?next=30`,
+        headers,
+      ),
     ]);
     const now = new Date();
+    const matchesById = new Map<number, FootballMatch>();
     let competitionCount = 0;
     let matchCount = 0;
 
     for (const competition of (competitionsResponse.response ?? []).slice(
       0,
-      40,
+      80,
     )) {
+      if (!competition.league?.name) {
+        continue;
+      }
+
       const currentSeason =
         competition.seasons?.find((item) => item.current) ??
         competition.seasons?.find((item) => item.year === season);
@@ -210,7 +220,16 @@ export class SportsApiSyncService {
       competitionCount += 1;
     }
 
-    for (const match of matchesResponse.response ?? []) {
+    for (const match of [
+      ...(liveMatchesResponse.response ?? []),
+      ...(upcomingMatchesResponse.response ?? []),
+    ]) {
+      if (match.fixture?.id) {
+        matchesById.set(match.fixture.id, match);
+      }
+    }
+
+    for (const match of matchesById.values()) {
       if (!match.league?.name) {
         continue;
       }
