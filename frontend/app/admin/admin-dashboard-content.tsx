@@ -620,6 +620,7 @@ export default function AdminDashboardContent({
               title={group.title}
               total={group.total}
               tournaments={group.tournaments}
+              emptyMessage={group.emptyMessage}
               tournamentMatches={dashboard.tournamentMatches}
               selectedTournamentId={selectedTournamentId}
               onSelectTournament={setSelectedTournamentId}
@@ -628,17 +629,6 @@ export default function AdminDashboardContent({
               onDeleteTournament={setTournamentToDelete}
             />
           ))}
-          {dashboard.tournaments.length === 0 && (
-            <section className="overflow-hidden rounded border border-[#3a4d54] bg-[#0d252d]">
-              <DashboardPanelTitle
-                title="Tournament Management"
-                icon={<Filter size={17} />}
-              />
-              <div className="flex h-[120px] items-center justify-center text-[#9fb2b8]">
-                No tournaments found in database.
-              </div>
-            </section>
-          )}
         </div>
 
         <aside className="overflow-hidden rounded border border-[#3a4d54] bg-[#0d252d]">
@@ -974,6 +964,7 @@ function TournamentManagementTable({
   title,
   total,
   tournaments,
+  emptyMessage,
   tournamentMatches,
   selectedTournamentId,
   onSelectTournament,
@@ -984,6 +975,7 @@ function TournamentManagementTable({
   title: string;
   total: number;
   tournaments: TournamentRow[];
+  emptyMessage: string;
   tournamentMatches: MatchRow[];
   selectedTournamentId: number | null;
   onSelectTournament: React.Dispatch<React.SetStateAction<number | null>>;
@@ -1096,6 +1088,16 @@ function TournamentManagementTable({
                 </Fragment>
               );
             })}
+            {tournaments.length === 0 && (
+              <tr>
+                <td
+                  colSpan={7}
+                  className="h-[104px] text-center text-[#9fb2b8]"
+                >
+                  {emptyMessage}
+                </td>
+              </tr>
+            )}
           </tbody>
         </table>
       </div>
@@ -1446,46 +1448,45 @@ function normalizeStatus(status: string): TournamentForm["status"] {
 }
 
 function getTournamentGroups(tournaments: TournamentRow[]) {
-  const grouped = new Map<string, TournamentRow[]>();
+  const football = tournaments.filter(
+    (tournament) => normalizeSportType(tournament.sportType) === "FOOTBALL",
+  );
+  const f1 = tournaments.filter(
+    (tournament) => normalizeSportType(tournament.sportType) === "F1",
+  );
+  const otherSports = tournaments.filter((tournament) => {
+    const sportType = normalizeSportType(tournament.sportType);
 
-  for (const tournament of tournaments) {
-    const sportType = (tournament.sportType || "FOOTBALL").toUpperCase();
-    const current = grouped.get(sportType) ?? [];
-    grouped.set(sportType, [...current, tournament]);
-  }
+    return sportType !== "FOOTBALL" && sportType !== "F1";
+  });
 
-  const sportOrder = (sportType: string) =>
-    sportType === "FOOTBALL" ? 0 : sportType === "F1" ? 1 : 2;
-
-  return Array.from(grouped.entries())
-    .sort(([firstSport], [secondSport]) => {
-      const firstOrder = sportOrder(firstSport);
-      const secondOrder = sportOrder(secondSport);
-
-      if (firstOrder !== secondOrder) {
-        return firstOrder - secondOrder;
-      }
-
-      return firstSport.localeCompare(secondSport);
-    })
-    .map(([sportType, items]) => ({
-      sportType,
-      title: `${formatSportLabel(sportType)} Tournaments`,
-      total: items.length,
-      tournaments: items.slice(0, 5),
-    }));
+  return [
+    {
+      sportType: "FOOTBALL",
+      title: "Football Tournaments",
+      total: football.length,
+      tournaments: football.slice(0, 5),
+      emptyMessage: "No football tournaments found in database.",
+    },
+    {
+      sportType: "F1",
+      title: "F1 Tournaments",
+      total: f1.length,
+      tournaments: f1.slice(0, 5),
+      emptyMessage: "No F1 tournaments found in database.",
+    },
+    {
+      sportType: "OTHER",
+      title: "Other Sports Tournaments",
+      total: otherSports.length,
+      tournaments: otherSports.slice(0, 5),
+      emptyMessage: "No other sports tournaments found in database.",
+    },
+  ];
 }
 
-function formatSportLabel(sportType: string) {
-  if (sportType === "F1") {
-    return "F1";
-  }
-
-  return sportType
-    .toLowerCase()
-    .split("_")
-    .map((part) => part.charAt(0).toUpperCase() + part.slice(1))
-    .join(" ");
+function normalizeSportType(sportType: string | undefined) {
+  return (sportType || "FOOTBALL").toUpperCase();
 }
 
 function getFootballLeagueKey(competition: FootballCompetitionOption) {
