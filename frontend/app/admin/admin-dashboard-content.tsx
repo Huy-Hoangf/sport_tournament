@@ -3,7 +3,7 @@
 import { apiRequest } from "../api";
 import NoticeBanner, { type Notice } from "../notice-banner";
 import type React from "react";
-import { useEffect, useState } from "react";
+import { Fragment, useEffect, useState } from "react";
 import {
   AlertTriangle,
   CalendarDays,
@@ -130,15 +130,6 @@ export default function AdminDashboardContent({
   );
   const [tournamentForm, setTournamentForm] =
     useState<TournamentForm>(emptyTournamentForm);
-
-  const selectedTournament =
-    dashboard.tournaments.find((tournament) => tournament.id === selectedTournamentId) ??
-    null;
-  const selectedTournamentMatches = selectedTournament
-    ? dashboard.tournamentMatches.filter(
-        (match) => match.tournamentId === selectedTournament.id,
-      )
-    : [];
 
   useEffect(() => {
     void loadDashboard();
@@ -411,63 +402,90 @@ export default function AdminDashboardContent({
                 </tr>
               </thead>
               <tbody>
-                {dashboard.tournaments.map((tournament) => (
-                  <tr
-                    key={tournament.id}
-                    onClick={() => setSelectedTournamentId(tournament.id)}
-                    className={`h-[73px] cursor-pointer border-b border-[#243c43] text-sm transition last:border-b-0 hover:bg-[#102d35] ${
-                      selectedTournamentId === tournament.id ? "bg-[#12333c]" : ""
-                    }`}
-                  >
-                    <td className="px-6 font-black text-white">
-                      <div className="flex items-center gap-3">
-                        <span className="flex h-8 w-8 items-center justify-center bg-[#143942] text-[#84d8e8]">
-                          <ShieldCheck size={17} />
-                        </span>
-                        <span className="min-w-0 truncate">{tournament.name}</span>
-                      </div>
-                    </td>
-                    <td className="px-4 text-white">
-                      {tournament.sportType ?? "FOOTBALL"}
-                    </td>
-                    <td className="px-4">
-                      <DashboardStatusBadge status={tournament.status} />
-                    </td>
-                    <td className="px-4 text-white">
-                      {tournament.players.toLocaleString()}
-                    </td>
-                    <td className="px-4 text-white">
-                      {tournament.matches.toLocaleString()}
-                    </td>
-                    <td className="px-4">
-                      <DashboardSourceBadge source={tournament.source} />
-                    </td>
-                    <td className="px-4" onClick={(event) => event.stopPropagation()}>
-                      {isAdmin ? (
-                        <div className="flex items-center gap-3">
-                          <button
-                            onClick={() => openEditTournament(tournament)}
-                            className="text-[#84d8e8] transition hover:text-white"
-                            title="Edit tournament"
-                          >
-                            <Pencil size={17} />
-                          </button>
-                          <button
-                            onClick={() => void deleteTournament(tournament)}
-                            className="text-[#ffab9e] transition hover:text-white"
-                            title="Delete tournament"
-                          >
-                            <Trash2 size={17} />
-                          </button>
-                        </div>
-                      ) : (
-                        <span className="text-xs uppercase text-[#789098]">
-                          Details
-                        </span>
+                {dashboard.tournaments.map((tournament) => {
+                  const isSelected = selectedTournamentId === tournament.id;
+                  const matches = dashboard.tournamentMatches.filter(
+                    (match) => match.tournamentId === tournament.id,
+                  );
+
+                  return (
+                    <Fragment key={tournament.id}>
+                      <tr
+                        onClick={() =>
+                          setSelectedTournamentId((currentId) =>
+                            currentId === tournament.id ? null : tournament.id,
+                          )
+                        }
+                        className={`h-[73px] cursor-pointer border-b border-[#243c43] text-sm transition hover:bg-[#102d35] ${
+                          isSelected ? "bg-[#12333c]" : ""
+                        }`}
+                      >
+                        <td className="px-6 font-black text-white">
+                          <div className="flex items-center gap-3">
+                            <span className="flex h-8 w-8 items-center justify-center bg-[#143942] text-[#84d8e8]">
+                              <ShieldCheck size={17} />
+                            </span>
+                            <span className="min-w-0 truncate">
+                              {tournament.name}
+                            </span>
+                          </div>
+                        </td>
+                        <td className="px-4 text-white">
+                          {tournament.sportType ?? "FOOTBALL"}
+                        </td>
+                        <td className="px-4">
+                          <DashboardStatusBadge status={tournament.status} />
+                        </td>
+                        <td className="px-4 text-white">
+                          {tournament.players.toLocaleString()}
+                        </td>
+                        <td className="px-4 text-white">
+                          {tournament.matches.toLocaleString()}
+                        </td>
+                        <td className="px-4">
+                          <DashboardSourceBadge source={tournament.source} />
+                        </td>
+                        <td
+                          className="px-4"
+                          onClick={(event) => event.stopPropagation()}
+                        >
+                          {isAdmin ? (
+                            <div className="flex items-center gap-3">
+                              <button
+                                onClick={() => openEditTournament(tournament)}
+                                className="text-[#84d8e8] transition hover:text-white"
+                                title="Edit tournament"
+                              >
+                                <Pencil size={17} />
+                              </button>
+                              <button
+                                onClick={() => void deleteTournament(tournament)}
+                                className="text-[#ffab9e] transition hover:text-white"
+                                title="Delete tournament"
+                              >
+                                <Trash2 size={17} />
+                              </button>
+                            </div>
+                          ) : (
+                            <span className="text-xs uppercase text-[#789098]">
+                              Details
+                            </span>
+                          )}
+                        </td>
+                      </tr>
+                      {isSelected && (
+                        <tr className="border-b border-[#243c43] bg-[#092127]">
+                          <td colSpan={7} className="p-0">
+                            <TournamentMatchDetails
+                              tournament={tournament}
+                              matches={matches}
+                            />
+                          </td>
+                        </tr>
                       )}
-                    </td>
-                  </tr>
-                ))}
+                    </Fragment>
+                  );
+                })}
                 {dashboard.tournaments.length === 0 && (
                   <tr>
                     <td
@@ -509,69 +527,6 @@ export default function AdminDashboardContent({
           </div>
         </aside>
       </div>
-
-      {selectedTournament && (
-        <section className="mt-5 overflow-hidden rounded border border-[#3a4d54] bg-[#0d252d]">
-          <DashboardPanelTitle
-            title={`${selectedTournament.name} Details`}
-            right={`${selectedTournamentMatches.length} matches`}
-          />
-          <div className="border-b border-[#243c43] px-6 py-4 text-sm text-[#9fb2b8]">
-            <span className="font-black uppercase text-white">
-              {selectedTournament.sportType ?? "FOOTBALL"}
-            </span>{" "}
-            / {selectedTournament.status} / Source:{" "}
-            {selectedTournament.source || "MANUAL"}
-          </div>
-          <div className="overflow-x-auto">
-            <table className="w-full min-w-[860px] table-fixed text-left">
-              <thead className="h-[54px] border-b border-[#3a4d54] bg-[#14272e] text-xs uppercase tracking-[0.08em] text-[#d5e0e3]">
-                <tr>
-                  <th className="px-6 py-3">Teams / Players</th>
-                  <th className="w-48 px-4 py-3">Date & Time</th>
-                  <th className="w-44 px-4 py-3">Deadline</th>
-                  <th className="w-40 px-4 py-3">Source</th>
-                  <th className="w-32 px-4 py-3">Status</th>
-                </tr>
-              </thead>
-              <tbody>
-                {selectedTournamentMatches.map((match) => (
-                  <tr
-                    key={match.id}
-                    className="h-[64px] border-b border-[#243c43] text-sm last:border-b-0"
-                  >
-                    <td className="px-6 font-black text-white">
-                      {match.encounter}
-                    </td>
-                    <td className="px-4 text-white">
-                      {formatDateTime(match.scheduledTime)}
-                    </td>
-                    <td className="px-4 text-white">
-                      {formatDateTime(match.deadline)}
-                    </td>
-                    <td className="px-4">
-                      <DashboardSourceBadge source={match.source} />
-                    </td>
-                    <td className="px-4">
-                      <DashboardStatusBadge status={match.status} />
-                    </td>
-                  </tr>
-                ))}
-                {selectedTournamentMatches.length === 0 && (
-                  <tr>
-                    <td
-                      colSpan={5}
-                      className="h-[96px] text-center text-[#9fb2b8]"
-                    >
-                      No matches found for this tournament.
-                    </td>
-                  </tr>
-                )}
-              </tbody>
-            </table>
-          </div>
-        </section>
-      )}
 
       <section className="mt-14 overflow-hidden rounded border border-[#3a4d54] bg-[#0d252d]">
         <DashboardPanelTitle title="Upcoming Schedule" right="View All Matches" />
@@ -778,6 +733,80 @@ function DashboardActionButton({
       {icon}
       {label}
     </button>
+  );
+}
+
+function TournamentMatchDetails({
+  tournament,
+  matches,
+}: {
+  tournament: TournamentRow;
+  matches: MatchRow[];
+}) {
+  return (
+    <div className="px-6 py-5">
+      <div className="mb-4 flex flex-wrap items-center justify-between gap-3">
+        <div>
+          <h3 className="text-sm font-black uppercase tracking-[0.08em] text-[#84d8e8]">
+            {tournament.name} Details
+          </h3>
+          <p className="mt-2 text-sm text-[#9fb2b8]">
+            <span className="font-black uppercase text-white">
+              {tournament.sportType ?? "FOOTBALL"}
+            </span>{" "}
+            / {tournament.status} / Source: {tournament.source || "MANUAL"}
+          </p>
+        </div>
+        <span className="text-xs font-black uppercase text-[#84d8e8]">
+          {matches.length} {matches.length === 1 ? "match" : "matches"}
+        </span>
+      </div>
+
+      <div className="overflow-x-auto rounded border border-[#243c43]">
+        <table className="w-full min-w-[860px] table-fixed text-left">
+          <thead className="h-[54px] border-b border-[#3a4d54] bg-[#14272e] text-xs uppercase tracking-[0.08em] text-[#d5e0e3]">
+            <tr>
+              <th className="px-5 py-3">Teams / Players</th>
+              <th className="w-48 px-4 py-3">Match Time</th>
+              <th className="w-48 px-4 py-3">Prediction Lock</th>
+              <th className="w-40 px-4 py-3">Source</th>
+              <th className="w-32 px-4 py-3">Status</th>
+            </tr>
+          </thead>
+          <tbody>
+            {matches.map((match) => (
+              <tr
+                key={match.id}
+                className="h-[64px] border-b border-[#243c43] bg-[#0d252d] text-sm last:border-b-0"
+              >
+                <td className="px-5 font-black text-white">
+                  {match.encounter}
+                </td>
+                <td className="px-4 text-white">
+                  {formatDateTime(match.scheduledTime)}
+                </td>
+                <td className="px-4 text-white">
+                  {formatDateTime(match.deadline)}
+                </td>
+                <td className="px-4">
+                  <DashboardSourceBadge source={match.source} />
+                </td>
+                <td className="px-4">
+                  <DashboardStatusBadge status={match.status} />
+                </td>
+              </tr>
+            ))}
+            {matches.length === 0 && (
+              <tr>
+                <td colSpan={5} className="h-[96px] bg-[#0d252d] text-center text-[#9fb2b8]">
+                  No matches found for this tournament.
+                </td>
+              </tr>
+            )}
+          </tbody>
+        </table>
+      </div>
+    </div>
   );
 }
 
