@@ -64,6 +64,7 @@ type ImportedPlayer = {
 };
 
 type AdminView = 'dashboard' | 'players';
+type StatusFilter = "ALL" | Player["status"];
 
 const PLAYERS_PER_PAGE = 5;
 const COMPANY_EMAIL_DOMAIN = "@twenty-tech.com";
@@ -79,6 +80,7 @@ export default function AdminPage() {
   const [isLoading, setIsLoading] = useState(false);
   const [isNameSearchOpen, setIsNameSearchOpen] = useState(false);
   const [nameSearch, setNameSearch] = useState("");
+  const [statusFilter, setStatusFilter] = useState<StatusFilter>("ALL");
   const [currentPage, setCurrentPage] = useState(1);
   const [selectedPlayer, setSelectedPlayer] = useState<Player | null>(null);
   const [renameFullName, setRenameFullName] = useState("");
@@ -147,12 +149,16 @@ export default function AdminPage() {
   );
   const visiblePlayers = useMemo(() => {
     const keyword = nameSearch.trim().toLowerCase();
+    const statusFilteredPlayers =
+      statusFilter === "ALL"
+        ? players
+        : players.filter((player) => player.status === statusFilter);
 
     if (!keyword) {
-      return players;
+      return statusFilteredPlayers;
     }
 
-    return players.filter((player) => {
+    return statusFilteredPlayers.filter((player) => {
       const normalizedKeyword = keyword.replace(/^id[-_\s]*/i, "");
 
       return (
@@ -163,7 +169,7 @@ export default function AdminPage() {
         player.id.toLowerCase().includes(normalizedKeyword)
       );
     });
-  }, [nameSearch, players]);
+  }, [nameSearch, players, statusFilter]);
   const totalPages = Math.max(1, Math.ceil(visiblePlayers.length / PLAYERS_PER_PAGE));
   const currentSafePage = Math.min(currentPage, totalPages);
   const paginatedPlayers = visiblePlayers.slice(
@@ -642,8 +648,13 @@ export default function AdminPage() {
           </div>
 
           <div className="mb-6 flex items-center gap-3">
-            <FilterButton label="Status: All" />
-            <FilterButton label="Tournament: All" />
+            <StatusFilterSelect
+              value={statusFilter}
+              onChange={(value) => {
+                setStatusFilter(value);
+                setCurrentPage(1);
+              }}
+            />
             <button
               onClick={() => setIsNameSearchOpen((isOpen) => !isOpen)}
               className={`flex h-[35px] w-[43px] items-center justify-center rounded border border-[#3a4d54] text-[#e3eef0] ${
@@ -1380,12 +1391,38 @@ function StatCard({
   );
 }
 
-function FilterButton({ label }: { label: string }) {
+function StatusFilterSelect({
+  value,
+  onChange,
+}: {
+  value: StatusFilter;
+  onChange: (value: StatusFilter) => void;
+}) {
   return (
-    <button className="flex h-[35px] w-[244px] items-center justify-between rounded border border-[#3a4d54] bg-[#0d252d] px-4 text-sm font-black uppercase tracking-[0.08em] text-[#dce8eb]">
-      {label}
-      <ChevronDown size={16} />
-    </button>
+    <label className="relative flex h-[35px] w-[244px] items-center rounded border border-[#3a4d54] bg-[#0d252d] px-4 text-sm font-black uppercase tracking-[0.08em] text-[#dce8eb]">
+      <select
+        value={value}
+        onChange={(event) => onChange(event.target.value as StatusFilter)}
+        className="h-full w-full appearance-none bg-transparent pr-8 font-black uppercase tracking-[0.08em] text-[#dce8eb] outline-none"
+      >
+        <option className="bg-[#0d252d] text-white" value="ALL">
+          Status: All
+        </option>
+        <option className="bg-[#0d252d] text-white" value="ACTIVE">
+          Status: Active
+        </option>
+        <option className="bg-[#0d252d] text-white" value="INACTIVE">
+          Status: Inactive
+        </option>
+        <option className="bg-[#0d252d] text-white" value="PENDING">
+          Status: Pending
+        </option>
+      </select>
+      <ChevronDown
+        size={16}
+        className="pointer-events-none absolute right-4 text-[#dce8eb]"
+      />
+    </label>
   );
 }
 
