@@ -26,7 +26,21 @@ export class DashboardController {
   @Post('sync')
   async syncNow(@Headers('authorization') authorization: string | undefined) {
     await this.authService.verifyAdminToken(authorization);
-    return this.sportsApiSyncService.syncIfStale(true);
+    return this.sportsApiSyncService.syncAllNow();
+  }
+
+  @Post('sync/football')
+  async syncFootballNow(
+    @Headers('authorization') authorization: string | undefined,
+  ) {
+    await this.authService.verifyAdminToken(authorization);
+    return this.sportsApiSyncService.syncFootballNow();
+  }
+
+  @Post('sync/f1')
+  async syncF1Now(@Headers('authorization') authorization: string | undefined) {
+    await this.authService.verifyAdminToken(authorization);
+    return this.sportsApiSyncService.syncF1Now();
   }
 
   @Get('football-competitions')

@@ -3,7 +3,6 @@ import { InjectRepository } from '@nestjs/typeorm';
 import { Repository } from 'typeorm';
 import { User } from '../users/user.entity';
 
-const SYNC_INTERVAL_MS = 14.4 * 60 * 1000;
 const LOL_CACHE_MS = 24 * 60 * 60 * 1000;
 const FOOTBALL_API_BASE_URL = 'https://v3.football.api-sports.io';
 const OPENF1_API_BASE_URL = 'https://api.openf1.org/v1';
@@ -138,8 +137,6 @@ type LolScheduleSnapshot = {
 
 @Injectable()
 export class SportsApiSyncService {
-  private lastSyncAttempt = 0;
-  private inFlight: Promise<SyncResult> | null = null;
   private lolScheduleCache: {
     expiresAt: number;
     snapshot: LolScheduleSnapshot;
@@ -150,27 +147,30 @@ export class SportsApiSyncService {
     private readonly usersRepository: Repository<User>,
   ) {}
 
-  async syncIfStale(force = false) {
-    if (!force && Date.now() - this.lastSyncAttempt < SYNC_INTERVAL_MS) {
-      return {
-        skipped: true,
-        message: 'API cache is still fresh.',
-        nextSyncAt: new Date(
-          this.lastSyncAttempt + SYNC_INTERVAL_MS,
-        ).toISOString(),
-      };
+  async syncAllNow() {
+    return this.syncExternalData();
+  }
+
+  async syncFootballNow() {
+    await this.ensureSportTypeConstraint();
+    const adminId = await this.findAdminId();
+
+    if (!adminId) {
+      throw new Error('Admin account was not found.');
     }
 
-    if (this.inFlight) {
-      return this.inFlight;
+    return this.syncFootball(adminId);
+  }
+
+  async syncF1Now() {
+    await this.ensureSportTypeConstraint();
+    const adminId = await this.findAdminId();
+
+    if (!adminId) {
+      throw new Error('Admin account was not found.');
     }
 
-    this.lastSyncAttempt = Date.now();
-    this.inFlight = this.syncExternalData().finally(() => {
-      this.inFlight = null;
-    });
-
-    return this.inFlight;
+    return this.syncF1(adminId);
   }
 
   async listFootballCompetitions() {

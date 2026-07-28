@@ -74,6 +74,7 @@ type FootballCompetitionOption = {
 };
 
 type ImportSport = "FOOTBALL" | "F1" | "LOL";
+type SyncSport = "FOOTBALL" | "F1";
 
 type F1MeetingOption = {
   id: number;
@@ -158,13 +159,14 @@ export default function AdminDashboardContent({
   const [notice, setNotice] = useState<Notice | null>(null);
   const [openTournamentForm, setOpenTournamentForm] = useState(false);
   const [openImportApiModal, setOpenImportApiModal] = useState(false);
+  const [openSyncApiModal, setOpenSyncApiModal] = useState(false);
   const [footballCompetitions, setFootballCompetitions] = useState<
     FootballCompetitionOption[]
   >([]);
   const [selectedFootballLeagueKeys, setSelectedFootballLeagueKeys] = useState<
     string[]
   >([]);
-  const [importSport, setImportSport] = useState<ImportSport>("FOOTBALL");
+  const [importSport, setImportSport] = useState<ImportSport | null>(null);
   const [f1Meetings, setF1Meetings] = useState<F1MeetingOption[]>([]);
   const [selectedF1MeetingKeys, setSelectedF1MeetingKeys] = useState<number[]>(
     [],
@@ -224,7 +226,7 @@ export default function AdminDashboardContent({
     return () => window.clearInterval(interval);
   }, [loadDashboard]);
 
-  async function syncSportsApi() {
+  async function syncSportsApi(sport: SyncSport) {
     if (!isAdmin) {
       showNotice("Only admin can sync API data.", "error");
       return;
@@ -233,34 +235,40 @@ export default function AdminDashboardContent({
     setIsMutating(true);
 
     try {
-      const result = await apiRequest<{
-        football?: {
+      if (sport === "FOOTBALL") {
+        const result = await apiRequest<{
           competitions: number;
           matches: number;
           error: string | null;
-        };
-        f1?: { meetings: number; sessions: number; error: string | null };
-      }>("/dashboard/sync", {
-        method: "POST",
-      });
+        }>("/dashboard/sync/football", { method: "POST" });
+        showNotice(
+          [
+            `Football: ${result.competitions} competitions, ${result.matches} matches`,
+            result.error ? `Football note: ${result.error}` : "",
+          ]
+            .filter(Boolean)
+            .join("\n"),
+          result.error ? "info" : "success",
+        );
+      } else {
+        const result = await apiRequest<{
+          meetings: number;
+          sessions: number;
+          error: string | null;
+        }>("/dashboard/sync/f1", { method: "POST" });
+        showNotice(
+          [
+            `F1: ${result.meetings} meetings, ${result.sessions} sessions`,
+            result.error ? `F1 note: ${result.error}` : "",
+          ]
+            .filter(Boolean)
+            .join("\n"),
+          result.error ? "info" : "success",
+        );
+      }
+
+      setOpenSyncApiModal(false);
       await loadDashboard();
-      showNotice(
-        [
-          `Football: ${result.football?.competitions ?? 0} competitions, ${
-            result.football?.matches ?? 0
-          } matches`,
-          `F1: ${result.f1?.meetings ?? 0} meetings, ${
-            result.f1?.sessions ?? 0
-          } sessions`,
-          result.football?.error
-            ? `Football note: ${result.football.error}`
-            : "",
-          result.f1?.error ? `F1 note: ${result.f1.error}` : "",
-        ]
-          .filter(Boolean)
-          .join("\n"),
-        "success",
-      );
     } catch (error) {
       showNotice(
         error instanceof Error ? error.message : "API sync failed.",
@@ -281,8 +289,7 @@ export default function AdminDashboardContent({
     setSelectedFootballLeagueKeys([]);
     setSelectedF1MeetingKeys([]);
     setSelectedLolCompetitionKeys([]);
-    setImportSport("FOOTBALL");
-    await loadImportOptions("FOOTBALL");
+    setImportSport(null);
   }
 
   async function loadImportOptions(sport: ImportSport) {
@@ -398,7 +405,12 @@ export default function AdminDashboardContent({
       return;
     }
 
-    await importSelectedFootballLeagues();
+    if (importSport === "FOOTBALL") {
+      await importSelectedFootballLeagues();
+      return;
+    }
+
+    showNotice("Choose a sport before importing.", "error");
   }
 
   async function importSelectedFootballLeagues() {
@@ -574,13 +586,17 @@ export default function AdminDashboardContent({
       ? selectedF1MeetingKeys.length
       : importSport === "LOL"
         ? selectedLolCompetitionKeys.length
-        : selectedFootballLeagueKeys.length;
+        : importSport === "FOOTBALL"
+          ? selectedFootballLeagueKeys.length
+          : 0;
   const importItemCount =
     importSport === "F1"
       ? f1Meetings.length
       : importSport === "LOL"
         ? lolCompetitions.length
-        : footballCompetitions.length;
+        : importSport === "FOOTBALL"
+          ? footballCompetitions.length
+          : 0;
   const tournamentGroups = getTournamentGroups(dashboard.tournaments);
 
   async function saveTournament() {
@@ -668,7 +684,7 @@ export default function AdminDashboardContent({
               <DashboardActionButton
                 icon={<RefreshCw size={18} />}
                 label={isMutating ? "Syncing..." : "Reset API"}
-                onClick={syncSportsApi}
+                onClick={() => setOpenSyncApiModal(true)}
               />
               <DashboardActionButton
                 icon={<FileDown size={18} />}
@@ -793,6 +809,51 @@ export default function AdminDashboardContent({
         </aside>
       </div>
 
+      {openSyncApiModal && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/70 px-4">
+          <div className="w-full max-w-[520px] rounded border border-[#3a4d54] bg-[#0d252d] p-7 shadow-2xl">
+            <h3 className="text-2xl font-black text-[#84d8e8]">
+              Reset API Data
+            </h3>
+            <p className="mt-2 text-sm text-[#9fb2b8]">
+              Choose one data source. Dashboard refreshes never call external
+              APIs.
+            </p>
+            <div className="mt-6 grid gap-3 sm:grid-cols-2">
+              <button
+                onClick={() => void syncSportsApi("FOOTBALL")}
+                disabled={isMutating}
+                className="rounded border border-[#84d8e8] bg-[#143942] px-5 py-5 text-left disabled:opacity-60"
+              >
+                <span className="block font-black text-white">Football</span>
+                <span className="mt-2 block text-xs text-[#9fb2b8]">
+                  Uses API-SPORTS Football quota
+                </span>
+              </button>
+              <button
+                onClick={() => void syncSportsApi("F1")}
+                disabled={isMutating}
+                className="rounded border border-[#3a4d54] bg-[#14272e] px-5 py-5 text-left disabled:opacity-60"
+              >
+                <span className="block font-black text-white">Formula 1</span>
+                <span className="mt-2 block text-xs text-[#9fb2b8]">
+                  Uses OpenF1, not API-SPORTS quota
+                </span>
+              </button>
+            </div>
+            <div className="mt-6 flex justify-end">
+              <button
+                onClick={() => setOpenSyncApiModal(false)}
+                disabled={isMutating}
+                className="h-11 rounded border border-white/10 px-6 font-bold text-zinc-200 disabled:opacity-60"
+              >
+                Cancel
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+
       {openImportApiModal && (
         <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/70 px-4">
           <div className="w-full max-w-[760px] rounded border border-[#3a4d54] bg-[#0d252d] p-7 shadow-2xl">
@@ -819,14 +880,19 @@ export default function AdminDashboardContent({
                 Sport
               </span>
               <select
-                value={importSport}
+                value={importSport ?? ""}
                 onChange={(event) => {
+                  if (!event.target.value) {
+                    setImportSport(null);
+                    return;
+                  }
                   const nextSport = event.target.value as ImportSport;
                   setImportSport(nextSport);
                   void loadImportOptions(nextSport);
                 }}
                 className="h-12 w-full rounded border border-[#3a4d54] bg-[#070d0d] px-4 font-black uppercase tracking-[0.08em] text-white outline-none focus:border-[#84d8e8]"
               >
+                <option value="">Choose sport</option>
                 <option value="FOOTBALL">Football</option>
                 <option value="F1">F1</option>
                 <option value="LOL">League of Legends</option>
@@ -854,7 +920,11 @@ export default function AdminDashboardContent({
                 </div>
               ) : (
                 <div>
-                  {importSport === "FOOTBALL" ? (
+                  {!importSport ? (
+                    <div className="flex h-[180px] items-center justify-center text-sm font-bold text-[#9fb2b8]">
+                      Choose a sport to load competitions.
+                    </div>
+                  ) : importSport === "FOOTBALL" ? (
                     <>
                       <FootballCompetitionGroup
                         title="Ongoing"
@@ -900,7 +970,7 @@ export default function AdminDashboardContent({
                       />
                     </>
                   )}
-                  {importItemCount === 0 && (
+                  {importSport && importItemCount === 0 && (
                     <div className="flex h-[180px] items-center justify-center text-sm font-bold text-[#9fb2b8]">
                       No ongoing or upcoming items found for this sport.
                     </div>

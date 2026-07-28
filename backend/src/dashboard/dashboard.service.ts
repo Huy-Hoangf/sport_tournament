@@ -2,27 +2,28 @@
 import { InjectRepository } from '@nestjs/typeorm';
 import { Repository } from 'typeorm';
 import { User } from '../users/user.entity';
-import { SportsApiSyncService } from './sports-api-sync.service';
 
 @Injectable()
 export class DashboardService {
   constructor(
     @InjectRepository(User)
     private readonly usersRepository: Repository<User>,
-    private readonly sportsApiSyncService: SportsApiSyncService,
   ) {}
 
   async getDashboard() {
-    await this.sportsApiSyncService.syncIfStale(false);
-
-    const [summaryRows, tournaments, tournamentMatches, upcomingSchedule, activities] =
-      await Promise.all([
-        this.usersRepository.query(this.summaryQuery()),
-        this.usersRepository.query(this.tournamentsQuery()),
-        this.usersRepository.query(this.tournamentMatchesQuery()),
-        this.usersRepository.query(this.upcomingScheduleQuery()),
-        this.usersRepository.query(this.activitiesQuery()),
-      ]);
+    const [
+      summaryRows,
+      tournaments,
+      tournamentMatches,
+      upcomingSchedule,
+      activities,
+    ] = await Promise.all([
+      this.usersRepository.query(this.summaryQuery()),
+      this.usersRepository.query(this.tournamentsQuery()),
+      this.usersRepository.query(this.tournamentMatchesQuery()),
+      this.usersRepository.query(this.upcomingScheduleQuery()),
+      this.usersRepository.query(this.activitiesQuery()),
+    ]);
 
     const summary = this.mapSummary(summaryRows[0]);
 
@@ -226,11 +227,3 @@ export class DashboardService {
     return `FD_${String(hash).padStart(5, '0').slice(-5)}`;
   }
 }
-
-
-
-
-
-
-
-
