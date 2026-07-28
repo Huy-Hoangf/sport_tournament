@@ -174,6 +174,71 @@ export class SportsApiSyncService {
     return this.syncExternalData();
   }
 
+  async deleteImportedApiData() {
+    const apiSources = ['FOOTBALL_DATA', 'ESPN_ASEAN', 'OPENF1', 'CITO_LOL'];
+    const apiStageNames = ['API Feed', 'Race Weekend', 'League Schedule'];
+    const [result] = await this.usersRepository.query(
+      `
+        WITH api_tournaments AS MATERIALIZED (
+          SELECT
+            t.id,
+            (SELECT COUNT(*) FROM matches m WHERE m.tournament_id = t.id) AS match_count
+          FROM tournaments t
+          WHERE
+            EXISTS (
+              SELECT 1
+              FROM matches m
+              WHERE m.tournament_id = t.id
+                AND m.external_source = ANY($1::text[])
+            )
+            OR EXISTS (
+              SELECT 1
+              FROM stages s
+              WHERE s.tournament_id = t.id
+                AND s.name = ANY($2::text[])
+            )
+            OR (
+              t.sport_type IN ('FOOTBALL', 'F1', 'ESPORTS')
+              AND NOT EXISTS (
+                SELECT 1 FROM matches m WHERE m.tournament_id = t.id
+              )
+              AND NOT EXISTS (
+                SELECT 1 FROM teams team WHERE team.tournament_id = t.id
+              )
+              AND NOT EXISTS (
+                SELECT 1 FROM stages s WHERE s.tournament_id = t.id
+              )
+              AND NOT EXISTS (
+                SELECT 1
+                FROM tournament_participants participant
+                WHERE participant.tournament_id = t.id
+              )
+            )
+        ),
+        deleted AS (
+          DELETE FROM tournaments tournament
+          USING api_tournaments api
+          WHERE tournament.id = api.id
+          RETURNING tournament.id
+        )
+        SELECT
+          COUNT(*)::int AS "deletedTournaments",
+          COALESCE(SUM(api.match_count), 0)::int AS "deletedMatches"
+        FROM api_tournaments api
+        JOIN deleted ON deleted.id = api.id
+      `,
+      [apiSources, apiStageNames],
+    );
+
+    this.lolScheduleCache = null;
+
+    return {
+      deletedTournaments: Number(result?.deletedTournaments ?? 0),
+      deletedMatches: Number(result?.deletedMatches ?? 0),
+      message: 'Imported API data deleted successfully.',
+    };
+  }
+
   async syncFootballNow() {
     await this.ensureSportTypeConstraint();
     const adminId = await this.findAdminId();

@@ -2,6 +2,7 @@ import {
   BadRequestException,
   Body,
   Controller,
+  Delete,
   Get,
   Headers,
   Post,
@@ -27,6 +28,14 @@ export class DashboardController {
   async syncNow(@Headers('authorization') authorization: string | undefined) {
     await this.authService.verifyAdminToken(authorization);
     return this.sportsApiSyncService.syncAllNow();
+  }
+
+  @Delete('api-data')
+  async deleteApiData(
+    @Headers('authorization') authorization: string | undefined,
+  ) {
+    await this.authService.verifyAdminToken(authorization);
+    return this.sportsApiSyncService.deleteImportedApiData();
   }
 
   @Post('sync/football')

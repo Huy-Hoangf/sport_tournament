@@ -160,6 +160,7 @@ export default function AdminDashboardContent({
   const [openTournamentForm, setOpenTournamentForm] = useState(false);
   const [openImportApiModal, setOpenImportApiModal] = useState(false);
   const [openSyncApiModal, setOpenSyncApiModal] = useState(false);
+  const [confirmResetApiData, setConfirmResetApiData] = useState(false);
   const [footballCompetitions, setFootballCompetitions] = useState<
     FootballCompetitionOption[]
   >([]);
@@ -272,6 +273,36 @@ export default function AdminDashboardContent({
     } catch (error) {
       showNotice(
         error instanceof Error ? error.message : "API sync failed.",
+        "error",
+      );
+    } finally {
+      setIsMutating(false);
+    }
+  }
+
+  async function resetImportedApiData() {
+    if (!isAdmin) {
+      showNotice("Only admin can reset API data.", "error");
+      return;
+    }
+
+    setIsMutating(true);
+
+    try {
+      const result = await apiRequest<{
+        deletedTournaments: number;
+        deletedMatches: number;
+      }>("/dashboard/api-data", { method: "DELETE" });
+      showNotice(
+        `Deleted ${result.deletedTournaments} API tournaments and ${result.deletedMatches} matches.`,
+        "success",
+      );
+      setConfirmResetApiData(false);
+      setOpenSyncApiModal(false);
+      await loadDashboard();
+    } catch (error) {
+      showNotice(
+        error instanceof Error ? error.message : "Cannot reset API data.",
         "error",
       );
     } finally {
@@ -841,6 +872,21 @@ export default function AdminDashboardContent({
                 </span>
               </button>
             </div>
+            <button
+              onClick={() => {
+                setOpenSyncApiModal(false);
+                setConfirmResetApiData(true);
+              }}
+              disabled={isMutating}
+              className="mt-4 w-full rounded border border-[#8f4b45] bg-[#351a19] px-5 py-4 text-left disabled:opacity-60"
+            >
+              <span className="block font-black text-[#ffab9e]">
+                Delete all imported API data
+              </span>
+              <span className="mt-2 block text-xs text-[#c89992]">
+                Clears old API tournaments and matches without calling any API.
+              </span>
+            </button>
             <div className="mt-6 flex justify-end">
               <button
                 onClick={() => setOpenSyncApiModal(false)}
@@ -848,6 +894,40 @@ export default function AdminDashboardContent({
                 className="h-11 rounded border border-white/10 px-6 font-bold text-zinc-200 disabled:opacity-60"
               >
                 Cancel
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {confirmResetApiData && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/70 px-4">
+          <div className="w-full max-w-[500px] rounded border border-[#8f4b45] bg-[#0d252d] p-7 shadow-2xl">
+            <h3 className="text-2xl font-black text-[#ffab9e]">
+              Delete Imported API Data
+            </h3>
+            <p className="mt-4 text-sm leading-6 text-[#d7e2e5]">
+              This deletes all API matches, their tournaments, teams, stages and
+              predictions. Empty tournaments left by the old importer are also
+              removed. Players and populated manual tournaments are kept.
+            </p>
+            <p className="mt-3 text-sm font-bold text-[#ffab9e]">
+              This action cannot be undone.
+            </p>
+            <div className="mt-7 flex justify-end gap-3">
+              <button
+                onClick={() => setConfirmResetApiData(false)}
+                disabled={isMutating}
+                className="h-12 rounded border border-white/10 px-6 font-bold text-zinc-200 disabled:opacity-60"
+              >
+                Cancel
+              </button>
+              <button
+                onClick={() => void resetImportedApiData()}
+                disabled={isMutating}
+                className="h-12 rounded bg-[#ffab9e] px-6 font-black text-[#2b1414] disabled:opacity-60"
+              >
+                {isMutating ? "Deleting..." : "Delete API Data"}
               </button>
             </div>
           </div>
