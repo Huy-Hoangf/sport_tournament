@@ -156,13 +156,9 @@ export class SportsApiSyncService {
     for (const competition of responses.flatMap(
       (response) => response.response ?? [],
     )) {
-      const option = this.toFootballCompetitionOption(competition);
-
-      if (!option) {
-        continue;
+      for (const option of this.toFootballCompetitionOptions(competition)) {
+        optionsByKey.set(`${option.id}:${option.season}`, option);
       }
-
-      optionsByKey.set(`${option.id}:${option.season}`, option);
     }
 
     return Array.from(optionsByKey.values())
@@ -739,43 +735,44 @@ export class SportsApiSyncService {
     return (await response.json()) as T;
   }
 
-  private toFootballCompetitionOption(
+  private toFootballCompetitionOptions(
     competition: FootballCompetition,
-  ): FootballCompetitionOption | null {
+  ): FootballCompetitionOption[] {
     if (!competition.league?.id || !competition.league.name) {
-      return null;
+      return [];
     }
 
-    const currentSeason =
-      competition.seasons?.find((season) => season.current) ??
-      competition.seasons?.at(-1);
-
-    if (!currentSeason?.year) {
-      return null;
-    }
-
-    return {
-      id: competition.league.id,
-      name: competition.league.name,
-      country: competition.country?.name || 'International',
-      season: currentSeason.year,
-      start: currentSeason.start ?? null,
-      end: currentSeason.end ?? null,
-      current: Boolean(currentSeason.current),
-      type: competition.league.type || 'League',
-    };
+    return (competition.seasons ?? [])
+      .filter((season) => Boolean(season.year))
+      .map((season) => ({
+        id: competition.league.id,
+        name: competition.league.name,
+        country: competition.country?.name || 'International',
+        season: season.year,
+        start: season.start ?? null,
+        end: season.end ?? null,
+        current: Boolean(season.current),
+        type: competition.league.type || 'League',
+      }));
   }
 
   private isCompetitionImportable(option: FootballCompetitionOption) {
-    if (option.current) {
-      return true;
-    }
-
     const now = new Date();
+    const futureWindow = new Date(
+      now.getTime() + 180 * 24 * 60 * 60 * 1000,
+    );
     const start = option.start ? new Date(option.start) : null;
     const end = option.end ? new Date(option.end) : null;
 
-    return (!start || start <= now) && (!end || end >= now);
+    if (end && end < now) {
+      return false;
+    }
+
+    if (start && start > futureWindow) {
+      return false;
+    }
+
+    return option.current || Boolean(start || end);
   }
 
   private getCompetitionPriority(name: string) {
