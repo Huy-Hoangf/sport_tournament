@@ -1,4 +1,4 @@
-import { Module } from '@nestjs/common';
+﻿import { Module } from '@nestjs/common';
 import { ConfigModule } from '@nestjs/config';
 import { TypeOrmModule } from '@nestjs/typeorm';
 
@@ -12,6 +12,13 @@ import { TeamsModule } from './teams/teams.module';
 import { MatchesModule } from './matches/matches.module';
 import { PredictionsModule } from './predictions/predictions.module';
 import { LeaderboardModule } from './leaderboard/leaderboard.module';
+import { DashboardModule } from './dashboard/dashboard.module';
+
+function readSslConfig() {
+  return process.env.DB_SSL === 'false'
+    ? false
+    : { rejectUnauthorized: false };
+}
 
 @Module({
   imports: [
@@ -20,18 +27,15 @@ import { LeaderboardModule } from './leaderboard/leaderboard.module';
     }),
 
     TypeOrmModule.forRoot({
-      type: 'mssql',
+      type: 'postgres',
       host: process.env.DB_HOST,
-      port: Number(process.env.DB_PORT),
+      port: Number(process.env.DB_PORT ?? 5432),
       username: process.env.DB_USERNAME,
       password: process.env.DB_PASSWORD,
       database: process.env.DB_NAME,
       entities: [__dirname + '/**/*.entity{.ts,.js}'],
       synchronize: false,
-      options: {
-        encrypt: false,
-        trustServerCertificate: true,
-      },
+      ssl: readSslConfig(),
     }),
 
     AuthModule,
@@ -42,6 +46,7 @@ import { LeaderboardModule } from './leaderboard/leaderboard.module';
     MatchesModule,
     PredictionsModule,
     LeaderboardModule,
+    DashboardModule,
   ],
   controllers: [AppController],
   providers: [AppService],

@@ -5,6 +5,7 @@ import { useRouter } from "next/navigation";
 import { ArrowLeft, KeyRound, Lock, Mail } from "lucide-react";
 import Link from "next/link";
 import { apiRequest } from "../api";
+import NoticeBanner, { type Notice } from "../notice-banner";
 
 export default function ForgotPasswordPage() {
   const router = useRouter();
@@ -14,12 +15,17 @@ export default function ForgotPasswordPage() {
   const [newPassword, setNewPassword] = useState("");
   const [confirmPassword, setConfirmPassword] = useState("");
   const [isLoading, setIsLoading] = useState(false);
+  const [notice, setNotice] = useState<Notice | null>(null);
+
+  function showNotice(message: string, tone: Notice["tone"] = "info") {
+    setNotice({ message, tone });
+  }
 
   async function verifyEmail() {
     const normalizedEmail = email.trim().toLowerCase();
 
     if (!normalizedEmail) {
-      alert("Please enter your company email.");
+      showNotice("Please enter your company email.", "error");
       return;
     }
 
@@ -34,7 +40,10 @@ export default function ForgotPasswordPage() {
       setEmail(normalizedEmail);
       setIsVerified(true);
     } catch (error) {
-      alert(error instanceof Error ? error.message : "Email verification failed.");
+      showNotice(
+        error instanceof Error ? error.message : "Email verification failed.",
+        "error",
+      );
     } finally {
       setIsLoading(false);
     }
@@ -42,12 +51,12 @@ export default function ForgotPasswordPage() {
 
   async function resetPassword() {
     if (!newPassword || !confirmPassword) {
-      alert("Please enter and confirm the new password.");
+      showNotice("Please enter and confirm the new password.", "error");
       return;
     }
 
     if (newPassword !== confirmPassword) {
-      alert("Confirm password does not match.");
+      showNotice("Confirm password does not match.", "error");
       return;
     }
 
@@ -62,10 +71,13 @@ export default function ForgotPasswordPage() {
         }),
       });
 
-      alert("Password reset successfully.");
+      showNotice("Password reset successfully.", "success");
       router.push("/login");
     } catch (error) {
-      alert(error instanceof Error ? error.message : "Reset password failed.");
+      showNotice(
+        error instanceof Error ? error.message : "Reset password failed.",
+        "error",
+      );
     } finally {
       setIsLoading(false);
     }
@@ -73,9 +85,10 @@ export default function ForgotPasswordPage() {
 
   return (
     <main className="auth-page flex min-h-screen flex-col overflow-hidden bg-[#0c1111] text-zinc-200">
+      <NoticeBanner notice={notice} onClose={() => setNotice(null)} />
       <header className="flex h-[90px] shrink-0 items-center justify-between border-b border-white/10 px-8">
         <h1 className="text-[30px] font-black tracking-[-0.06em] text-[#9ddff2] drop-shadow-[0_0_10px_rgba(142,216,236,0.45)]">
-          GOALCRYSTAL
+          TWENTY-TECH
         </h1>
 
         <Link

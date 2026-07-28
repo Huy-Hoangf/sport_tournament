@@ -2,6 +2,8 @@
 
 import { apiRequest, type CurrentUser } from "../api";
 import { logoutAll, readCurrentUser } from "../auth-sync";
+import NoticeBanner, { type Notice } from "../notice-banner";
+import AdminDashboardContent from "./admin-dashboard-content";
 import { useEffect, useMemo, useState } from "react";
 import { useRouter } from "next/navigation";
 import * as XLSX from "xlsx";
@@ -61,24 +63,24 @@ type ImportedPlayer = {
   email: string;
 };
 
+type AdminView = 'dashboard' | 'players';
+type StatusFilter = "ALL" | Player["status"];
+
 const PLAYERS_PER_PAGE = 5;
 const COMPANY_EMAIL_DOMAIN = "@twenty-tech.com";
 
 export default function AdminPage() {
   const router = useRouter();
   const [players, setPlayers] = useState<Player[]>([]);
-  const [currentUser] = useState<CurrentUser | null>(() => {
-    if (typeof window === "undefined") {
-      return null;
-    }
-
-    return readCurrentUser() as CurrentUser | null;
-  });
+  const [activeView, setActiveView] = useState<AdminView>("dashboard");
+  const [dashboardRefreshKey, setDashboardRefreshKey] = useState(0);
+  const [currentUser, setCurrentUser] = useState<CurrentUser | null>(null);
   const [fullName, setFullName] = useState("");
   const [email, setEmail] = useState("");
   const [isLoading, setIsLoading] = useState(false);
   const [isNameSearchOpen, setIsNameSearchOpen] = useState(false);
   const [nameSearch, setNameSearch] = useState("");
+  const [statusFilter, setStatusFilter] = useState<StatusFilter>("ALL");
   const [currentPage, setCurrentPage] = useState(1);
   const [selectedPlayer, setSelectedPlayer] = useState<Player | null>(null);
   const [renameFullName, setRenameFullName] = useState("");
@@ -96,17 +98,31 @@ export default function AdminPage() {
   const [currentPassword, setCurrentPassword] = useState("");
   const [newPassword, setNewPassword] = useState("");
   const [confirmPassword, setConfirmPassword] = useState("");
+  const [notice, setNotice] = useState<Notice | null>(null);
   const isAdmin = currentUser?.role === "ADMIN";
+
+  function showNotice(message: string, tone: Notice["tone"] = "info") {
+    setNotice({ message, tone });
+  }
+
+  function refreshDashboard() {
+    setDashboardRefreshKey((key) => key + 1);
+  }
 
   useEffect(() => {
     const currentUser = readCurrentUser() as CurrentUser | null;
 
-    if (!currentUser || currentUser.role !== "ADMIN") {
+    if (!currentUser) {
       router.push("/login");
       return;
     }
 
-    void fetchPlayers();
+    setCurrentUser(currentUser);
+    setActiveView(currentUser.role === "ADMIN" ? "players" : "dashboard");
+
+    if (currentUser.role === "ADMIN") {
+      void fetchPlayers();
+    }
 
     function handleStorage(event: StorageEvent) {
       if (event.key === "logoutEvent" || event.key === "currentUser") {
@@ -133,12 +149,16 @@ export default function AdminPage() {
   );
   const visiblePlayers = useMemo(() => {
     const keyword = nameSearch.trim().toLowerCase();
+    const statusFilteredPlayers =
+      statusFilter === "ALL"
+        ? players
+        : players.filter((player) => player.status === statusFilter);
 
     if (!keyword) {
-      return players;
+      return statusFilteredPlayers;
     }
 
-    return players.filter((player) => {
+    return statusFilteredPlayers.filter((player) => {
       const normalizedKeyword = keyword.replace(/^id[-_\s]*/i, "");
 
       return (
@@ -149,7 +169,7 @@ export default function AdminPage() {
         player.id.toLowerCase().includes(normalizedKeyword)
       );
     });
-  }, [nameSearch, players]);
+  }, [nameSearch, players, statusFilter]);
   const totalPages = Math.max(1, Math.ceil(visiblePlayers.length / PLAYERS_PER_PAGE));
   const currentSafePage = Math.min(currentPage, totalPages);
   const paginatedPlayers = visiblePlayers.slice(
@@ -162,18 +182,18 @@ export default function AdminPage() {
       const users = await apiRequest<BackendUser[]>("/users");
       setPlayers(users.map(mapUserToPlayer));
     } catch (error) {
-      alert(error instanceof Error ? error.message : "Cannot load users.");
+      showNotice(error instanceof Error ? error.message : "Cannot load users.");
     }
   }
 
   async function createPlayer() {
     if (!isAdmin) {
-      alert("Only admin can create players.");
+      showNotice("Only admin can create players.");
       return;
     }
 
     if (!fullName.trim() || !email.trim()) {
-      alert("Please enter name and email.");
+      showNotice("Please enter name and email.");
       return;
     }
 
@@ -188,15 +208,16 @@ export default function AdminPage() {
         }),
       });
 
-      alert(
+      showNotice(
         `User created successfully. Default password: ${data.user.defaultPassword}`,
       );
       setFullName("");
       setEmail("");
       setOpenModal(null);
       await fetchPlayers();
+      refreshDashboard();
     } catch (error) {
-      alert(error instanceof Error ? error.message : "Create user failed.");
+      showNotice(error instanceof Error ? error.message : "Create user failed.");
     } finally {
       setIsLoading(false);
     }
@@ -208,17 +229,17 @@ export default function AdminPage() {
     }
 
     if (currentUser?.role !== "ADMIN") {
-      alert("Only admin can rename players.");
+      showNotice("Only admin can rename players.");
       return;
     }
 
     if (!renameFullName.trim()) {
-      alert("Please enter a new player name.");
+      showNotice("Please enter a new player name.");
       return;
     }
 
     if (!renameEmail.trim()) {
-      alert("Please enter player email.");
+      showNotice("Please enter player email.");
       return;
     }
 
@@ -236,14 +257,15 @@ export default function AdminPage() {
         },
       );
 
-      alert("Player updated successfully.");
+      showNotice("Player updated successfully.");
       setSelectedPlayer(null);
       setRenameFullName("");
       setRenameEmail("");
       setOpenModal(null);
       await fetchPlayers();
+      refreshDashboard();
     } catch (error) {
-      alert(error instanceof Error ? error.message : "Update player failed.");
+      showNotice(error instanceof Error ? error.message : "Update player failed.");
     } finally {
       setIsLoading(false);
     }
@@ -273,10 +295,10 @@ export default function AdminPage() {
       setImportPlayers(imported);
 
       if (imported.length === 0) {
-        alert("Cannot find player names in this Excel file.");
+        showNotice("Cannot find player names in this Excel file.");
       }
     } catch {
-      alert("Cannot read this Excel file.");
+      showNotice("Cannot read this Excel file.");
       setImportFileName("");
       setImportPlayers([]);
     }
@@ -284,12 +306,12 @@ export default function AdminPage() {
 
   async function importPlayersFromList() {
     if (!isAdmin) {
-      alert("Only admin can import players.");
+      showNotice("Only admin can import players.");
       return;
     }
 
     if (importPlayers.length === 0) {
-      alert("Please choose an Excel file first.");
+      showNotice("Please choose an Excel file first.");
       return;
     }
 
@@ -318,7 +340,7 @@ export default function AdminPage() {
     await fetchPlayers();
 
     if (failedRows.length > 0) {
-      alert(
+      showNotice(
         `Imported ${successCount}/${importPlayers.length} players.\nFailed:\n${failedRows.join(
           "\n",
         )}`,
@@ -326,7 +348,7 @@ export default function AdminPage() {
       return;
     }
 
-    alert(`Imported ${successCount} players. Default password: 123456`);
+    showNotice(`Imported ${successCount} players. Default password: 123456`);
     setImportFileName("");
     setImportPlayers([]);
     setOpenModal(null);
@@ -334,12 +356,12 @@ export default function AdminPage() {
 
   async function deletePlayer(player: Player) {
     if (currentUser?.role !== "ADMIN") {
-      alert("Only admin can delete players.");
+      showNotice("Only admin can delete players.");
       return;
     }
 
     if (player.role === "ADMIN") {
-      alert("Cannot delete the admin account.");
+      showNotice("Cannot delete the admin account.");
       return;
     }
 
@@ -358,10 +380,11 @@ export default function AdminPage() {
         method: "DELETE",
       });
 
-      alert("Player deleted successfully.");
+      showNotice("Player deleted successfully.");
       await fetchPlayers();
+      refreshDashboard();
     } catch (error) {
-      alert(error instanceof Error ? error.message : "Delete player failed.");
+      showNotice(error instanceof Error ? error.message : "Delete player failed.");
     } finally {
       setIsLoading(false);
     }
@@ -369,14 +392,14 @@ export default function AdminPage() {
 
   async function deleteAllPlayers() {
     if (currentUser?.role !== "ADMIN") {
-      alert("Only admin can delete players.");
+      showNotice("Only admin can delete players.");
       return;
     }
 
     const playerCount = players.filter((player) => player.role === "PLAYER").length;
 
     if (playerCount === 0) {
-      alert("There are no players to delete.");
+      showNotice("There are no players to delete.");
       return;
     }
 
@@ -398,11 +421,12 @@ export default function AdminPage() {
         method: "DELETE",
       });
 
-      alert(`Deleted ${data.deletedCount} players.`);
+      showNotice(`Deleted ${data.deletedCount} players.`);
       setCurrentPage(1);
       await fetchPlayers();
+      refreshDashboard();
     } catch (error) {
-      alert(
+      showNotice(
         error instanceof Error ? error.message : "Delete all players failed.",
       );
     } finally {
@@ -416,12 +440,12 @@ export default function AdminPage() {
     }
 
     if (currentUser?.role !== "ADMIN") {
-      alert("Only admin can change player status.");
+      showNotice("Only admin can change player status.");
       return;
     }
 
     if (selectedPlayer.role === "ADMIN") {
-      alert("Cannot change the admin account status.");
+      showNotice("Cannot change the admin account status.");
       return;
     }
 
@@ -436,12 +460,13 @@ export default function AdminPage() {
         },
       );
 
-      alert("Player status updated successfully.");
+      showNotice("Player status updated successfully.");
       setSelectedPlayer(null);
       setOpenModal(null);
       await fetchPlayers();
+      refreshDashboard();
     } catch (error) {
-      alert(
+      showNotice(
         error instanceof Error ? error.message : "Change player status failed.",
       );
     } finally {
@@ -458,12 +483,12 @@ export default function AdminPage() {
     }
 
     if (!currentPassword || !newPassword || !confirmPassword) {
-      alert("Please fill all password fields.");
+      showNotice("Please fill all password fields.");
       return;
     }
 
     if (newPassword !== confirmPassword) {
-      alert("Confirm password does not match.");
+      showNotice("Confirm password does not match.");
       return;
     }
 
@@ -477,14 +502,14 @@ export default function AdminPage() {
         }),
       });
 
-      alert("Password changed successfully.");
+      showNotice("Password changed successfully.");
 
       setCurrentPassword("");
       setNewPassword("");
       setConfirmPassword("");
       setOpenModal(null);
     } catch (error) {
-      alert(error instanceof Error ? error.message : "Change password failed.");
+      showNotice(error instanceof Error ? error.message : "Change password failed.");
     }
   }
 
@@ -495,6 +520,7 @@ export default function AdminPage() {
 
   return (
     <main className="min-h-screen bg-[#06161b] text-[#d9e5e7]">
+      <NoticeBanner notice={notice} onClose={() => setNotice(null)} />
       <aside className="fixed left-0 top-0 flex h-screen w-[260px] flex-col border-r border-[#3c5056] bg-[#0d252d]">
         <div className="px-6 pt-8">
           <h1 className="text-sm font-black uppercase leading-3 tracking-[0.08em] text-white">
@@ -508,11 +534,13 @@ export default function AdminPage() {
         </div>
 
         <nav className="mt-14 space-y-2 text-sm font-bold">
-          <MenuItem icon={<LayoutDashboard size={21} />} label="Dashboard" />
-          <MenuItem icon={<Trophy size={21} />} label="Tournaments" />
-          <MenuItem icon={<Gamepad2 size={21} />} label="Matches" />
-          <MenuItem active icon={<Users size={18} />} label="Players" />
-          <MenuItem icon={<BarChart3 size={21} />} label="Leaderboard" />
+          <MenuItem active={activeView === "dashboard"} icon={<LayoutDashboard size={21} />} label="Dashboard" onClick={() => setActiveView("dashboard")} />
+          <MenuItem icon={<Trophy size={21} />} label="Tournaments" onClick={() => showNotice("this feature is not ready")} />
+          <MenuItem icon={<Gamepad2 size={21} />} label="Matches" onClick={() => showNotice("this feature is not ready")} />
+          {isAdmin && (
+            <MenuItem active={activeView === "players"} icon={<Users size={18} />} label="Players" onClick={() => setActiveView("players")} />
+          )}
+          <MenuItem icon={<BarChart3 size={21} />} label="Leaderboard" onClick={() => showNotice("this feature is not ready")} />
         </nav>
 
         <div className="mt-auto border-t border-[#3c5056] p-6">
@@ -541,7 +569,7 @@ export default function AdminPage() {
       <section className="ml-[260px] min-h-screen bg-[#06161b]">
         <header className="flex h-[88px] items-center border-b border-[#3c5056] px-8">
           <div className="w-[190px] text-[25px] font-black uppercase leading-8 text-white">
-            PLAYERS
+            {activeView === "dashboard" || !isAdmin ? "DASHBOARD" : "PLAYERS"}
           </div>
 
           <div className="ml-auto flex items-center gap-7">
@@ -559,6 +587,9 @@ export default function AdminPage() {
           </div>
         </header>
 
+        {activeView === "dashboard" || !isAdmin ? (
+          <AdminDashboardContent isAdmin={isAdmin} refreshKey={dashboardRefreshKey} />
+        ) : (
         <div className="px-8 py-9">
           <div className="mb-8 flex items-start justify-between gap-6">
             <div>
@@ -617,8 +648,13 @@ export default function AdminPage() {
           </div>
 
           <div className="mb-6 flex items-center gap-3">
-            <FilterButton label="Status: All" />
-            <FilterButton label="Tournament: All" />
+            <StatusFilterSelect
+              value={statusFilter}
+              onChange={(value) => {
+                setStatusFilter(value);
+                setCurrentPage(1);
+              }}
+            />
             <button
               onClick={() => setIsNameSearchOpen((isOpen) => !isOpen)}
               className={`flex h-[35px] w-[43px] items-center justify-center rounded border border-[#3a4d54] text-[#e3eef0] ${
@@ -715,12 +751,12 @@ export default function AdminPage() {
                         <button
                           onClick={() => {
                             if (!isAdmin) {
-                              alert("Only admin can rename players.");
+                              showNotice("Only admin can rename players.");
                               return;
                             }
 
                             if (player.role === "ADMIN") {
-                              alert("Cannot rename the admin account.");
+                              showNotice("Cannot rename the admin account.");
                               return;
                             }
 
@@ -744,12 +780,12 @@ export default function AdminPage() {
                         <button
                           onClick={() => {
                             if (!isAdmin) {
-                              alert("Only admin can change player status.");
+                              showNotice("Only admin can change player status.");
                               return;
                             }
 
                             if (player.role === "ADMIN") {
-                              alert("Cannot change the admin account status.");
+                              showNotice("Cannot change the admin account status.");
                               return;
                             }
 
@@ -820,6 +856,7 @@ export default function AdminPage() {
             </div>
           </div>
         </div>
+        )}
       </section>
 
       {openModal === "createUser" && (
@@ -856,7 +893,7 @@ export default function AdminPage() {
               Choose Excel File
             </span>
             <span className="mt-2 text-sm text-zinc-500">
-              {importFileName || ".xlsx file with name/email columns"}
+              {importFileName || ".xlsx with name/full name/ho ten/email"}
             </span>
             <input
               type="file"
@@ -1044,31 +1081,24 @@ function parsePlayersFromRows(
   const headerIndex = rows.findIndex((row) =>
     row.some((cell) => {
       const value = normalizeHeader(cell);
-      return (
-        value === "email" ||
-        value === "mail" ||
-        value === "name" ||
-        value === "full name" ||
-        value === "player" ||
-        value === "nguoi choi"
-      );
+      return isEmailHeader(value) || isNameHeader(value);
     }),
   );
   const importedPlayers: ImportedPlayer[] = [];
 
   if (headerIndex >= 0) {
     const headers = rows[headerIndex].map(normalizeHeader);
-    const nameColumn = headers.findIndex((header) =>
-      ["name", "full name", "player", "nguoi choi"].includes(header),
-    );
-    const emailColumn = headers.findIndex((header) =>
-      ["email", "mail"].includes(header),
-    );
+    const nameColumn = headers.findIndex(isNameHeader);
+    const emailColumn = headers.findIndex(isEmailHeader);
+
+    if (nameColumn < 0) {
+      return collectPlayersFromBestNameColumn(rows, usedNames, usedEmails);
+    }
 
     for (const row of rows.slice(headerIndex + 1)) {
       const fullName = readCell(row[nameColumn]);
 
-      if (!fullName) {
+      if (!looksLikePlayerName(fullName)) {
         continue;
       }
 
@@ -1092,12 +1122,36 @@ function parsePlayersFromRows(
     return importedPlayers;
   }
 
-  const firstColumnRows = rows.slice(1);
+  return collectPlayersFromBestNameColumn(rows, usedNames, usedEmails);
+}
 
-  for (const row of firstColumnRows) {
-    const fullName = readCell(row[0]);
+function collectPlayersFromBestNameColumn(
+  rows: unknown[][],
+  usedNames: Set<string>,
+  usedEmails: Set<string>,
+): ImportedPlayer[] {
+  const columnCount = Math.max(0, ...rows.map((row) => row.length));
+  let bestColumn = 0;
+  let bestScore = 0;
 
-    if (!fullName || fullName.startsWith("M")) {
+  for (let column = 0; column < columnCount; column += 1) {
+    const score = rows.reduce((total, row) => {
+      const value = readCell(row[column]);
+      return total + (looksLikePlayerName(value) ? 1 : 0);
+    }, 0);
+
+    if (score > bestScore) {
+      bestColumn = column;
+      bestScore = score;
+    }
+  }
+
+  const importedPlayers: ImportedPlayer[] = [];
+
+  for (const row of rows) {
+    const fullName = readCell(row[bestColumn]);
+
+    if (!looksLikePlayerName(fullName)) {
       continue;
     }
 
@@ -1118,6 +1172,86 @@ function parsePlayersFromRows(
   }
 
   return importedPlayers;
+}
+
+function isNameHeader(header: string) {
+  return [
+    "name",
+    "full name",
+    "fullname",
+    "player",
+    "player name",
+    "member",
+    "member name",
+    "user",
+    "user name",
+    "username",
+    "ho ten",
+    "ho va ten",
+    "hoten",
+    "ten",
+    "ten nguoi choi",
+    "nguoi choi",
+    "ten nhan vien",
+    "nhan vien",
+    "ten thanh vien",
+    "thanh vien",
+  ].includes(header);
+}
+
+function isEmailHeader(header: string) {
+  return ["email", "mail", "e-mail", "gmail", "company email"].includes(
+    header,
+  );
+}
+
+function looksLikePlayerName(value: string) {
+  if (!value || value.length < 2 || value.includes("@")) {
+    return false;
+  }
+
+  const normalized = normalizeHeader(value);
+  const wordCount = normalized.split(/\s+/).filter(Boolean).length;
+  const punctuationCount = (value.match(/[.!?:;,/\\|()[\]{}]/g) ?? []).length;
+  const blockedValues = new Set([
+    "name",
+    "full name",
+    "player",
+    "email",
+    "mail",
+    "stt",
+    "no",
+    "id",
+    "ma",
+    "member id",
+    "ho ten",
+    "ten",
+    "nguoi choi",
+    "toan bo nhan vien",
+    "chon doi",
+    "cau thu xinh",
+  ]);
+
+  if (blockedValues.has(normalized) || /^\d+$/.test(normalized)) {
+    return false;
+  }
+
+  if (
+    value.length > 48 ||
+    wordCount > 6 ||
+    punctuationCount > 1 ||
+    normalized.includes("khong can biet") ||
+    normalized.includes("chon doi") ||
+    normalized.includes("du doan") ||
+    normalized.includes("minigame") ||
+    normalized.includes("world cup") ||
+    normalized.includes("cau thu xinh") ||
+    normalized.includes("hop ly")
+  ) {
+    return false;
+  }
+
+  return /[a-zA-Z\u00C0-\u1EF9]/.test(value);
 }
 
 function buildImportEmail(
@@ -1195,14 +1329,18 @@ function MenuItem({
   icon,
   label,
   active,
+  onClick,
 }: {
   icon: React.ReactNode;
   label: string;
   active?: boolean;
+  onClick?: () => void;
 }) {
   return (
-    <div
-      className={`flex h-[49px] items-center gap-4 px-6 tracking-[0.03em] ${
+    <button
+      type="button"
+      onClick={onClick}
+      className={`flex h-[49px] w-full items-center gap-4 px-6 text-left tracking-[0.03em] ${
         active
           ? "border-l-4 border-[#e9feff] bg-[#263b43] text-white"
           : "text-[#d7e4e8]"
@@ -1210,10 +1348,9 @@ function MenuItem({
     >
       {icon}
       <span>{label}</span>
-    </div>
+    </button>
   );
 }
-
 function StatCard({
   title,
   value,
@@ -1254,12 +1391,38 @@ function StatCard({
   );
 }
 
-function FilterButton({ label }: { label: string }) {
+function StatusFilterSelect({
+  value,
+  onChange,
+}: {
+  value: StatusFilter;
+  onChange: (value: StatusFilter) => void;
+}) {
   return (
-    <button className="flex h-[35px] w-[244px] items-center justify-between rounded border border-[#3a4d54] bg-[#0d252d] px-4 text-sm font-black uppercase tracking-[0.08em] text-[#dce8eb]">
-      {label}
-      <ChevronDown size={16} />
-    </button>
+    <label className="relative flex h-[35px] w-[244px] items-center rounded border border-[#3a4d54] bg-[#0d252d] px-4 text-sm font-black uppercase tracking-[0.08em] text-[#dce8eb]">
+      <select
+        value={value}
+        onChange={(event) => onChange(event.target.value as StatusFilter)}
+        className="h-full w-full appearance-none bg-transparent pr-8 font-black uppercase tracking-[0.08em] text-[#dce8eb] outline-none"
+      >
+        <option className="bg-[#0d252d] text-white" value="ALL">
+          Status: All
+        </option>
+        <option className="bg-[#0d252d] text-white" value="ACTIVE">
+          Status: Active
+        </option>
+        <option className="bg-[#0d252d] text-white" value="INACTIVE">
+          Status: Inactive
+        </option>
+        <option className="bg-[#0d252d] text-white" value="PENDING">
+          Status: Pending
+        </option>
+      </select>
+      <ChevronDown
+        size={16}
+        className="pointer-events-none absolute right-4 text-[#dce8eb]"
+      />
+    </label>
   );
 }
 
@@ -1351,3 +1514,8 @@ function ModalActions({
     </div>
   );
 }
+
+
+
+
+

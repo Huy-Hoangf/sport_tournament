@@ -1,0 +1,24 @@
+import { Controller, Get, Headers, Post } from '@nestjs/common';
+import { AuthService } from '../auth/auth.service';
+import { DashboardService } from './dashboard.service';
+import { SportsApiSyncService } from './sports-api-sync.service';
+
+@Controller('dashboard')
+export class DashboardController {
+  constructor(
+    private readonly dashboardService: DashboardService,
+    private readonly sportsApiSyncService: SportsApiSyncService,
+    private readonly authService: AuthService,
+  ) {}
+
+  @Get()
+  getDashboard() {
+    return this.dashboardService.getDashboard();
+  }
+
+  @Post('sync')
+  async syncNow(@Headers('authorization') authorization: string | undefined) {
+    await this.authService.verifyAdminToken(authorization);
+    return this.sportsApiSyncService.syncIfStale(true);
+  }
+}

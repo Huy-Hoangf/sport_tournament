@@ -1,4 +1,4 @@
-import {
+﻿import {
   BadRequestException,
   ConflictException,
   Injectable,
@@ -27,8 +27,6 @@ export class UsersService implements OnModuleInit {
   ) {}
 
   async onModuleInit() {
-    await this.ensureMemberCodeColumn();
-    await this.ensureUserStatusColumn();
     await this.seedDefaultAdmin();
     await this.backfillMemberCodes();
   }
@@ -39,14 +37,14 @@ export class UsersService implements OnModuleInit {
     const rows = await this.usersRepository.query(`
       SELECT
         u.id,
-        u.member_code AS memberCode,
+        u.member_code AS "memberCode",
         u.email,
-        u.full_name AS fullName,
+        u.full_name AS "fullName",
         u.role,
         u.user_status AS status,
-        u.created_at AS createdAt,
-        u.updated_at AS updatedAt,
-        COUNT(DISTINCT tp.tournament_id) AS eventsCount
+        u.created_at AS "createdAt",
+        u.updated_at AS "updatedAt",
+        COUNT(DISTINCT tp.tournament_id) AS "eventsCount"
       FROM users u
       LEFT JOIN tournament_participants tp ON tp.user_id = u.id
       GROUP BY
@@ -231,51 +229,51 @@ export class UsersService implements OnModuleInit {
     }
 
     const [{ totalPlayers }] = await this.usersRepository.query(`
-      SELECT COUNT(*) AS totalPlayers
+      SELECT COUNT(*) AS "totalPlayers"
       FROM users
       WHERE role = 'PLAYER'
-        AND email <> @0
+        AND email <> $1
     `, [ADMIN_EMAIL]);
     const deletedCount = Number(totalPlayers ?? 0);
 
     await this.usersRepository.manager.transaction(async (manager) => {
       await manager.query(`
-        DELETE p
-        FROM predictions p
-        JOIN users u ON u.id = p.user_id
-        WHERE u.role = 'PLAYER'
-          AND u.email <> @0
+        DELETE FROM predictions p
+        USING users u
+        WHERE u.id = p.user_id
+          AND u.role = 'PLAYER'
+          AND u.email <> $1
       `, [ADMIN_EMAIL]);
 
       await manager.query(`
-        DELETE ls
-        FROM leaderboard_snapshots ls
-        JOIN users u ON u.id = ls.user_id
-        WHERE u.role = 'PLAYER'
-          AND u.email <> @0
+        DELETE FROM leaderboard_snapshots ls
+        USING users u
+        WHERE u.id = ls.user_id
+          AND u.role = 'PLAYER'
+          AND u.email <> $1
       `, [ADMIN_EMAIL]);
 
       await manager.query(`
-        DELETE tp
-        FROM tournament_participants tp
-        JOIN users u ON u.id = tp.user_id
-        WHERE u.role = 'PLAYER'
-          AND u.email <> @0
+        DELETE FROM tournament_participants tp
+        USING users u
+        WHERE u.id = tp.user_id
+          AND u.role = 'PLAYER'
+          AND u.email <> $1
       `, [ADMIN_EMAIL]);
 
       await manager.query(`
-        UPDATE t
-        SET created_by = @0
-        FROM tournaments t
-        JOIN users u ON u.id = t.created_by
-        WHERE u.role = 'PLAYER'
-          AND u.email <> @1
+        UPDATE tournaments t
+        SET created_by = $1
+        FROM users u
+        WHERE u.id = t.created_by
+          AND u.role = 'PLAYER'
+          AND u.email <> $2
       `, [admin.id, ADMIN_EMAIL]);
 
       await manager.query(`
         DELETE FROM users
         WHERE role = 'PLAYER'
-          AND email <> @0
+          AND email <> $1
       `, [ADMIN_EMAIL]);
     });
 
@@ -322,24 +320,6 @@ export class UsersService implements OnModuleInit {
     await this.usersRepository.save(admin);
   }
 
-  private async ensureMemberCodeColumn() {
-    await this.usersRepository.query(`
-      IF COL_LENGTH('users', 'member_code') IS NULL
-      BEGIN
-        ALTER TABLE users ADD member_code NVARCHAR(20) NULL;
-      END
-    `);
-  }
-
-  private async ensureUserStatusColumn() {
-    await this.usersRepository.query(`
-      IF COL_LENGTH('users', 'user_status') IS NULL
-      BEGIN
-        ALTER TABLE users ADD user_status NVARCHAR(20) NOT NULL DEFAULT 'ACTIVE';
-      END
-    `);
-  }
-
   private async backfillMemberCodes() {
     const users = await this.usersRepository.find({
       order: {
@@ -355,25 +335,11 @@ export class UsersService implements OnModuleInit {
       user.memberCode = await this.generateMemberCode();
       await this.usersRepository.save(user);
     }
-
-    await this.usersRepository.query(`
-      IF NOT EXISTS (
-        SELECT 1
-        FROM sys.indexes
-        WHERE name = 'uq_users_member_code'
-          AND object_id = OBJECT_ID('users')
-      )
-      BEGIN
-        CREATE UNIQUE INDEX uq_users_member_code
-        ON users(member_code)
-        WHERE member_code IS NOT NULL;
-      END
-    `);
   }
 
   private async generateMemberCode() {
     const rows = await this.usersRepository.query(`
-      SELECT member_code AS memberCode
+      SELECT member_code AS "memberCode"
       FROM users
       WHERE member_code IS NOT NULL
     `);
@@ -396,3 +362,5 @@ export class UsersService implements OnModuleInit {
     return `GC-${String(nextNumber).padStart(4, '0')}`;
   }
 }
+
+

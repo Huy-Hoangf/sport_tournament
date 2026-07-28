@@ -1,8 +1,10 @@
 import {
   BadRequestException,
+  ForbiddenException,
   Injectable,
   UnauthorizedException,
 } from '@nestjs/common';
+import { JwtService } from '@nestjs/jwt';
 import * as bcrypt from 'bcrypt';
 import { UsersService } from '../users/users.service';
 import {
@@ -13,7 +15,10 @@ import {
 
 @Injectable()
 export class AuthService {
-  constructor(private readonly usersService: UsersService) {}
+  constructor(
+    private readonly usersService: UsersService,
+    private readonly jwtService: JwtService,
+  ) {}
 
   async login(email: string, password: string) {
     const normalizedEmail = normalizeEmail(email);
@@ -34,12 +39,51 @@ export class AuthService {
       throw new UnauthorizedException('Invalid email or password.');
     }
 
-    return {
+    const responseUser = {
       id: user.id,
       email: user.email,
       fullName: user.fullName,
       role: normalizedEmail === ADMIN_EMAIL ? 'ADMIN' : user.role,
     };
+
+    return {
+      ...responseUser,
+      accessToken: await this.jwtService.signAsync({
+        sub: responseUser.id,
+        email: responseUser.email,
+        role: responseUser.role,
+      }),
+    };
+  }
+
+  async verifyAdminToken(authorization?: string) {
+    const token = authorization?.startsWith('Bearer ')
+      ? authorization.slice('Bearer '.length)
+      : '';
+
+    if (!token) {
+      throw new UnauthorizedException('Missing access token.');
+    }
+
+    try {
+      const payload = await this.jwtService.verifyAsync<{
+        sub: number;
+        email: string;
+        role: string;
+      }>(token);
+
+      if (payload.role !== 'ADMIN') {
+        throw new ForbiddenException('Only admin can perform this action.');
+      }
+
+      return payload;
+    } catch (error) {
+      if (error instanceof ForbiddenException) {
+        throw error;
+      }
+
+      throw new UnauthorizedException('Invalid or expired access token.');
+    }
   }
 
   async verifyForgotPasswordEmail(email: string) {
