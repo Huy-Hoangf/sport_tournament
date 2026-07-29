@@ -7,6 +7,8 @@ import { Fragment, useCallback, useEffect, useState } from "react";
 import {
   AlertTriangle,
   CalendarDays,
+  ChevronLeft,
+  ChevronRight,
   Cloud,
   FileDown,
   Filter,
@@ -1289,12 +1291,48 @@ function TournamentManagementTable({
   onEditTournament: (tournament: TournamentRow) => void;
   onDeleteTournament: (tournament: TournamentRow) => void;
 }) {
+  const pageSize = 5;
+  const totalPages = Math.max(1, Math.ceil(total / pageSize));
+  const [currentPage, setCurrentPage] = useState(1);
+
+  useEffect(() => {
+    setCurrentPage((page) => Math.min(page, totalPages));
+  }, [totalPages]);
+
+  const firstVisibleIndex = (currentPage - 1) * pageSize;
+  const visibleTournaments = tournaments.slice(
+    firstVisibleIndex,
+    firstVisibleIndex + pageSize,
+  );
+  const pageNumbers = Array.from(
+    { length: totalPages },
+    (_, index) => index + 1,
+  );
+
+  function changePage(page: number) {
+    const nextPage = Math.min(Math.max(page, 1), totalPages);
+
+    if (nextPage === currentPage) {
+      return;
+    }
+
+    setCurrentPage(nextPage);
+    onSelectTournament(null);
+  }
+
   return (
     <section className="overflow-hidden rounded border border-[#3a4d54] bg-[#0d252d]">
       <DashboardPanelTitle
         title={title}
         icon={<Filter size={17} />}
-        right={total > 5 ? `Showing 5 of ${total}` : `${total} total`}
+        right={
+          total > 0
+            ? `Showing ${firstVisibleIndex + 1}-${Math.min(
+                firstVisibleIndex + pageSize,
+                total,
+              )} of ${total}`
+            : "0 total"
+        }
       />
       <div className="overflow-x-auto">
         <table className="w-full min-w-[980px] table-fixed text-left">
@@ -1310,7 +1348,7 @@ function TournamentManagementTable({
             </tr>
           </thead>
           <tbody>
-            {tournaments.map((tournament) => {
+            {visibleTournaments.map((tournament) => {
               const isSelected = selectedTournamentId === tournament.id;
               const matches = tournamentMatches.filter(
                 (match) => match.tournamentId === tournament.id,
@@ -1394,7 +1432,7 @@ function TournamentManagementTable({
                 </Fragment>
               );
             })}
-            {tournaments.length === 0 && (
+            {visibleTournaments.length === 0 && (
               <tr>
                 <td
                   colSpan={7}
@@ -1407,6 +1445,54 @@ function TournamentManagementTable({
           </tbody>
         </table>
       </div>
+      {totalPages > 1 && (
+        <div className="flex min-h-[64px] flex-wrap items-center justify-between gap-4 border-t border-[#3a4d54] bg-[#10242b] px-6 py-3">
+          <span className="text-xs font-black uppercase text-[#9fb2b8]">
+            Page {currentPage} of {totalPages}
+          </span>
+          <nav
+            aria-label={`${title} pagination`}
+            className="flex flex-wrap items-center gap-2"
+          >
+            <button
+              type="button"
+              onClick={() => changePage(currentPage - 1)}
+              disabled={currentPage === 1}
+              aria-label="Previous page"
+              title="Previous page"
+              className="flex h-9 w-9 items-center justify-center border border-[#3a4d54] text-[#dce8eb] transition hover:border-[#84d8e8] hover:text-[#84d8e8] disabled:cursor-not-allowed disabled:opacity-40"
+            >
+              <ChevronLeft size={17} />
+            </button>
+            {pageNumbers.map((page) => (
+              <button
+                key={page}
+                type="button"
+                onClick={() => changePage(page)}
+                aria-label={`Page ${page}`}
+                aria-current={page === currentPage ? "page" : undefined}
+                className={`flex h-9 min-w-9 items-center justify-center border px-2 text-xs font-black transition ${
+                  page === currentPage
+                    ? "border-[#84d8e8] bg-[#84d8e8] text-[#06161b]"
+                    : "border-[#3a4d54] text-[#dce8eb] hover:border-[#84d8e8] hover:text-[#84d8e8]"
+                }`}
+              >
+                {page}
+              </button>
+            ))}
+            <button
+              type="button"
+              onClick={() => changePage(currentPage + 1)}
+              disabled={currentPage === totalPages}
+              aria-label="Next page"
+              title="Next page"
+              className="flex h-9 w-9 items-center justify-center border border-[#3a4d54] text-[#dce8eb] transition hover:border-[#84d8e8] hover:text-[#84d8e8] disabled:cursor-not-allowed disabled:opacity-40"
+            >
+              <ChevronRight size={17} />
+            </button>
+          </nav>
+        </div>
+      )}
     </section>
   );
 }
@@ -1845,28 +1931,28 @@ function getTournamentGroups(tournaments: TournamentRow[]) {
       sportType: "FOOTBALL",
       title: "Football Tournaments",
       total: football.length,
-      tournaments: football.slice(0, 5),
+      tournaments: football,
       emptyMessage: "No football tournaments found in database.",
     },
     {
       sportType: "F1",
       title: "F1 Tournaments",
       total: f1.length,
-      tournaments: f1.slice(0, 5),
+      tournaments: f1,
       emptyMessage: "No F1 tournaments found in database.",
     },
     {
       sportType: "LOL",
       title: "League of Legends Tournaments",
       total: lol.length,
-      tournaments: lol.slice(0, 5),
+      tournaments: lol,
       emptyMessage: "No League of Legends tournaments found in database.",
     },
     {
       sportType: "OTHER",
       title: "Other Sports Tournaments",
       total: otherSports.length,
-      tournaments: otherSports.slice(0, 5),
+      tournaments: otherSports,
       emptyMessage: "No other sports tournaments found in database.",
     },
   ];
