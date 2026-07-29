@@ -387,39 +387,28 @@ export default function AdminDashboardContent({
     );
   }
 
-  function selectOngoingFootballLeagues() {
+  function selectAllFootballLeagues() {
     setSelectedFootballLeagueKeys(
-      footballCompetitions
-        .filter(
-          (competition) =>
-            getFootballCompetitionPhase(competition) === "ongoing",
-        )
-        .map((competition) => getFootballLeagueKey(competition)),
+      footballCompetitions.map((competition) =>
+        getFootballLeagueKey(competition),
+      ),
     );
   }
 
-  function selectOngoingImportItems() {
+  function selectAllImportItems() {
     if (importSport === "F1") {
-      setSelectedF1MeetingKeys(
-        f1Meetings
-          .filter((meeting) => getF1MeetingPhase(meeting) === "ongoing")
-          .map((meeting) => meeting.id),
-      );
+      setSelectedF1MeetingKeys(f1Meetings.map((meeting) => meeting.id));
       return;
     }
 
     if (importSport === "LOL") {
       setSelectedLolCompetitionKeys(
-        lolCompetitions
-          .filter(
-            (competition) => getLolCompetitionPhase(competition) === "ongoing",
-          )
-          .map((competition) => competition.id),
+        lolCompetitions.map((competition) => competition.id),
       );
       return;
     }
 
-    selectOngoingFootballLeagues();
+    selectAllFootballLeagues();
   }
 
   async function importSelectedApiItems() {
@@ -983,11 +972,11 @@ export default function AdminDashboardContent({
 
             <div className="mb-4 flex flex-wrap items-center justify-between gap-3">
               <button
-                onClick={selectOngoingImportItems}
+                onClick={selectAllImportItems}
                 disabled={isLoadingCompetitions || importItemCount === 0}
                 className="h-11 rounded border border-[#84d8e8] px-4 text-sm font-black uppercase tracking-[0.08em] text-[#84d8e8] disabled:cursor-not-allowed disabled:opacity-50"
               >
-                Select ongoing{" "}
+                Select all{" "}
                 {importSport === "F1" ? "meetings" : "competitions"}
               </button>
               <span className="text-sm font-bold text-[#9fb2b8]">
