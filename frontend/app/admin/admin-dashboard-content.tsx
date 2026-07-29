@@ -387,28 +387,40 @@ export default function AdminDashboardContent({
     );
   }
 
-  function selectAllFootballLeagues() {
-    setSelectedFootballLeagueKeys(
-      footballCompetitions.map((competition) =>
-        getFootballLeagueKey(competition),
-      ),
+  function toggleAllFootballLeagues() {
+    const allKeys = footballCompetitions.map((competition) =>
+      getFootballLeagueKey(competition),
+    );
+
+    setSelectedFootballLeagueKeys((currentKeys) =>
+      allKeys.length > 0 && currentKeys.length === allKeys.length
+        ? []
+        : allKeys,
     );
   }
 
-  function selectAllImportItems() {
+  function toggleAllImportItems() {
     if (importSport === "F1") {
-      setSelectedF1MeetingKeys(f1Meetings.map((meeting) => meeting.id));
-      return;
-    }
-
-    if (importSport === "LOL") {
-      setSelectedLolCompetitionKeys(
-        lolCompetitions.map((competition) => competition.id),
+      const allKeys = f1Meetings.map((meeting) => meeting.id);
+      setSelectedF1MeetingKeys((currentKeys) =>
+        allKeys.length > 0 && currentKeys.length === allKeys.length
+          ? []
+          : allKeys,
       );
       return;
     }
 
-    selectAllFootballLeagues();
+    if (importSport === "LOL") {
+      const allKeys = lolCompetitions.map((competition) => competition.id);
+      setSelectedLolCompetitionKeys((currentKeys) =>
+        allKeys.length > 0 && currentKeys.length === allKeys.length
+          ? []
+          : allKeys,
+      );
+      return;
+    }
+
+    toggleAllFootballLeagues();
   }
 
   async function importSelectedApiItems() {
@@ -619,6 +631,8 @@ export default function AdminDashboardContent({
         : importSport === "FOOTBALL"
           ? footballCompetitions.length
           : 0;
+  const allImportItemsSelected =
+    importItemCount > 0 && selectedImportCount === importItemCount;
   const tournamentGroups = getTournamentGroups(dashboard.tournaments);
 
   async function saveTournament() {
@@ -972,11 +986,11 @@ export default function AdminDashboardContent({
 
             <div className="mb-4 flex flex-wrap items-center justify-between gap-3">
               <button
-                onClick={selectAllImportItems}
+                onClick={toggleAllImportItems}
                 disabled={isLoadingCompetitions || importItemCount === 0}
                 className="h-11 rounded border border-[#84d8e8] px-4 text-sm font-black uppercase tracking-[0.08em] text-[#84d8e8] disabled:cursor-not-allowed disabled:opacity-50"
               >
-                Select all{" "}
+                {allImportItemsSelected ? "Clear all" : "Select all"}{" "}
                 {importSport === "F1" ? "meetings" : "competitions"}
               </button>
               <span className="text-sm font-bold text-[#9fb2b8]">
