@@ -17,12 +17,14 @@ export class DashboardService {
       tournamentMatches,
       upcomingSchedule,
       activities,
+      inactivePlayers,
     ] = await Promise.all([
       this.usersRepository.query(this.summaryQuery()),
       this.usersRepository.query(this.tournamentsQuery()),
       this.usersRepository.query(this.tournamentMatchesQuery()),
       this.usersRepository.query(this.upcomingScheduleQuery()),
       this.usersRepository.query(this.activitiesQuery()),
+      this.usersRepository.query(this.inactivePlayersQuery()),
     ]);
 
     const summary = this.mapSummary(summaryRows[0]);
@@ -81,6 +83,14 @@ export class DashboardService {
         message: row.message,
         createdAt: row.createdAt,
       })),
+      inactivePlayers: inactivePlayers.map((row) => ({
+        id: Number(row.id),
+        memberCode: row.memberCode,
+        fullName: row.fullName,
+        email: row.email,
+        status: row.status,
+        updatedAt: row.updatedAt,
+      })),
     };
   }
 
@@ -120,7 +130,28 @@ export class DashboardService {
         END,
         t.updated_at DESC,
         t.created_at DESC
-      LIMIT 80
+    `;
+  }
+
+  private inactivePlayersQuery() {
+    return `
+      SELECT
+        id,
+        member_code AS "memberCode",
+        full_name AS "fullName",
+        email,
+        user_status AS status,
+        updated_at AS "updatedAt"
+      FROM users
+      WHERE role = 'PLAYER'
+        AND user_status <> 'ACTIVE'
+      ORDER BY
+        CASE user_status
+          WHEN 'INACTIVE' THEN 0
+          WHEN 'PENDING' THEN 1
+          ELSE 2
+        END,
+        full_name ASC
     `;
   }
 

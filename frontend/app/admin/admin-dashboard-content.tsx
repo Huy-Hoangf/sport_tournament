@@ -19,6 +19,7 @@ import {
   Trash2,
   Trophy,
   Users,
+  X,
   Zap,
 } from "lucide-react";
 
@@ -44,6 +45,7 @@ type DashboardData = {
   tournamentMatches: MatchRow[];
   upcomingSchedule: MatchRow[];
   recentActivity: ActivityRow[];
+  inactivePlayers: InactivePlayerRow[];
 };
 
 type TournamentRow = {
@@ -77,6 +79,7 @@ type FootballCompetitionOption = {
 
 type ImportSport = "FOOTBALL" | "F1" | "LOL";
 type SyncSport = "FOOTBALL" | "F1";
+type TournamentStatusFilter = "ALL" | "ACTIVE" | "UPCOMING" | "COMPLETED";
 
 type F1MeetingOption = {
   id: number;
@@ -118,6 +121,15 @@ type ActivityRow = {
   createdAt: string;
 };
 
+type InactivePlayerRow = {
+  id: number;
+  memberCode: string;
+  fullName: string;
+  email: string;
+  status: string;
+  updatedAt: string;
+};
+
 const emptyTournamentForm: TournamentForm = {
   name: "",
   sportType: "FOOTBALL",
@@ -146,6 +158,7 @@ const emptyDashboard: DashboardData = {
   tournamentMatches: [],
   upcomingSchedule: [],
   recentActivity: [],
+  inactivePlayers: [],
 };
 
 export default function AdminDashboardContent({
@@ -163,6 +176,7 @@ export default function AdminDashboardContent({
   const [openImportApiModal, setOpenImportApiModal] = useState(false);
   const [openSyncApiModal, setOpenSyncApiModal] = useState(false);
   const [confirmResetApiData, setConfirmResetApiData] = useState(false);
+  const [openAttentionDetails, setOpenAttentionDetails] = useState(false);
   const [footballCompetitions, setFootballCompetitions] = useState<
     FootballCompetitionOption[]
   >([]);
@@ -204,7 +218,10 @@ export default function AdminDashboardContent({
 
     try {
       const data = await apiRequest<DashboardData>("/dashboard");
-      setDashboard(data);
+      setDashboard({
+        ...data,
+        inactivePlayers: data.inactivePlayers ?? [],
+      });
     } catch (error) {
       showNotice(
         error instanceof Error ? error.message : "Cannot load dashboard.",
@@ -796,6 +813,7 @@ export default function AdminDashboardContent({
           value={dashboard.stats.attentionNeeded}
           note={`${dashboard.stats.inactivePlayers} inactive, ${dashboard.stats.pendingPredictions} pending`}
           icon={<AlertTriangle size={24} />}
+          onClick={() => setOpenAttentionDetails(true)}
         />
       </section>
 
@@ -844,6 +862,74 @@ export default function AdminDashboardContent({
           </div>
         </aside>
       </div>
+
+      {openAttentionDetails && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/70 px-4">
+          <section className="w-full max-w-[720px] overflow-hidden rounded border border-[#6b4440] bg-[#0d252d] shadow-2xl">
+            <header className="flex items-center justify-between border-b border-[#3a4d54] bg-[#14272e] px-6 py-5">
+              <div>
+                <h3 className="text-xl font-black uppercase text-[#ffab9e]">
+                  Players Needing Attention
+                </h3>
+                <p className="mt-2 text-sm text-[#9fb2b8]">
+                  {dashboard.inactivePlayers.length} inactive or pending players
+                </p>
+              </div>
+              <button
+                type="button"
+                onClick={() => setOpenAttentionDetails(false)}
+                className="flex h-10 w-10 items-center justify-center text-[#dce8eb] transition hover:text-white"
+                aria-label="Close attention details"
+                title="Close"
+              >
+                <X size={20} />
+              </button>
+            </header>
+
+            <div className="max-h-[480px] overflow-y-auto">
+              {dashboard.inactivePlayers.map((player) => (
+                <div
+                  key={player.id}
+                  className="grid gap-4 border-b border-[#243c43] px-6 py-5 last:border-b-0 sm:grid-cols-[minmax(0,1fr)_150px]"
+                >
+                  <div className="flex min-w-0 items-start gap-4">
+                    <span className="flex h-10 w-10 shrink-0 items-center justify-center bg-[#213740] text-[#84d8e8]">
+                      <Users size={18} />
+                    </span>
+                    <div className="min-w-0">
+                      <p className="truncate font-black text-white">
+                        {player.fullName}
+                      </p>
+                      <p className="mt-1 truncate text-sm text-[#b9c8cc]">
+                        {player.email}
+                      </p>
+                      <p className="mt-2 text-xs uppercase text-[#789098]">
+                        {player.memberCode || "No member ID"} · Updated{" "}
+                        {formatRelative(player.updatedAt)}
+                      </p>
+                    </div>
+                  </div>
+                  <div className="flex items-center sm:justify-end">
+                    <DashboardStatusBadge status={player.status} />
+                  </div>
+                </div>
+              ))}
+              {dashboard.inactivePlayers.length === 0 && (
+                <div className="px-6 py-16 text-center text-[#9fb2b8]">
+                  All players are active.
+                </div>
+              )}
+            </div>
+
+            <footer className="flex flex-wrap gap-x-6 gap-y-2 border-t border-[#3a4d54] bg-[#10242b] px-6 py-4 text-xs font-bold uppercase text-[#9fb2b8]">
+              <span>
+                Pending predictions: {dashboard.stats.pendingPredictions}
+              </span>
+              <span>Sync warnings: {dashboard.stats.warningMatches}</span>
+            </footer>
+          </section>
+        </div>
+      )}
 
       {openSyncApiModal && (
         <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/70 px-4">
@@ -1295,15 +1381,31 @@ function TournamentManagementTable({
   onDeleteTournament: (tournament: TournamentRow) => void;
 }) {
   const pageSize = 5;
-  const totalPages = Math.max(1, Math.ceil(total / pageSize));
   const [currentPage, setCurrentPage] = useState(1);
+  const [statusFilter, setStatusFilter] =
+    useState<TournamentStatusFilter>("ALL");
+  const filteredTournaments = tournaments.filter((tournament) => {
+    const status = tournament.status.toUpperCase();
+
+    if (statusFilter === "ALL") {
+      return true;
+    }
+
+    if (statusFilter === "COMPLETED") {
+      return status === "COMPLETED" || status === "CANCELLED";
+    }
+
+    return status === statusFilter;
+  });
+  const filteredTotal = filteredTournaments.length;
+  const totalPages = Math.max(1, Math.ceil(filteredTotal / pageSize));
 
   useEffect(() => {
     setCurrentPage((page) => Math.min(page, totalPages));
   }, [totalPages]);
 
   const firstVisibleIndex = (currentPage - 1) * pageSize;
-  const visibleTournaments = tournaments.slice(
+  const visibleTournaments = filteredTournaments.slice(
     firstVisibleIndex,
     firstVisibleIndex + pageSize,
   );
@@ -1323,18 +1425,48 @@ function TournamentManagementTable({
     onSelectTournament(null);
   }
 
+  function changeStatusFilter(filter: TournamentStatusFilter) {
+    setStatusFilter(filter);
+    setCurrentPage(1);
+    onSelectTournament(null);
+  }
+
   return (
     <section className="overflow-hidden rounded border border-[#3a4d54] bg-[#0d252d]">
       <DashboardPanelTitle
         title={title}
-        icon={<Filter size={17} />}
+        icon={
+          <label className="relative block w-[150px]">
+            <Filter
+              size={16}
+              className="pointer-events-none absolute left-3 top-1/2 -translate-y-1/2 text-[#84d8e8]"
+            />
+            <select
+              value={statusFilter}
+              onChange={(event) =>
+                changeStatusFilter(
+                  event.target.value as TournamentStatusFilter,
+                )
+              }
+              aria-label={`Filter ${title} by status`}
+              className="h-9 w-full appearance-none border border-[#3a4d54] bg-[#0d252d] pl-9 pr-3 text-xs font-black uppercase text-[#dce8eb] outline-none transition focus:border-[#84d8e8]"
+            >
+              <option value="ALL">All statuses</option>
+              <option value="ACTIVE">Ongoing</option>
+              <option value="UPCOMING">Upcoming</option>
+              <option value="COMPLETED">Completed</option>
+            </select>
+          </label>
+        }
         right={
-          total > 0
+          filteredTotal > 0
             ? `Showing ${firstVisibleIndex + 1}-${Math.min(
                 firstVisibleIndex + pageSize,
-                total,
-              )} of ${total}`
-            : "0 total"
+                filteredTotal,
+              )} of ${filteredTotal}${statusFilter === "ALL" ? "" : ` / ${total}`}`
+            : statusFilter === "ALL"
+              ? "0 total"
+              : `0 of ${total}`
         }
       />
       <div className="overflow-x-auto">
@@ -1791,19 +1923,17 @@ function DashboardStatCard({
   note,
   icon,
   tone = "normal",
+  onClick,
 }: {
   title: string;
   value: number;
   note: string;
   icon: React.ReactNode;
   tone?: "normal" | "danger";
+  onClick?: () => void;
 }) {
-  return (
-    <div
-      className={`h-[144px] rounded border bg-[#0d252d] px-6 py-6 shadow-[0_2px_0_rgba(255,255,255,0.08)] ${
-        tone === "danger" ? "border-[#6b4440]" : "border-[#3a4d54]"
-      }`}
-    >
+  const content = (
+    <>
       <div className="flex items-start justify-between gap-4">
         <div>
           <h3
@@ -1826,8 +1956,26 @@ function DashboardStatCard({
           {icon}
         </div>
       </div>
-    </div>
+    </>
   );
+
+  const className = `h-[144px] w-full rounded border bg-[#0d252d] px-6 py-6 text-left shadow-[0_2px_0_rgba(255,255,255,0.08)] ${
+    tone === "danger" ? "border-[#6b4440]" : "border-[#3a4d54]"
+  }`;
+
+  if (onClick) {
+    return (
+      <button
+        type="button"
+        onClick={onClick}
+        className={`${className} cursor-pointer transition hover:border-[#ffab9e] hover:bg-[#102d35] focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-[#84d8e8]`}
+      >
+        {content}
+      </button>
+    );
+  }
+
+  return <div className={className}>{content}</div>;
 }
 
 function DashboardPanelTitle({
@@ -1840,15 +1988,19 @@ function DashboardPanelTitle({
   right?: string;
 }) {
   return (
-    <div className="flex h-[65px] items-center justify-between border-b border-[#3a4d54] bg-[#14272e] px-6">
-      <h2 className="text-sm font-black uppercase tracking-[0.08em] text-[#d5e0e3]">
+    <div className="flex min-h-[65px] items-center border-b border-[#3a4d54] bg-[#14272e] px-6 py-3">
+      <h2 className="min-w-0 flex-1 text-sm font-black uppercase tracking-[0.08em] text-[#d5e0e3]">
         {title}
       </h2>
-      {icon && <div className="text-[#dce8eb]">{icon}</div>}
+      {icon && (
+        <div className="flex w-[170px] shrink-0 justify-center text-[#dce8eb]">
+          {icon}
+        </div>
+      )}
       {right && (
-        <button className="text-xs font-black uppercase text-[#84d8e8]">
+        <span className="w-[170px] shrink-0 text-right text-xs font-black uppercase text-[#84d8e8]">
           {right}
-        </button>
+        </span>
       )}
     </div>
   );
