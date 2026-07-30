@@ -40,6 +40,7 @@ type DashboardData = {
     pendingPredictions: number;
     warningMatches: number;
     inactivePlayers: number;
+    pendingPlayers: number;
   };
   tournaments: TournamentRow[];
   tournamentMatches: MatchRow[];
@@ -153,6 +154,7 @@ const emptyDashboard: DashboardData = {
     pendingPredictions: 0,
     warningMatches: 0,
     inactivePlayers: 0,
+    pendingPlayers: 0,
   },
   tournaments: [],
   tournamentMatches: [],
@@ -811,7 +813,7 @@ export default function AdminDashboardContent({
           tone="danger"
           title="Attention Needed"
           value={dashboard.stats.attentionNeeded}
-          note={`${dashboard.stats.inactivePlayers} inactive, ${dashboard.stats.pendingPredictions} pending`}
+          note={`${dashboard.stats.inactivePlayers} inactive, ${dashboard.stats.pendingPlayers} pending`}
           icon={<AlertTriangle size={24} />}
           onClick={() => setOpenAttentionDetails(true)}
         />
@@ -872,7 +874,8 @@ export default function AdminDashboardContent({
                   Players Needing Attention
                 </h3>
                 <p className="mt-2 text-sm text-[#9fb2b8]">
-                  {dashboard.inactivePlayers.length} inactive or pending players
+                  {dashboard.stats.inactivePlayers} inactive,{" "}
+                  {dashboard.stats.pendingPlayers} pending players
                 </p>
               </div>
               <button
@@ -1444,9 +1447,7 @@ function TournamentManagementTable({
             <select
               value={statusFilter}
               onChange={(event) =>
-                changeStatusFilter(
-                  event.target.value as TournamentStatusFilter,
-                )
+                changeStatusFilter(event.target.value as TournamentStatusFilter)
               }
               aria-label={`Filter ${title} by status`}
               className="h-9 w-full appearance-none border border-[#3a4d54] bg-[#0d252d] pl-9 pr-3 text-xs font-black uppercase text-[#dce8eb] outline-none transition focus:border-[#84d8e8]"

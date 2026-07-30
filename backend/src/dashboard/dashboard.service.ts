@@ -44,6 +44,7 @@ export class DashboardService {
         pendingPredictions: summary.pendingPredictions,
         warningMatches: summary.warningMatches,
         inactivePlayers: summary.inactivePlayers,
+        pendingPlayers: summary.pendingPlayers,
       },
       tournaments: tournaments.map((row) => ({
         id: Number(row.id),
@@ -99,7 +100,8 @@ export class DashboardService {
       SELECT
         (SELECT COUNT(*) FROM tournaments WHERE status = 'ACTIVE') AS "activeTournaments",
         (SELECT COUNT(*) FROM users WHERE role = 'PLAYER') AS "totalPlayers",
-        (SELECT COUNT(*) FROM users WHERE role = 'PLAYER' AND user_status <> 'ACTIVE') AS "inactivePlayers",
+        (SELECT COUNT(*) FROM users WHERE role = 'PLAYER' AND user_status = 'INACTIVE') AS "inactivePlayers",
+        (SELECT COUNT(*) FROM users WHERE role = 'PLAYER' AND user_status = 'PENDING') AS "pendingPlayers",
         (SELECT COUNT(*) FROM matches WHERE scheduled_time >= NOW() AND status IN ('PENDING', 'LIVE')) AS "upcomingMatches",
         (SELECT COUNT(*) FROM predictions p JOIN matches m ON m.id = p.match_id WHERE m.status IN ('PENDING', 'LIVE')) AS "pendingPredictions",
         (SELECT COUNT(*) FROM matches WHERE sync_status IS NOT NULL AND sync_status <> 'SYNCED') AS "warningMatches",
@@ -251,15 +253,17 @@ export class DashboardService {
     const pendingPredictions = Number(row?.pendingPredictions ?? 0);
     const warningMatches = Number(row?.warningMatches ?? 0);
     const inactivePlayers = Number(row?.inactivePlayers ?? 0);
+    const pendingPlayers = Number(row?.pendingPlayers ?? 0);
 
     return {
       activeTournaments: Number(row?.activeTournaments ?? 0),
       totalPlayers: Number(row?.totalPlayers ?? 0),
       upcomingMatches: Number(row?.upcomingMatches ?? 0),
-      attentionNeeded: inactivePlayers + pendingPredictions + warningMatches,
+      attentionNeeded: inactivePlayers + pendingPlayers,
       pendingPredictions,
       warningMatches,
       inactivePlayers,
+      pendingPlayers,
       lastApiSync: (row?.lastApiSync as string | null | undefined) ?? null,
     };
   }
