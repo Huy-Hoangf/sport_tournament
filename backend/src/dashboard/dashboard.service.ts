@@ -2,34 +2,37 @@
 import { InjectRepository } from '@nestjs/typeorm';
 import { Repository } from 'typeorm';
 import { User } from '../users/user.entity';
-import { SportsApiSyncService } from './sports-api-sync.service';
 
 @Injectable()
 export class DashboardService {
   constructor(
     @InjectRepository(User)
     private readonly usersRepository: Repository<User>,
-    private readonly sportsApiSyncService: SportsApiSyncService,
   ) {}
 
   async getDashboard() {
-    await this.sportsApiSyncService.syncIfStale(false);
-
-    const [summaryRows, tournaments, tournamentMatches, upcomingSchedule, activities] =
-      await Promise.all([
-        this.usersRepository.query(this.summaryQuery()),
-        this.usersRepository.query(this.tournamentsQuery()),
-        this.usersRepository.query(this.tournamentMatchesQuery()),
-        this.usersRepository.query(this.upcomingScheduleQuery()),
-        this.usersRepository.query(this.activitiesQuery()),
-      ]);
+    const [
+      summaryRows,
+      tournaments,
+      tournamentMatches,
+      upcomingSchedule,
+      activities,
+      inactivePlayers,
+    ] = await Promise.all([
+      this.usersRepository.query(this.summaryQuery()),
+      this.usersRepository.query(this.tournamentsQuery()),
+      this.usersRepository.query(this.tournamentMatchesQuery()),
+      this.usersRepository.query(this.upcomingScheduleQuery()),
+      this.usersRepository.query(this.activitiesQuery()),
+      this.usersRepository.query(this.inactivePlayersQuery()),
+    ]);
 
     const summary = this.mapSummary(summaryRows[0]);
 
     return {
       apiStatus: {
         connected: Boolean(summary.lastApiSync),
-        provider: 'API-SPORTS Football + OpenF1',
+        provider: 'API-SPORTS Football + ESPN ASEAN + OpenF1 + Cito LoL',
         lastSync: summary.lastApiSync,
         externalId: this.buildExternalId(summary.lastApiSync),
       },
@@ -47,7 +50,7 @@ export class DashboardService {
         name: row.name,
         sportType: row.sportType,
         status: row.status,
-        players: Number(row.players ?? 0),
+        teams: Number(row.teams ?? 0),
         matches: Number(row.matches ?? 0),
         source: row.source ?? 'MANUAL',
       })),
@@ -80,6 +83,14 @@ export class DashboardService {
         message: row.message,
         createdAt: row.createdAt,
       })),
+      inactivePlayers: inactivePlayers.map((row) => ({
+        id: Number(row.id),
+        memberCode: row.memberCode,
+        fullName: row.fullName,
+        email: row.email,
+        status: row.status,
+        updatedAt: row.updatedAt,
+      })),
     };
   }
 
@@ -103,11 +114,11 @@ export class DashboardService {
         t.name,
         t.sport_type AS "sportType",
         t.status,
-        COUNT(DISTINCT tp.user_id) AS players,
+        COUNT(DISTINCT team.id) AS teams,
         COUNT(DISTINCT m.id) AS matches,
         COALESCE(MAX(m.external_source), 'MANUAL') AS source
       FROM tournaments t
-      LEFT JOIN tournament_participants tp ON tp.tournament_id = t.id
+      LEFT JOIN teams team ON team.tournament_id = t.id
       LEFT JOIN matches m ON m.tournament_id = t.id
       GROUP BY t.id, t.name, t.sport_type, t.status, t.updated_at, t.created_at
       ORDER BY
@@ -119,7 +130,28 @@ export class DashboardService {
         END,
         t.updated_at DESC,
         t.created_at DESC
-      LIMIT 10
+    `;
+  }
+
+  private inactivePlayersQuery() {
+    return `
+      SELECT
+        id,
+        member_code AS "memberCode",
+        full_name AS "fullName",
+        email,
+        user_status AS status,
+        updated_at AS "updatedAt"
+      FROM users
+      WHERE role = 'PLAYER'
+        AND user_status <> 'ACTIVE'
+      ORDER BY
+        CASE user_status
+          WHEN 'INACTIVE' THEN 0
+          WHEN 'PENDING' THEN 1
+          ELSE 2
+        END,
+        full_name ASC
     `;
   }
 
@@ -147,21 +179,40 @@ export class DashboardService {
   private tournamentMatchesQuery() {
     return `
       SELECT
-        m.id,
-        m.tournament_id AS "tournamentId",
-        t.name AS "tournamentName",
-        COALESCE(home.name, m.home_placeholder) AS "homeTeam",
-        COALESCE(away.name, m.away_placeholder) AS "awayTeam",
-        m.scheduled_time AS "scheduledTime",
-        m.scheduled_time - (m.lock_minutes_before_start * INTERVAL '1 minute') AS deadline,
-        COALESCE(m.external_source, 'MANUAL') AS source,
-        m.status
-      FROM matches m
-      JOIN tournaments t ON t.id = m.tournament_id
-      LEFT JOIN teams home ON home.id = m.home_team_id
-      LEFT JOIN teams away ON away.id = m.away_team_id
-      ORDER BY m.scheduled_time ASC
-      LIMIT 120
+        ranked.id,
+        ranked."tournamentId",
+        ranked."tournamentName",
+        ranked."homeTeam",
+        ranked."awayTeam",
+        ranked."scheduledTime",
+        ranked.deadline,
+        ranked.source,
+        ranked.status
+      FROM (
+        SELECT
+          m.id,
+          m.tournament_id AS "tournamentId",
+          t.name AS "tournamentName",
+          COALESCE(home.name, m.home_placeholder) AS "homeTeam",
+          COALESCE(away.name, m.away_placeholder) AS "awayTeam",
+          m.scheduled_time AS "scheduledTime",
+          m.scheduled_time - (m.lock_minutes_before_start * INTERVAL '1 minute') AS deadline,
+          COALESCE(m.external_source, 'MANUAL') AS source,
+          m.status,
+          ROW_NUMBER() OVER (
+            PARTITION BY m.tournament_id
+            ORDER BY
+              CASE WHEN m.scheduled_time >= NOW() THEN 0 ELSE 1 END,
+              CASE WHEN m.scheduled_time >= NOW() THEN m.scheduled_time END ASC,
+              CASE WHEN m.scheduled_time < NOW() THEN m.scheduled_time END DESC
+          ) AS row_number
+        FROM matches m
+        JOIN tournaments t ON t.id = m.tournament_id
+        LEFT JOIN teams home ON home.id = m.home_team_id
+        LEFT JOIN teams away ON away.id = m.away_team_id
+      ) ranked
+      WHERE ranked.row_number <= 20
+      ORDER BY ranked."tournamentId", ranked."scheduledTime" ASC
     `;
   }
 
@@ -226,11 +277,3 @@ export class DashboardService {
     return `FD_${String(hash).padStart(5, '0').slice(-5)}`;
   }
 }
-
-
-
-
-
-
-
-
