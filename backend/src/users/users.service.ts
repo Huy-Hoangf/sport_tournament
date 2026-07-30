@@ -10,9 +10,10 @@ import * as bcrypt from 'bcrypt';
 import { Repository } from 'typeorm';
 import {
   ADMIN_EMAIL,
+  COMPANY_EMAIL_DOMAIN,
   DEFAULT_ADMIN_PASSWORD,
   DEFAULT_PLAYER_PASSWORD,
-  isTwentyTechEmail,
+  isCompanyEmail,
   normalizeEmail,
 } from '../auth/auth.constants';
 import { User, type UserStatus } from './user.entity';
@@ -27,6 +28,7 @@ export class UsersService implements OnModuleInit {
   ) {}
 
   async onModuleInit() {
+    await this.migrateCompanyEmailDomain();
     await this.seedDefaultAdmin();
     await this.backfillMemberCodes();
   }
@@ -81,8 +83,8 @@ export class UsersService implements OnModuleInit {
       throw new BadRequestException('Full name is required.');
     }
 
-    if (!isTwentyTechEmail(email)) {
-      throw new BadRequestException('Email must use @twenty-tech.com.');
+    if (!isCompanyEmail(email)) {
+      throw new BadRequestException(`Email must use ${COMPANY_EMAIL_DOMAIN}.`);
     }
 
     if (email === ADMIN_EMAIL) {
@@ -131,8 +133,8 @@ export class UsersService implements OnModuleInit {
       throw new BadRequestException('Full name is required.');
     }
 
-    if (!isTwentyTechEmail(email)) {
-      throw new BadRequestException('Email must use @twenty-tech.com.');
+    if (!isCompanyEmail(email)) {
+      throw new BadRequestException(`Email must use ${COMPANY_EMAIL_DOMAIN}.`);
     }
 
     if (email === ADMIN_EMAIL) {
@@ -292,6 +294,27 @@ export class UsersService implements OnModuleInit {
 
     user.passwordHash = await bcrypt.hash(password, 10);
     return this.usersRepository.save(user);
+  }
+
+  private async migrateCompanyEmailDomain() {
+    await this.usersRepository.query(
+      `
+        UPDATE users AS target_user
+        SET
+          email = LOWER(SPLIT_PART(target_user.email, '@', 1)) || $1,
+          updated_at = NOW()
+        WHERE POSITION('@' IN target_user.email) > 1
+          AND LOWER(target_user.email) NOT LIKE $2
+          AND NOT EXISTS (
+            SELECT 1
+            FROM users AS existing_user
+            WHERE existing_user.id <> target_user.id
+              AND LOWER(existing_user.email) =
+                LOWER(SPLIT_PART(target_user.email, '@', 1) || $1)
+          )
+      `,
+      [COMPANY_EMAIL_DOMAIN, `%${COMPANY_EMAIL_DOMAIN}`],
+    );
   }
 
   private async seedDefaultAdmin() {

@@ -9,8 +9,9 @@ import * as bcrypt from 'bcrypt';
 import { UsersService } from '../users/users.service';
 import {
   ADMIN_EMAIL,
+  COMPANY_EMAIL_DOMAIN,
   DEFAULT_PLAYER_PASSWORD,
-  isTwentyTechEmail,
+  isCompanyEmail,
   normalizeEmail,
 } from './auth.constants';
 
@@ -31,8 +32,8 @@ export class AuthService {
   async login(email: string, password: string) {
     const normalizedEmail = normalizeEmail(email);
 
-    if (!isTwentyTechEmail(normalizedEmail)) {
-      throw new BadRequestException('Email must use @twenty-tech.com.');
+    if (!isCompanyEmail(normalizedEmail)) {
+      throw new BadRequestException(`Email must use ${COMPANY_EMAIL_DOMAIN}.`);
     }
 
     const user = await this.usersService.findByEmail(normalizedEmail);
@@ -194,8 +195,8 @@ export class AuthService {
   async verifyForgotPasswordEmail(email: string) {
     const normalizedEmail = normalizeEmail(email);
 
-    if (!isTwentyTechEmail(normalizedEmail)) {
-      throw new BadRequestException('Email must use @twenty-tech.com.');
+    if (!isCompanyEmail(normalizedEmail)) {
+      throw new BadRequestException(`Email must use ${COMPANY_EMAIL_DOMAIN}.`);
     }
 
     const user = await this.usersService.findByEmail(normalizedEmail);
@@ -242,8 +243,8 @@ export class AuthService {
   ) {
     const normalizedEmail = normalizeEmail(email);
 
-    if (!isTwentyTechEmail(normalizedEmail)) {
-      throw new BadRequestException('Email must use @twenty-tech.com.');
+    if (!isCompanyEmail(normalizedEmail)) {
+      throw new BadRequestException(`Email must use ${COMPANY_EMAIL_DOMAIN}.`);
     }
 
     if (!newPassword || newPassword.length < 6) {

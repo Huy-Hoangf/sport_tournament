@@ -50,7 +50,7 @@ describe('AuthService', () => {
   it('issues a temporary token when a player uses the default password', async () => {
     usersService.findByEmail.mockResolvedValue({
       id: 7,
-      email: 'player@twenty-tech.com',
+      email: 'player@tech.com',
       fullName: 'First Player',
       role: 'PLAYER',
       passwordHash: await bcrypt.hash(DEFAULT_PLAYER_PASSWORD, 10),
@@ -58,7 +58,7 @@ describe('AuthService', () => {
     jwtService.signAsync.mockResolvedValue('temporary-token');
 
     const result = await service.login(
-      'player@twenty-tech.com',
+      'player@tech.com',
       DEFAULT_PLAYER_PASSWORD,
     );
 
@@ -77,7 +77,7 @@ describe('AuthService', () => {
   it('changes the default password before issuing a full access token', async () => {
     const player = {
       id: 7,
-      email: 'player@twenty-tech.com',
+      email: 'player@tech.com',
       fullName: 'First Player',
       role: 'PLAYER' as const,
       passwordHash: await bcrypt.hash(DEFAULT_PLAYER_PASSWORD, 10),

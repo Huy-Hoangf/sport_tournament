@@ -67,7 +67,7 @@ type AdminView = 'dashboard' | 'players';
 type StatusFilter = "ALL" | Player["status"];
 
 const PLAYERS_PER_PAGE = 5;
-const COMPANY_EMAIL_DOMAIN = "@twenty-tech.com";
+const COMPANY_EMAIL_DOMAIN = "@tech.com";
 
 export default function AdminPage() {
   const router = useRouter();
@@ -873,7 +873,7 @@ export default function AdminPage() {
           <input
             value={email}
             onChange={(event) => setEmail(event.target.value)}
-            placeholder="name@twenty-tech.com"
+            placeholder={`name${COMPANY_EMAIL_DOMAIN}`}
             className="mb-4 h-[54px] w-full rounded border border-white/10 bg-[#070d0d] px-4 text-zinc-100 outline-none focus:border-[#8ed8ec]"
           />
 
@@ -992,7 +992,7 @@ export default function AdminPage() {
           <input
             value={renameEmail}
             onChange={(event) => setRenameEmail(event.target.value)}
-            placeholder="name@twenty-tech.com"
+            placeholder={`name${COMPANY_EMAIL_DOMAIN}`}
             className="mb-6 h-[54px] w-full rounded border border-white/10 bg-[#070d0d] px-4 text-zinc-100 outline-none focus:border-[#8ed8ec]"
           />
 
