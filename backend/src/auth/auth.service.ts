@@ -9,6 +9,7 @@ import * as bcrypt from 'bcrypt';
 import { UsersService } from '../users/users.service';
 import {
   ADMIN_EMAIL,
+  DEFAULT_PLAYER_PASSWORD,
   isTwentyTechEmail,
   normalizeEmail,
 } from './auth.constants';
@@ -45,14 +46,102 @@ export class AuthService {
       fullName: user.fullName,
       role: normalizedEmail === ADMIN_EMAIL ? 'ADMIN' : user.role,
     };
+    const requiresPasswordChange =
+      responseUser.role === 'PLAYER' && password === DEFAULT_PLAYER_PASSWORD;
 
     return {
       ...responseUser,
-      accessToken: await this.jwtService.signAsync({
-        sub: responseUser.id,
-        email: responseUser.email,
-        role: responseUser.role,
-      }),
+      requiresPasswordChange,
+      accessToken: requiresPasswordChange
+        ? await this.jwtService.signAsync(
+            {
+              sub: responseUser.id,
+              email: responseUser.email,
+              role: responseUser.role,
+              purpose: 'PASSWORD_CHANGE',
+            },
+            { expiresIn: '15m' },
+          )
+        : await this.signAccessToken(responseUser),
+    };
+  }
+
+  async completeFirstLogin(
+    authorization: string | undefined,
+    newPassword: string,
+  ) {
+    const token = authorization?.startsWith('Bearer ')
+      ? authorization.slice('Bearer '.length)
+      : '';
+
+    if (!token) {
+      throw new UnauthorizedException('Missing password change token.');
+    }
+
+    if (!newPassword || newPassword.length < 6) {
+      throw new BadRequestException(
+        'Password must contain at least 6 characters.',
+      );
+    }
+
+    if (newPassword === DEFAULT_PLAYER_PASSWORD) {
+      throw new BadRequestException(
+        'New password must be different from the default password.',
+      );
+    }
+
+    let payload: {
+      sub: number;
+      email: string;
+      role: string;
+      purpose?: string;
+    };
+
+    try {
+      payload = await this.jwtService.verifyAsync(token);
+    } catch {
+      throw new UnauthorizedException(
+        'Invalid or expired password change token.',
+      );
+    }
+
+    if (payload.role !== 'PLAYER' || payload.purpose !== 'PASSWORD_CHANGE') {
+      throw new ForbiddenException('This token cannot change the password.');
+    }
+
+    const user = await this.usersService.findByEmail(payload.email);
+
+    if (
+      !user ||
+      !user.passwordHash ||
+      user.id !== payload.sub ||
+      user.role !== 'PLAYER'
+    ) {
+      throw new UnauthorizedException('Invalid player account.');
+    }
+
+    const stillUsesDefaultPassword = await bcrypt.compare(
+      DEFAULT_PLAYER_PASSWORD,
+      user.passwordHash,
+    );
+
+    if (!stillUsesDefaultPassword) {
+      throw new BadRequestException('Password has already been changed.');
+    }
+
+    await this.usersService.updatePassword(user.email, newPassword);
+
+    const responseUser = {
+      id: user.id,
+      email: user.email,
+      fullName: user.fullName,
+      role: user.role,
+    };
+
+    return {
+      message: 'Password changed successfully.',
+      user: responseUser,
+      accessToken: await this.signAccessToken(responseUser),
     };
   }
 
@@ -167,5 +256,13 @@ export class AuthService {
     return {
       message: 'Password changed successfully.',
     };
+  }
+
+  private signAccessToken(user: { id: number; email: string; role: string }) {
+    return this.jwtService.signAsync({
+      sub: user.id,
+      email: user.email,
+      role: user.role,
+    });
   }
 }

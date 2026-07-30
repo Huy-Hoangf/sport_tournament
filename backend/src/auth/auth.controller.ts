@@ -1,4 +1,4 @@
-import { Body, Controller, Post } from '@nestjs/common';
+import { Body, Controller, Headers, Post } from '@nestjs/common';
 import { AuthService } from './auth.service';
 
 @Controller('auth')
@@ -18,7 +18,16 @@ export class AuthController {
         role: user.role,
       },
       accessToken: user.accessToken,
+      requiresPasswordChange: user.requiresPasswordChange,
     };
+  }
+
+  @Post('complete-first-login')
+  completeFirstLogin(
+    @Headers('authorization') authorization: string | undefined,
+    @Body() body: { newPassword: string },
+  ) {
+    return this.authService.completeFirstLogin(authorization, body.newPassword);
   }
 
   @Post('forgot-password')
