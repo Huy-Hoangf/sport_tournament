@@ -13,8 +13,10 @@ describe('AuthController', () => {
           provide: AuthService,
           useValue: {
             login: jest.fn(),
+            completeFirstLogin: jest.fn(),
             verifyForgotPasswordEmail: jest.fn(),
             resetPassword: jest.fn(),
+            changePassword: jest.fn(),
           },
         },
       ],

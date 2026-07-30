@@ -594,15 +594,6 @@ export default function AdminPage() {
         ) : (
         <div className="px-8 py-9">
           <div className="mb-8 flex items-start justify-between gap-6">
-            <div>
-              <h2 className="text-[34px] font-black leading-none text-white">
-                Player Management
-              </h2>
-              <p className="mt-3 text-[16px] text-[#adbdc2]">
-                Track, edit, and manage the system member directory.
-              </p>
-            </div>
-
             <div className="flex flex-wrap justify-end gap-4">
               <button
                 onClick={() => setOpenModal("createUser")}

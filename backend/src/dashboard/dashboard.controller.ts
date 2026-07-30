@@ -20,8 +20,14 @@ export class DashboardController {
   ) {}
 
   @Get()
-  getDashboard() {
-    return this.dashboardService.getDashboard();
+  async getDashboard(
+    @Headers('authorization') authorization: string | undefined,
+  ) {
+    const user = await this.authService.verifyAccessToken(authorization);
+
+    return this.dashboardService.getDashboard({
+      includeAttentionDetails: user.role === 'ADMIN',
+    });
   }
 
   @Post('sync')

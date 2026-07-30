@@ -10,7 +10,11 @@ export class DashboardService {
     private readonly usersRepository: Repository<User>,
   ) {}
 
-  async getDashboard() {
+  async getDashboard({
+    includeAttentionDetails = false,
+  }: {
+    includeAttentionDetails?: boolean;
+  } = {}) {
     const [
       summaryRows,
       tournaments,
@@ -24,7 +28,9 @@ export class DashboardService {
       this.usersRepository.query(this.tournamentMatchesQuery()),
       this.usersRepository.query(this.upcomingScheduleQuery()),
       this.usersRepository.query(this.activitiesQuery()),
-      this.usersRepository.query(this.inactivePlayersQuery()),
+      includeAttentionDetails
+        ? this.usersRepository.query(this.inactivePlayersQuery())
+        : Promise.resolve([]),
     ]);
 
     const summary = this.mapSummary(summaryRows[0]);
@@ -40,10 +46,13 @@ export class DashboardService {
         activeTournaments: summary.activeTournaments,
         totalPlayers: summary.totalPlayers,
         upcomingMatches: summary.upcomingMatches,
-        attentionNeeded: summary.attentionNeeded,
-        pendingPredictions: summary.pendingPredictions,
-        warningMatches: summary.warningMatches,
-        inactivePlayers: summary.inactivePlayers,
+        attentionNeeded: includeAttentionDetails ? summary.attentionNeeded : 0,
+        pendingPredictions: includeAttentionDetails
+          ? summary.pendingPredictions
+          : 0,
+        warningMatches: includeAttentionDetails ? summary.warningMatches : 0,
+        inactivePlayers: includeAttentionDetails ? summary.inactivePlayers : 0,
+        pendingPlayers: includeAttentionDetails ? summary.pendingPlayers : 0,
       },
       tournaments: tournaments.map((row) => ({
         id: Number(row.id),
@@ -83,14 +92,16 @@ export class DashboardService {
         message: row.message,
         createdAt: row.createdAt,
       })),
-      inactivePlayers: inactivePlayers.map((row) => ({
-        id: Number(row.id),
-        memberCode: row.memberCode,
-        fullName: row.fullName,
-        email: row.email,
-        status: row.status,
-        updatedAt: row.updatedAt,
-      })),
+      inactivePlayers: includeAttentionDetails
+        ? inactivePlayers.map((row) => ({
+            id: Number(row.id),
+            memberCode: row.memberCode,
+            fullName: row.fullName,
+            email: row.email,
+            status: row.status,
+            updatedAt: row.updatedAt,
+          }))
+        : [],
     };
   }
 
@@ -99,7 +110,8 @@ export class DashboardService {
       SELECT
         (SELECT COUNT(*) FROM tournaments WHERE status = 'ACTIVE') AS "activeTournaments",
         (SELECT COUNT(*) FROM users WHERE role = 'PLAYER') AS "totalPlayers",
-        (SELECT COUNT(*) FROM users WHERE role = 'PLAYER' AND user_status <> 'ACTIVE') AS "inactivePlayers",
+        (SELECT COUNT(*) FROM users WHERE role = 'PLAYER' AND user_status = 'INACTIVE') AS "inactivePlayers",
+        (SELECT COUNT(*) FROM users WHERE role = 'PLAYER' AND user_status = 'PENDING') AS "pendingPlayers",
         (SELECT COUNT(*) FROM matches WHERE scheduled_time >= NOW() AND status IN ('PENDING', 'LIVE')) AS "upcomingMatches",
         (SELECT COUNT(*) FROM predictions p JOIN matches m ON m.id = p.match_id WHERE m.status IN ('PENDING', 'LIVE')) AS "pendingPredictions",
         (SELECT COUNT(*) FROM matches WHERE sync_status IS NOT NULL AND sync_status <> 'SYNCED') AS "warningMatches",
@@ -251,15 +263,17 @@ export class DashboardService {
     const pendingPredictions = Number(row?.pendingPredictions ?? 0);
     const warningMatches = Number(row?.warningMatches ?? 0);
     const inactivePlayers = Number(row?.inactivePlayers ?? 0);
+    const pendingPlayers = Number(row?.pendingPlayers ?? 0);
 
     return {
       activeTournaments: Number(row?.activeTournaments ?? 0),
       totalPlayers: Number(row?.totalPlayers ?? 0),
       upcomingMatches: Number(row?.upcomingMatches ?? 0),
-      attentionNeeded: inactivePlayers + pendingPredictions + warningMatches,
+      attentionNeeded: inactivePlayers + pendingPlayers,
       pendingPredictions,
       warningMatches,
       inactivePlayers,
+      pendingPlayers,
       lastApiSync: (row?.lastApiSync as string | null | undefined) ?? null,
     };
   }

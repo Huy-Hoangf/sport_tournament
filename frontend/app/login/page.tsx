@@ -19,6 +19,7 @@ type LoginResponse = {
   message: string;
   user: CurrentUser;
   accessToken: string;
+  requiresPasswordChange: boolean;
 };
 
 export default function LoginPage() {
@@ -54,6 +55,20 @@ export default function LoginPage() {
         }),
       });
 
+      if (data.requiresPasswordChange) {
+        localStorage.removeItem("currentUser");
+        localStorage.removeItem("accessToken");
+        sessionStorage.setItem(
+          "pendingPasswordChangeUser",
+          JSON.stringify(data.user),
+        );
+        sessionStorage.setItem("pendingPasswordChangeToken", data.accessToken);
+        router.replace("/change-password");
+        return;
+      }
+
+      sessionStorage.removeItem("pendingPasswordChangeUser");
+      sessionStorage.removeItem("pendingPasswordChangeToken");
       localStorage.setItem("currentUser", JSON.stringify(data.user));
       localStorage.setItem("accessToken", data.accessToken);
       router.push("/admin");

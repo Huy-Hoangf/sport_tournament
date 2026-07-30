@@ -40,6 +40,7 @@ type DashboardData = {
     pendingPredictions: number;
     warningMatches: number;
     inactivePlayers: number;
+    pendingPlayers: number;
   };
   tournaments: TournamentRow[];
   tournamentMatches: MatchRow[];
@@ -153,6 +154,7 @@ const emptyDashboard: DashboardData = {
     pendingPredictions: 0,
     warningMatches: 0,
     inactivePlayers: 0,
+    pendingPlayers: 0,
   },
   tournaments: [],
   tournamentMatches: [],
@@ -722,14 +724,6 @@ export default function AdminDashboardContent({
     <div className="px-8 py-9">
       <NoticeBanner notice={notice} onClose={() => setNotice(null)} />
       <div className="mb-8 flex items-start justify-between gap-6">
-        <div>
-          <h2 className="text-[34px] font-black leading-none text-white">
-            Dashboard
-          </h2>
-          <p className="mt-3 text-[16px] text-[#adbdc2]">
-            Welcome back. System is running within optimal parameters.
-          </p>
-        </div>
 
         <div className="flex flex-wrap justify-end gap-4">
           {isAdmin ? (
@@ -788,7 +782,11 @@ export default function AdminDashboardContent({
         </div>
       </section>
 
-      <section className="mb-5 grid grid-cols-4 gap-6">
+      <section
+        className={`mb-5 grid gap-6 ${
+          isAdmin ? "md:grid-cols-2 xl:grid-cols-4" : "md:grid-cols-3"
+        }`}
+      >
         <DashboardStatCard
           title="Active Tournaments"
           value={dashboard.stats.activeTournaments}
@@ -807,14 +805,16 @@ export default function AdminDashboardContent({
           note="From now onward"
           icon={<CalendarDays size={22} />}
         />
-        <DashboardStatCard
-          tone="danger"
-          title="Attention Needed"
-          value={dashboard.stats.attentionNeeded}
-          note={`${dashboard.stats.inactivePlayers} inactive, ${dashboard.stats.pendingPredictions} pending`}
-          icon={<AlertTriangle size={24} />}
-          onClick={() => setOpenAttentionDetails(true)}
-        />
+        {isAdmin && (
+          <DashboardStatCard
+            tone="danger"
+            title="Attention Needed"
+            value={dashboard.stats.attentionNeeded}
+            note={`${dashboard.stats.inactivePlayers} inactive, ${dashboard.stats.pendingPlayers} pending`}
+            icon={<AlertTriangle size={24} />}
+            onClick={() => setOpenAttentionDetails(true)}
+          />
+        )}
       </section>
 
       <div className="grid gap-5 xl:grid-cols-[minmax(0,1fr)_390px]">
@@ -863,7 +863,7 @@ export default function AdminDashboardContent({
         </aside>
       </div>
 
-      {openAttentionDetails && (
+      {isAdmin && openAttentionDetails && (
         <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/70 px-4">
           <section className="w-full max-w-[720px] overflow-hidden rounded border border-[#6b4440] bg-[#0d252d] shadow-2xl">
             <header className="flex items-center justify-between border-b border-[#3a4d54] bg-[#14272e] px-6 py-5">
@@ -872,7 +872,8 @@ export default function AdminDashboardContent({
                   Players Needing Attention
                 </h3>
                 <p className="mt-2 text-sm text-[#9fb2b8]">
-                  {dashboard.inactivePlayers.length} inactive or pending players
+                  {dashboard.stats.inactivePlayers} inactive,{" "}
+                  {dashboard.stats.pendingPlayers} pending players
                 </p>
               </div>
               <button
@@ -1444,9 +1445,7 @@ function TournamentManagementTable({
             <select
               value={statusFilter}
               onChange={(event) =>
-                changeStatusFilter(
-                  event.target.value as TournamentStatusFilter,
-                )
+                changeStatusFilter(event.target.value as TournamentStatusFilter)
               }
               aria-label={`Filter ${title} by status`}
               className="h-9 w-full appearance-none border border-[#3a4d54] bg-[#0d252d] pl-9 pr-3 text-xs font-black uppercase text-[#dce8eb] outline-none transition focus:border-[#84d8e8]"
