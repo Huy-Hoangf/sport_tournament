@@ -66,7 +66,7 @@ type ImportedPlayer = {
 type AdminView = 'dashboard' | 'players';
 type StatusFilter = "ALL" | Player["status"];
 
-const PLAYERS_PER_PAGE = 6;
+const PLAYERS_PER_PAGE = 7;
 const COMPANY_EMAIL_DOMAIN = "@tech.com";
 
 export default function AdminPage() {
