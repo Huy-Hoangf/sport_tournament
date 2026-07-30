@@ -93,6 +93,8 @@ export default function AdminPage() {
     | "changePassword"
     | "renamePlayer"
     | "changeStatus"
+    | "deletePlayer"
+    | "deleteAllPlayers"
     | null
   >(null);
   const [currentPassword, setCurrentPassword] = useState("");
@@ -356,7 +358,7 @@ export default function AdminPage() {
     setOpenModal(null);
   }
 
-  async function deletePlayer(player: Player) {
+  function openDeletePlayerConfirmation(player: Player) {
     if (currentUser?.role !== "ADMIN") {
       showNotice("Only admin can delete players.");
       return;
@@ -367,14 +369,16 @@ export default function AdminPage() {
       return;
     }
 
-    const confirmed = window.confirm(
-      `Delete player "${player.fullName}"? This action cannot be undone.`,
-    );
+    setSelectedPlayer(player);
+    setOpenModal("deletePlayer");
+  }
 
-    if (!confirmed) {
+  async function deletePlayer() {
+    if (!selectedPlayer) {
       return;
     }
 
+    const player = selectedPlayer;
     setIsLoading(true);
 
     try {
@@ -383,6 +387,8 @@ export default function AdminPage() {
       });
 
       showNotice("Player deleted successfully.");
+      setOpenModal(null);
+      setSelectedPlayer(null);
       await fetchPlayers();
       refreshDashboard();
     } catch (error) {
@@ -392,7 +398,7 @@ export default function AdminPage() {
     }
   }
 
-  async function deleteAllPlayers() {
+  function openDeleteAllPlayersConfirmation() {
     if (currentUser?.role !== "ADMIN") {
       showNotice("Only admin can delete players.");
       return;
@@ -405,11 +411,12 @@ export default function AdminPage() {
       return;
     }
 
-    const confirmed = window.confirm(
-      `Delete all ${playerCount} players? The admin account will be kept.`,
-    );
+    setOpenModal("deleteAllPlayers");
+  }
 
-    if (!confirmed) {
+  async function deleteAllPlayers() {
+    if (currentUser?.role !== "ADMIN") {
+      showNotice("Only admin can delete players.");
       return;
     }
 
@@ -424,6 +431,7 @@ export default function AdminPage() {
       });
 
       showNotice(`Deleted ${data.deletedCount} players.`);
+      setOpenModal(null);
       setCurrentPage(1);
       await fetchPlayers();
       refreshDashboard();
@@ -619,7 +627,7 @@ export default function AdminPage() {
                 Add Player From List
               </button>
               <button
-                onClick={() => void deleteAllPlayers()}
+                onClick={openDeleteAllPlayersConfirmation}
                 disabled={isLoading}
                 className="flex h-[62px] items-center gap-3 rounded border border-[#ffab9e66] bg-[#2b1414] px-6 text-lg font-black text-[#ffab9e] transition hover:border-[#ffab9e] disabled:opacity-60"
               >
@@ -773,7 +781,7 @@ export default function AdminPage() {
                           <Pencil size={18} />
                         </button>
                         <button
-                          onClick={() => void deletePlayer(player)}
+                          onClick={() => openDeletePlayerConfirmation(player)}
                           title="Delete player"
                           className="transition hover:text-[#ffab9e]"
                         >
@@ -1050,6 +1058,57 @@ export default function AdminPage() {
               Cancel
             </button>
           </div>
+        </Modal>
+      )}
+
+      {openModal === "deletePlayer" && selectedPlayer && (
+        <Modal title="Delete Player">
+          <p className="text-base font-bold text-white">
+            Do you want to delete this player?
+          </p>
+          <div className="my-5 rounded border border-[#ffab9e55] bg-[#2b1414] px-4 py-4">
+            <p className="font-black text-[#ffab9e]">
+              {selectedPlayer.fullName}
+            </p>
+            <p className="mt-1 text-sm text-zinc-400">
+              {selectedPlayer.email} · {selectedPlayer.memberCode}
+            </p>
+          </div>
+          <p className="mb-6 text-sm text-zinc-400">
+            This action cannot be undone.
+          </p>
+          <ModalActions
+            cancel={() => {
+              setOpenModal(null);
+              setSelectedPlayer(null);
+            }}
+            confirm={() => void deletePlayer()}
+            confirmText={isLoading ? "Deleting..." : "Delete"}
+            disabled={isLoading}
+            danger
+          />
+        </Modal>
+      )}
+
+      {openModal === "deleteAllPlayers" && (
+        <Modal title="Delete All Players">
+          <p className="text-base font-bold text-white">
+            Do you want to delete all players?
+          </p>
+          <p className="my-5 rounded border border-[#ffab9e55] bg-[#2b1414] px-4 py-4 text-sm text-[#ffab9e]">
+            {players.filter((player) => player.role === "PLAYER").length} player
+            accounts will be deleted. The admin account will be kept.
+          </p>
+          <p className="mb-6 text-sm text-zinc-400">
+            This action cannot be undone.
+          </p>
+          <ModalActions
+            cancel={() => setOpenModal(null)}
+            confirm={() => void deleteAllPlayers()}
+            confirmText={isLoading ? "Deleting..." : "Delete All"}
+            disabled={isLoading}
+            danger
+          />
         </Modal>
       )}
     </main>
@@ -1491,15 +1550,18 @@ function ModalActions({
   confirm,
   confirmText,
   disabled,
+  danger = false,
 }: {
   cancel: () => void;
   confirm: () => void;
   confirmText: string;
   disabled?: boolean;
+  danger?: boolean;
 }) {
   return (
     <div className="flex justify-end gap-3">
       <button
+        type="button"
         onClick={cancel}
         className="h-[46px] rounded border border-white/10 px-5 text-zinc-300"
       >
@@ -1507,9 +1569,14 @@ function ModalActions({
       </button>
 
       <button
+        type="button"
         onClick={confirm}
         disabled={disabled}
-        className="h-[46px] rounded bg-[#8ed8ec] px-5 font-black text-[#102026] disabled:opacity-60"
+        className={`h-[46px] rounded px-5 font-black disabled:opacity-60 ${
+          danger
+            ? "border border-[#ffab9e66] bg-[#7b2929] text-white"
+            : "bg-[#8ed8ec] text-[#102026]"
+        }`}
       >
         {confirmText}
       </button>
