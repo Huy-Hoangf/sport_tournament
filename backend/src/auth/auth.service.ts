@@ -14,6 +14,13 @@ import {
   normalizeEmail,
 } from './auth.constants';
 
+type AccessTokenPayload = {
+  sub: number;
+  email: string;
+  role: string;
+  purpose?: string;
+};
+
 @Injectable()
 export class AuthService {
   constructor(
@@ -145,7 +152,7 @@ export class AuthService {
     };
   }
 
-  async verifyAdminToken(authorization?: string) {
+  async verifyAccessToken(authorization?: string) {
     const token = authorization?.startsWith('Bearer ')
       ? authorization.slice('Bearer '.length)
       : '';
@@ -155,24 +162,33 @@ export class AuthService {
     }
 
     try {
-      const payload = await this.jwtService.verifyAsync<{
-        sub: number;
-        email: string;
-        role: string;
-      }>(token);
+      const payload =
+        await this.jwtService.verifyAsync<AccessTokenPayload>(token);
 
-      if (payload.role !== 'ADMIN') {
-        throw new ForbiddenException('Only admin can perform this action.');
+      if (payload.purpose) {
+        throw new UnauthorizedException(
+          'This token cannot access the application.',
+        );
       }
 
       return payload;
     } catch (error) {
-      if (error instanceof ForbiddenException) {
+      if (error instanceof UnauthorizedException) {
         throw error;
       }
 
       throw new UnauthorizedException('Invalid or expired access token.');
     }
+  }
+
+  async verifyAdminToken(authorization?: string) {
+    const payload = await this.verifyAccessToken(authorization);
+
+    if (payload.role !== 'ADMIN') {
+      throw new ForbiddenException('Only admin can perform this action.');
+    }
+
+    return payload;
   }
 
   async verifyForgotPasswordEmail(email: string) {

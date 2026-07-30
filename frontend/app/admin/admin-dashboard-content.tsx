@@ -790,7 +790,11 @@ export default function AdminDashboardContent({
         </div>
       </section>
 
-      <section className="mb-5 grid grid-cols-4 gap-6">
+      <section
+        className={`mb-5 grid gap-6 ${
+          isAdmin ? "md:grid-cols-2 xl:grid-cols-4" : "md:grid-cols-3"
+        }`}
+      >
         <DashboardStatCard
           title="Active Tournaments"
           value={dashboard.stats.activeTournaments}
@@ -809,14 +813,16 @@ export default function AdminDashboardContent({
           note="From now onward"
           icon={<CalendarDays size={22} />}
         />
-        <DashboardStatCard
-          tone="danger"
-          title="Attention Needed"
-          value={dashboard.stats.attentionNeeded}
-          note={`${dashboard.stats.inactivePlayers} inactive, ${dashboard.stats.pendingPlayers} pending`}
-          icon={<AlertTriangle size={24} />}
-          onClick={() => setOpenAttentionDetails(true)}
-        />
+        {isAdmin && (
+          <DashboardStatCard
+            tone="danger"
+            title="Attention Needed"
+            value={dashboard.stats.attentionNeeded}
+            note={`${dashboard.stats.inactivePlayers} inactive, ${dashboard.stats.pendingPlayers} pending`}
+            icon={<AlertTriangle size={24} />}
+            onClick={() => setOpenAttentionDetails(true)}
+          />
+        )}
       </section>
 
       <div className="grid gap-5 xl:grid-cols-[minmax(0,1fr)_390px]">
@@ -865,7 +871,7 @@ export default function AdminDashboardContent({
         </aside>
       </div>
 
-      {openAttentionDetails && (
+      {isAdmin && openAttentionDetails && (
         <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/70 px-4">
           <section className="w-full max-w-[720px] overflow-hidden rounded border border-[#6b4440] bg-[#0d252d] shadow-2xl">
             <header className="flex items-center justify-between border-b border-[#3a4d54] bg-[#14272e] px-6 py-5">

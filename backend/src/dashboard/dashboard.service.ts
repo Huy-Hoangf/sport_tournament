@@ -10,7 +10,11 @@ export class DashboardService {
     private readonly usersRepository: Repository<User>,
   ) {}
 
-  async getDashboard() {
+  async getDashboard({
+    includeAttentionDetails = false,
+  }: {
+    includeAttentionDetails?: boolean;
+  } = {}) {
     const [
       summaryRows,
       tournaments,
@@ -24,7 +28,9 @@ export class DashboardService {
       this.usersRepository.query(this.tournamentMatchesQuery()),
       this.usersRepository.query(this.upcomingScheduleQuery()),
       this.usersRepository.query(this.activitiesQuery()),
-      this.usersRepository.query(this.inactivePlayersQuery()),
+      includeAttentionDetails
+        ? this.usersRepository.query(this.inactivePlayersQuery())
+        : Promise.resolve([]),
     ]);
 
     const summary = this.mapSummary(summaryRows[0]);
@@ -40,11 +46,13 @@ export class DashboardService {
         activeTournaments: summary.activeTournaments,
         totalPlayers: summary.totalPlayers,
         upcomingMatches: summary.upcomingMatches,
-        attentionNeeded: summary.attentionNeeded,
-        pendingPredictions: summary.pendingPredictions,
-        warningMatches: summary.warningMatches,
-        inactivePlayers: summary.inactivePlayers,
-        pendingPlayers: summary.pendingPlayers,
+        attentionNeeded: includeAttentionDetails ? summary.attentionNeeded : 0,
+        pendingPredictions: includeAttentionDetails
+          ? summary.pendingPredictions
+          : 0,
+        warningMatches: includeAttentionDetails ? summary.warningMatches : 0,
+        inactivePlayers: includeAttentionDetails ? summary.inactivePlayers : 0,
+        pendingPlayers: includeAttentionDetails ? summary.pendingPlayers : 0,
       },
       tournaments: tournaments.map((row) => ({
         id: Number(row.id),
@@ -84,14 +92,16 @@ export class DashboardService {
         message: row.message,
         createdAt: row.createdAt,
       })),
-      inactivePlayers: inactivePlayers.map((row) => ({
-        id: Number(row.id),
-        memberCode: row.memberCode,
-        fullName: row.fullName,
-        email: row.email,
-        status: row.status,
-        updatedAt: row.updatedAt,
-      })),
+      inactivePlayers: includeAttentionDetails
+        ? inactivePlayers.map((row) => ({
+            id: Number(row.id),
+            memberCode: row.memberCode,
+            fullName: row.fullName,
+            email: row.email,
+            status: row.status,
+            updatedAt: row.updatedAt,
+          }))
+        : [],
     };
   }
 
