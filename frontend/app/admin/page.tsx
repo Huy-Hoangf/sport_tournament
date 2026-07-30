@@ -541,9 +541,32 @@ export default function AdminPage() {
           <p className="text-[10px] font-bold uppercase tracking-[0.06em] text-[#9fb2b8]">
             A GAME FOR COMPANY
           </p>
+
+          <div className="mt-6 flex items-center justify-between border-y border-[#3c5056] py-4">
+            <button
+              type="button"
+              onClick={() => showNotice("this feature is not ready")}
+              title="Notifications"
+              className="flex h-9 w-9 items-center justify-center text-[#d9e5e7] transition hover:text-[#84d8e8]"
+            >
+              <Bell size={21} />
+            </button>
+
+            <div className="flex min-w-0 items-center gap-3">
+              <div className="min-w-0 text-right">
+                <p className="max-w-[105px] truncate text-xs font-black uppercase text-white">
+                  {currentUser?.fullName ?? "Admin_01"}
+                </p>
+                <p className="text-[10px] uppercase text-[#c4d3d8]">Online</p>
+              </div>
+              <div className="flex h-[42px] w-[42px] shrink-0 items-center justify-center border border-[#41636d] bg-[#143942] text-sm font-black uppercase text-[#84d8e8]">
+                {currentUser?.fullName?.trim().charAt(0) || "A"}
+              </div>
+            </div>
+          </div>
         </div>
 
-        <nav className="mt-14 space-y-2 text-sm font-bold">
+        <nav className="mt-8 space-y-2 text-sm font-bold">
           <MenuItem active={activeView === "dashboard"} icon={<LayoutDashboard size={21} />} label="Dashboard" onClick={() => setActiveView("dashboard")} />
           <MenuItem icon={<Trophy size={21} />} label="Tournaments" onClick={() => showNotice("this feature is not ready")} />
           <MenuItem icon={<Gamepad2 size={21} />} label="Matches" onClick={() => showNotice("this feature is not ready")} />
@@ -577,26 +600,6 @@ export default function AdminPage() {
       </aside>
 
       <section className="ml-[260px] min-h-screen bg-[#06161b]">
-        <header className="flex h-[88px] items-center border-b border-[#3c5056] px-8">
-          <div className="w-[190px] text-[25px] font-black uppercase leading-8 text-white">
-            {activeView === "dashboard" || !isAdmin ? "DASHBOARD" : "PLAYERS"}
-          </div>
-
-          <div className="ml-auto flex items-center gap-7">
-            <Bell size={22} />
-            <div className="hidden h-10 w-px bg-[#3c5056] md:block" />
-            <div className="flex items-center gap-3 border-l border-[#3c5056] pl-6">
-              <div className="text-right">
-                <p className="text-xs font-black uppercase text-white">
-                  {currentUser?.fullName ?? "Admin_01"}
-                </p>
-                <p className="text-[10px] uppercase text-[#c4d3d8]">Online</p>
-              </div>
-              <div className="h-[42px] w-[42px] border border-[#41636d] bg-[#143942]" />
-            </div>
-          </div>
-        </header>
-
         {activeView === "dashboard" || !isAdmin ? (
           <AdminDashboardContent isAdmin={isAdmin} refreshKey={dashboardRefreshKey} />
         ) : (
