@@ -724,14 +724,6 @@ export default function AdminDashboardContent({
     <div className="px-8 py-9">
       <NoticeBanner notice={notice} onClose={() => setNotice(null)} />
       <div className="mb-8 flex items-start justify-between gap-6">
-        <div>
-          <h2 className="text-[34px] font-black leading-none text-white">
-            Dashboard
-          </h2>
-          <p className="mt-3 text-[16px] text-[#adbdc2]">
-            Welcome back. System is running within optimal parameters.
-          </p>
-        </div>
 
         <div className="flex flex-wrap justify-end gap-4">
           {isAdmin ? (
