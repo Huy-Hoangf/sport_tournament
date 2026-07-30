@@ -67,7 +67,7 @@ type AdminView = 'dashboard' | 'players';
 type StatusFilter = "ALL" | Player["status"];
 
 const PLAYERS_PER_PAGE = 5;
-const COMPANY_EMAIL_DOMAIN = "@twenty-tech.com";
+const COMPANY_EMAIL_DOMAIN = "@tech.com";
 
 export default function AdminPage() {
   const router = useRouter();
@@ -93,6 +93,8 @@ export default function AdminPage() {
     | "changePassword"
     | "renamePlayer"
     | "changeStatus"
+    | "deletePlayer"
+    | "deleteAllPlayers"
     | null
   >(null);
   const [currentPassword, setCurrentPassword] = useState("");
@@ -356,7 +358,7 @@ export default function AdminPage() {
     setOpenModal(null);
   }
 
-  async function deletePlayer(player: Player) {
+  function openDeletePlayerConfirmation(player: Player) {
     if (currentUser?.role !== "ADMIN") {
       showNotice("Only admin can delete players.");
       return;
@@ -367,14 +369,16 @@ export default function AdminPage() {
       return;
     }
 
-    const confirmed = window.confirm(
-      `Delete player "${player.fullName}"? This action cannot be undone.`,
-    );
+    setSelectedPlayer(player);
+    setOpenModal("deletePlayer");
+  }
 
-    if (!confirmed) {
+  async function deletePlayer() {
+    if (!selectedPlayer) {
       return;
     }
 
+    const player = selectedPlayer;
     setIsLoading(true);
 
     try {
@@ -383,6 +387,8 @@ export default function AdminPage() {
       });
 
       showNotice("Player deleted successfully.");
+      setOpenModal(null);
+      setSelectedPlayer(null);
       await fetchPlayers();
       refreshDashboard();
     } catch (error) {
@@ -392,7 +398,7 @@ export default function AdminPage() {
     }
   }
 
-  async function deleteAllPlayers() {
+  function openDeleteAllPlayersConfirmation() {
     if (currentUser?.role !== "ADMIN") {
       showNotice("Only admin can delete players.");
       return;
@@ -405,11 +411,12 @@ export default function AdminPage() {
       return;
     }
 
-    const confirmed = window.confirm(
-      `Delete all ${playerCount} players? The admin account will be kept.`,
-    );
+    setOpenModal("deleteAllPlayers");
+  }
 
-    if (!confirmed) {
+  async function deleteAllPlayers() {
+    if (currentUser?.role !== "ADMIN") {
+      showNotice("Only admin can delete players.");
       return;
     }
 
@@ -424,6 +431,7 @@ export default function AdminPage() {
       });
 
       showNotice(`Deleted ${data.deletedCount} players.`);
+      setOpenModal(null);
       setCurrentPage(1);
       await fetchPlayers();
       refreshDashboard();
@@ -533,9 +541,31 @@ export default function AdminPage() {
           <p className="text-[10px] font-bold uppercase tracking-[0.06em] text-[#9fb2b8]">
             A GAME FOR COMPANY
           </p>
+
+          <div className="mt-6 flex items-center justify-between border-y border-[#3c5056] py-4">
+            <div className="flex min-w-0 items-center gap-3">
+              <div className="min-w-0 text-right">
+                <p className="max-w-[105px] truncate text-xs font-black uppercase text-white">
+                  {currentUser?.fullName ?? "Admin_01"}
+                </p>
+                <p className="text-[10px] uppercase text-[#c4d3d8]">Online</p>
+              </div>
+              <div className="flex h-[42px] w-[42px] shrink-0 items-center justify-center border border-[#41636d] bg-[#143942] text-sm font-black uppercase text-[#84d8e8]">
+                {currentUser?.fullName?.trim().charAt(0) || "A"}
+              </div>
+            </div>
+            <button
+              type="button"
+              onClick={() => showNotice("this feature is not ready")}
+              title="Notifications"
+              className="flex h-9 w-9 items-center justify-center text-[#d9e5e7] transition hover:text-[#84d8e8]"
+            >
+              <Bell size={21} />
+            </button>
+          </div>
         </div>
 
-        <nav className="mt-14 space-y-2 text-sm font-bold">
+        <nav className="mt-8 space-y-2 text-sm font-bold">
           <MenuItem active={activeView === "dashboard"} icon={<LayoutDashboard size={21} />} label="Dashboard" onClick={() => setActiveView("dashboard")} />
           <MenuItem icon={<Trophy size={21} />} label="Tournaments" onClick={() => showNotice("this feature is not ready")} />
           <MenuItem icon={<Gamepad2 size={21} />} label="Matches" onClick={() => showNotice("this feature is not ready")} />
@@ -569,26 +599,6 @@ export default function AdminPage() {
       </aside>
 
       <section className="ml-[260px] min-h-screen bg-[#06161b]">
-        <header className="flex h-[88px] items-center border-b border-[#3c5056] px-8">
-          <div className="w-[190px] text-[25px] font-black uppercase leading-8 text-white">
-            {activeView === "dashboard" || !isAdmin ? "DASHBOARD" : "PLAYERS"}
-          </div>
-
-          <div className="ml-auto flex items-center gap-7">
-            <Bell size={22} />
-            <div className="hidden h-10 w-px bg-[#3c5056] md:block" />
-            <div className="flex items-center gap-3 border-l border-[#3c5056] pl-6">
-              <div className="text-right">
-                <p className="text-xs font-black uppercase text-white">
-                  {currentUser?.fullName ?? "Admin_01"}
-                </p>
-                <p className="text-[10px] uppercase text-[#c4d3d8]">Online</p>
-              </div>
-              <div className="h-[42px] w-[42px] border border-[#41636d] bg-[#143942]" />
-            </div>
-          </div>
-        </header>
-
         {activeView === "dashboard" || !isAdmin ? (
           <AdminDashboardContent isAdmin={isAdmin} refreshKey={dashboardRefreshKey} />
         ) : (
@@ -619,7 +629,7 @@ export default function AdminPage() {
                 Add Player From List
               </button>
               <button
-                onClick={() => void deleteAllPlayers()}
+                onClick={openDeleteAllPlayersConfirmation}
                 disabled={isLoading}
                 className="flex h-[62px] items-center gap-3 rounded border border-[#ffab9e66] bg-[#2b1414] px-6 text-lg font-black text-[#ffab9e] transition hover:border-[#ffab9e] disabled:opacity-60"
               >
@@ -773,7 +783,7 @@ export default function AdminPage() {
                           <Pencil size={18} />
                         </button>
                         <button
-                          onClick={() => void deletePlayer(player)}
+                          onClick={() => openDeletePlayerConfirmation(player)}
                           title="Delete player"
                           className="transition hover:text-[#ffab9e]"
                         >
@@ -873,7 +883,7 @@ export default function AdminPage() {
           <input
             value={email}
             onChange={(event) => setEmail(event.target.value)}
-            placeholder="name@twenty-tech.com"
+            placeholder={`name${COMPANY_EMAIL_DOMAIN}`}
             className="mb-4 h-[54px] w-full rounded border border-white/10 bg-[#070d0d] px-4 text-zinc-100 outline-none focus:border-[#8ed8ec]"
           />
 
@@ -992,7 +1002,7 @@ export default function AdminPage() {
           <input
             value={renameEmail}
             onChange={(event) => setRenameEmail(event.target.value)}
-            placeholder="name@twenty-tech.com"
+            placeholder={`name${COMPANY_EMAIL_DOMAIN}`}
             className="mb-6 h-[54px] w-full rounded border border-white/10 bg-[#070d0d] px-4 text-zinc-100 outline-none focus:border-[#8ed8ec]"
           />
 
@@ -1050,6 +1060,57 @@ export default function AdminPage() {
               Cancel
             </button>
           </div>
+        </Modal>
+      )}
+
+      {openModal === "deletePlayer" && selectedPlayer && (
+        <Modal title="Delete Player">
+          <p className="text-base font-bold text-white">
+            Do you want to delete this player?
+          </p>
+          <div className="my-5 rounded border border-[#ffab9e55] bg-[#2b1414] px-4 py-4">
+            <p className="font-black text-[#ffab9e]">
+              {selectedPlayer.fullName}
+            </p>
+            <p className="mt-1 text-sm text-zinc-400">
+              {selectedPlayer.email} · {selectedPlayer.memberCode}
+            </p>
+          </div>
+          <p className="mb-6 text-sm text-zinc-400">
+            This action cannot be undone.
+          </p>
+          <ModalActions
+            cancel={() => {
+              setOpenModal(null);
+              setSelectedPlayer(null);
+            }}
+            confirm={() => void deletePlayer()}
+            confirmText={isLoading ? "Deleting..." : "Delete"}
+            disabled={isLoading}
+            danger
+          />
+        </Modal>
+      )}
+
+      {openModal === "deleteAllPlayers" && (
+        <Modal title="Delete All Players">
+          <p className="text-base font-bold text-white">
+            Do you want to delete all players?
+          </p>
+          <p className="my-5 rounded border border-[#ffab9e55] bg-[#2b1414] px-4 py-4 text-sm text-[#ffab9e]">
+            {players.filter((player) => player.role === "PLAYER").length} player
+            accounts will be deleted. The admin account will be kept.
+          </p>
+          <p className="mb-6 text-sm text-zinc-400">
+            This action cannot be undone.
+          </p>
+          <ModalActions
+            cancel={() => setOpenModal(null)}
+            confirm={() => void deleteAllPlayers()}
+            confirmText={isLoading ? "Deleting..." : "Delete All"}
+            disabled={isLoading}
+            danger
+          />
         </Modal>
       )}
     </main>
@@ -1491,15 +1552,18 @@ function ModalActions({
   confirm,
   confirmText,
   disabled,
+  danger = false,
 }: {
   cancel: () => void;
   confirm: () => void;
   confirmText: string;
   disabled?: boolean;
+  danger?: boolean;
 }) {
   return (
     <div className="flex justify-end gap-3">
       <button
+        type="button"
         onClick={cancel}
         className="h-[46px] rounded border border-white/10 px-5 text-zinc-300"
       >
@@ -1507,9 +1571,14 @@ function ModalActions({
       </button>
 
       <button
+        type="button"
         onClick={confirm}
         disabled={disabled}
-        className="h-[46px] rounded bg-[#8ed8ec] px-5 font-black text-[#102026] disabled:opacity-60"
+        className={`h-[46px] rounded px-5 font-black disabled:opacity-60 ${
+          danger
+            ? "border border-[#ffab9e66] bg-[#7b2929] text-white"
+            : "bg-[#8ed8ec] text-[#102026]"
+        }`}
       >
         {confirmText}
       </button>
