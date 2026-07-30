@@ -543,15 +543,6 @@ export default function AdminPage() {
           </p>
 
           <div className="mt-6 flex items-center justify-between border-y border-[#3c5056] py-4">
-            <button
-              type="button"
-              onClick={() => showNotice("this feature is not ready")}
-              title="Notifications"
-              className="flex h-9 w-9 items-center justify-center text-[#d9e5e7] transition hover:text-[#84d8e8]"
-            >
-              <Bell size={21} />
-            </button>
-
             <div className="flex min-w-0 items-center gap-3">
               <div className="min-w-0 text-right">
                 <p className="max-w-[105px] truncate text-xs font-black uppercase text-white">
@@ -563,6 +554,14 @@ export default function AdminPage() {
                 {currentUser?.fullName?.trim().charAt(0) || "A"}
               </div>
             </div>
+            <button
+              type="button"
+              onClick={() => showNotice("this feature is not ready")}
+              title="Notifications"
+              className="flex h-9 w-9 items-center justify-center text-[#d9e5e7] transition hover:text-[#84d8e8]"
+            >
+              <Bell size={21} />
+            </button>
           </div>
         </div>
 
