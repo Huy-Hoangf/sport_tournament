@@ -731,7 +731,7 @@ export default function AdminPage() {
                               ? "Administrator"
                               : player.rank === "ELITE"
                                 ? "Elite Level"
-                                : "Pro Member"}
+                                : "MEMBER"}
                           </p>
                         </div>
                       </div>
