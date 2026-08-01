@@ -1264,10 +1264,10 @@ export default function AdminDashboardContent({
               Delete Tournament
             </h3>
             <p className="mt-4 text-base font-bold text-white">
-              Delete This Tournament
+              Are you sure you want to delete <span className="text-[#ffab9e]">{tournamentToDelete.name}</span>
             </p>
             <p className="mt-2 text-sm text-[#9fb2b8]">
-              {tournamentToDelete.name}
+              This action cannot be undone. All matches, predictions and related data will be permanently deleted.
             </p>
             <div className="mt-7 flex justify-end gap-3">
               <button
