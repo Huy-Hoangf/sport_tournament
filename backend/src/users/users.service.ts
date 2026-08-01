@@ -143,11 +143,17 @@ export class UsersService implements OnModuleInit {
     id: number;
     email: string;
     fullName: string;
+    role?: 'ADMIN' | 'PLAYER';
     actorId: number;
     actorRole: UserRole;
   }) {
     const name = data.fullName.trim();
     const email = normalizeEmail(data.email);
+    const requestedRole = data.role;
+
+    if (requestedRole && !['ADMIN', 'PLAYER'].includes(requestedRole)) {
+      throw new BadRequestException('Invalid user role.');
+    }
 
     if (!name) {
       throw new BadRequestException('Full name is required.');
@@ -182,6 +188,16 @@ export class UsersService implements OnModuleInit {
       );
     }
 
+    if (
+      requestedRole &&
+      requestedRole !== user.role &&
+      data.actorRole !== 'SUPER_ADMIN'
+    ) {
+      throw new ForbiddenException(
+        'Only the super admin can change account roles.',
+      );
+    }
+
     if (email === ADMIN_EMAIL) {
       throw new BadRequestException('Cannot use the super admin email.');
     }
@@ -194,6 +210,11 @@ export class UsersService implements OnModuleInit {
 
     user.fullName = name;
     user.email = email;
+
+    if (requestedRole) {
+      user.role = requestedRole;
+    }
+
     const savedUser = await this.usersRepository.save(user);
 
     return {

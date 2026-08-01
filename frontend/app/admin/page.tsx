@@ -87,6 +87,7 @@ export default function AdminPage() {
   const [selectedPlayer, setSelectedPlayer] = useState<Player | null>(null);
   const [renameFullName, setRenameFullName] = useState("");
   const [renameEmail, setRenameEmail] = useState("");
+  const [renameRole, setRenameRole] = useState<"ADMIN" | "PLAYER">("PLAYER");
   const [importFileName, setImportFileName] = useState("");
   const [importPlayers, setImportPlayers] = useState<ImportedPlayer[]>([]);
   const [openModal, setOpenModal] = useState<
@@ -273,14 +274,16 @@ export default function AdminPage() {
           body: JSON.stringify({
             fullName: renameFullName.trim(),
             email: renameEmail.trim().toLowerCase(),
+            role: renameRole,
           }),
         },
       );
 
-      showNotice("Player updated successfully.");
+      showNotice("User updated successfully.");
       setSelectedPlayer(null);
       setRenameFullName("");
       setRenameEmail("");
+      setRenameRole("PLAYER");
       setOpenModal(null);
       await fetchPlayers();
       refreshDashboard();
@@ -799,6 +802,9 @@ export default function AdminPage() {
                               setSelectedPlayer(player);
                               setRenameFullName(player.fullName);
                               setRenameEmail(player.email);
+                              setRenameRole(
+                                player.role === "ADMIN" ? "ADMIN" : "PLAYER",
+                              );
                               setOpenModal("renamePlayer");
                             }}
                             title="Edit user name and email"
@@ -1028,14 +1034,33 @@ export default function AdminPage() {
             value={renameEmail}
             onChange={(event) => setRenameEmail(event.target.value)}
             placeholder={`name${COMPANY_EMAIL_DOMAIN}`}
-            className="mb-6 h-[54px] w-full rounded border border-white/10 bg-[#070d0d] px-4 text-zinc-100 outline-none focus:border-[#8ed8ec]"
+            className="mb-4 h-[54px] w-full rounded border border-white/10 bg-[#070d0d] px-4 text-zinc-100 outline-none focus:border-[#8ed8ec]"
           />
+
+          {isSuperAdmin && selectedPlayer?.role !== "SUPER_ADMIN" && (
+            <label className="mb-6 block">
+              <span className="mb-2 block text-xs font-black uppercase tracking-[0.12em] text-[#8ed8ec]">
+                Account role
+              </span>
+              <select
+                value={renameRole}
+                onChange={(event) =>
+                  setRenameRole(event.target.value as "ADMIN" | "PLAYER")
+                }
+                className="h-[54px] w-full rounded border border-white/10 bg-[#070d0d] px-4 font-black uppercase text-zinc-100 outline-none focus:border-[#8ed8ec]"
+              >
+                <option value="PLAYER">Player</option>
+                <option value="ADMIN">Administrator</option>
+              </select>
+            </label>
+          )}
 
           <ModalActions
             cancel={() => {
               setSelectedPlayer(null);
               setRenameFullName("");
               setRenameEmail("");
+              setRenameRole("PLAYER");
               setOpenModal(null);
             }}
             confirm={renamePlayer}

@@ -45,13 +45,19 @@ export class UsersController {
   async renamePlayerByAdmin(
     @Headers('authorization') authorization: string | undefined,
     @Param('id') id: string,
-    @Body() body: { email: string; fullName: string },
+    @Body()
+    body: {
+      email: string;
+      fullName: string;
+      role?: 'ADMIN' | 'PLAYER';
+    },
   ) {
     const admin = await this.authService.verifyAdminToken(authorization);
     const user = await this.usersService.renamePlayerByAdmin({
       id: Number(id),
       email: body.email,
       fullName: body.fullName,
+      role: body.role,
       actorId: admin.sub,
       actorRole: admin.role,
     });
