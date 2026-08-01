@@ -1,6 +1,7 @@
 ﻿import {
   BadRequestException,
   ConflictException,
+  ForbiddenException,
   Injectable,
   NotFoundException,
   OnModuleInit,
@@ -16,7 +17,7 @@ import {
   isCompanyEmail,
   normalizeEmail,
 } from '../auth/auth.constants';
-import { User, type UserStatus } from './user.entity';
+import { User, type UserRole, type UserStatus } from './user.entity';
 
 const USER_STATUSES: UserStatus[] = ['ACTIVE', 'INACTIVE', 'PENDING'];
 
@@ -28,6 +29,7 @@ export class UsersService implements OnModuleInit {
   ) {}
 
   async onModuleInit() {
+    await this.ensureUserRoleConstraint();
     await this.migrateCompanyEmailDomain();
     await this.seedDefaultAdmin();
     await this.backfillMemberCodes();
@@ -75,9 +77,17 @@ export class UsersService implements OnModuleInit {
     });
   }
 
-  async createPlayerByAdmin(data: { email: string; fullName: string }) {
+  async createPlayerByAdmin(
+    data: { email: string; fullName: string; role?: 'ADMIN' | 'PLAYER' },
+    actorRole: UserRole,
+  ) {
     const email = normalizeEmail(data.email);
     const fullName = data.fullName.trim();
+    const role = data.role ?? 'PLAYER';
+
+    if (!['ADMIN', 'PLAYER'].includes(role)) {
+      throw new BadRequestException('Invalid user role.');
+    }
 
     if (!fullName) {
       throw new BadRequestException('Full name is required.');
@@ -88,7 +98,13 @@ export class UsersService implements OnModuleInit {
     }
 
     if (email === ADMIN_EMAIL) {
-      throw new BadRequestException('Cannot create another admin account.');
+      throw new BadRequestException('Cannot use the super admin email.');
+    }
+
+    if (role === 'ADMIN' && actorRole !== 'SUPER_ADMIN') {
+      throw new ForbiddenException(
+        'Only the super admin can create administrator accounts.',
+      );
     }
 
     const existingUser = await this.findByEmail(email);
@@ -97,14 +113,16 @@ export class UsersService implements OnModuleInit {
       throw new ConflictException('Email already exists.');
     }
 
-    const passwordHash = await bcrypt.hash(DEFAULT_PLAYER_PASSWORD, 10);
+    const defaultPassword =
+      role === 'ADMIN' ? DEFAULT_ADMIN_PASSWORD : DEFAULT_PLAYER_PASSWORD;
+    const passwordHash = await bcrypt.hash(defaultPassword, 10);
     const memberCode = await this.generateMemberCode();
     const user = this.usersRepository.create({
       email,
       memberCode,
       fullName,
       passwordHash,
-      role: 'PLAYER',
+      role,
       status: 'ACTIVE',
     });
 
@@ -117,7 +135,7 @@ export class UsersService implements OnModuleInit {
       fullName: savedUser.fullName,
       role: savedUser.role,
       status: savedUser.status,
-      defaultPassword: DEFAULT_PLAYER_PASSWORD,
+      defaultPassword,
     };
   }
 
@@ -125,6 +143,8 @@ export class UsersService implements OnModuleInit {
     id: number;
     email: string;
     fullName: string;
+    actorId: number;
+    actorRole: UserRole;
   }) {
     const name = data.fullName.trim();
     const email = normalizeEmail(data.email);
@@ -137,10 +157,6 @@ export class UsersService implements OnModuleInit {
       throw new BadRequestException(`Email must use ${COMPANY_EMAIL_DOMAIN}.`);
     }
 
-    if (email === ADMIN_EMAIL) {
-      throw new BadRequestException('Cannot use the admin email.');
-    }
-
     const user = await this.usersRepository.findOne({
       where: { id: data.id },
     });
@@ -149,8 +165,25 @@ export class UsersService implements OnModuleInit {
       throw new NotFoundException('User not found.');
     }
 
-    if (user.role === 'ADMIN' || normalizeEmail(user.email) === ADMIN_EMAIL) {
-      throw new BadRequestException('Cannot rename the admin account.');
+    if (
+      user.role === 'SUPER_ADMIN' ||
+      normalizeEmail(user.email) === ADMIN_EMAIL
+    ) {
+      throw new BadRequestException('Cannot rename the super admin account.');
+    }
+
+    if (
+      user.role === 'ADMIN' &&
+      data.actorRole !== 'SUPER_ADMIN' &&
+      data.actorId !== user.id
+    ) {
+      throw new ForbiddenException(
+        'Administrators can only update their own admin account.',
+      );
+    }
+
+    if (email === ADMIN_EMAIL) {
+      throw new BadRequestException('Cannot use the super admin email.');
     }
 
     const existingUser = await this.findByEmail(email);
@@ -186,8 +219,8 @@ export class UsersService implements OnModuleInit {
       throw new NotFoundException('User not found.');
     }
 
-    if (user.role === 'ADMIN' || normalizeEmail(user.email) === ADMIN_EMAIL) {
-      throw new BadRequestException('Cannot update the admin account status.');
+    if (user.role !== 'PLAYER') {
+      throw new BadRequestException('Cannot update an admin account status.');
     }
 
     user.status = status;
@@ -212,8 +245,8 @@ export class UsersService implements OnModuleInit {
       throw new NotFoundException('User not found.');
     }
 
-    if (user.role === 'ADMIN' || normalizeEmail(user.email) === ADMIN_EMAIL) {
-      throw new BadRequestException('Cannot delete the admin account.');
+    if (user.role !== 'PLAYER') {
+      throw new BadRequestException('Cannot delete an admin account.');
     }
 
     await this.usersRepository.remove(user);
@@ -296,6 +329,35 @@ export class UsersService implements OnModuleInit {
     return this.usersRepository.save(user);
   }
 
+  private async ensureUserRoleConstraint() {
+    await this.usersRepository.query(`
+      DO $$
+      BEGIN
+        IF EXISTS (
+          SELECT 1
+          FROM pg_constraint
+          WHERE conrelid = 'users'::regclass
+            AND conname = 'chk_users_role'
+            AND pg_get_constraintdef(oid) NOT LIKE '%SUPER_ADMIN%'
+        ) THEN
+          ALTER TABLE users DROP CONSTRAINT chk_users_role;
+        END IF;
+
+        IF NOT EXISTS (
+          SELECT 1
+          FROM pg_constraint
+          WHERE conrelid = 'users'::regclass
+            AND conname = 'chk_users_role'
+        ) THEN
+          ALTER TABLE users
+          ADD CONSTRAINT chk_users_role
+          CHECK (role IN ('SUPER_ADMIN', 'ADMIN', 'PLAYER'));
+        END IF;
+      END
+      $$;
+    `);
+  }
+
   private async migrateCompanyEmailDomain() {
     await this.usersRepository.query(
       `
@@ -321,8 +383,12 @@ export class UsersService implements OnModuleInit {
     const existingAdmin = await this.findByEmail(ADMIN_EMAIL);
 
     if (existingAdmin) {
-      if (existingAdmin.role !== 'ADMIN') {
-        existingAdmin.role = 'ADMIN';
+      if (
+        existingAdmin.role !== 'SUPER_ADMIN' ||
+        existingAdmin.fullName !== 'Super Admin'
+      ) {
+        existingAdmin.role = 'SUPER_ADMIN';
+        existingAdmin.fullName = 'Super Admin';
         await this.usersRepository.save(existingAdmin);
       }
 
@@ -334,9 +400,9 @@ export class UsersService implements OnModuleInit {
     const admin = this.usersRepository.create({
       email: ADMIN_EMAIL,
       memberCode,
-      fullName: 'Son Vu',
+      fullName: 'Super Admin',
       passwordHash,
-      role: 'ADMIN',
+      role: 'SUPER_ADMIN',
       status: 'ACTIVE',
     });
 

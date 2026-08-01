@@ -6,7 +6,7 @@
   UpdateDateColumn,
 } from 'typeorm';
 
-export type UserRole = 'ADMIN' | 'PLAYER';
+export type UserRole = 'SUPER_ADMIN' | 'ADMIN' | 'PLAYER';
 export type UserStatus = 'ACTIVE' | 'INACTIVE' | 'PENDING';
 
 @Entity('users')

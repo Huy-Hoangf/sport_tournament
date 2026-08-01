@@ -61,8 +61,6 @@ type TournamentRow = {
 
 type TournamentForm = {
   name: string;
-  sportType: "FOOTBALL" | "F1" | "ESPORTS";
-  format: "ROUND_ROBIN" | "GROUP_AND_KNOCKOUT" | "KNOCKOUT";
   status: "UPCOMING" | "ACTIVE" | "COMPLETED" | "CANCELLED";
   visibility: "PUBLIC" | "PRIVATE";
 };
@@ -133,8 +131,6 @@ type InactivePlayerRow = {
 
 const emptyTournamentForm: TournamentForm = {
   name: "",
-  sportType: "FOOTBALL",
-  format: "ROUND_ROBIN",
   status: "UPCOMING",
   visibility: "PUBLIC",
 };
@@ -603,13 +599,6 @@ export default function AdminDashboardContent({
     setEditingTournamentId(tournament.id);
     setTournamentForm({
       name: tournament.name,
-      sportType:
-        tournament.sportType === "F1"
-          ? "F1"
-          : normalizeSportType(tournament.sportType) === "ESPORTS"
-            ? "ESPORTS"
-            : "FOOTBALL",
-      format: "ROUND_ROBIN",
       status: normalizeStatus(tournament.status),
       visibility: "PUBLIC",
     });
@@ -1194,17 +1183,6 @@ export default function AdminDashboardContent({
             />
             <div className="grid gap-4 sm:grid-cols-2">
               <TournamentSelect
-                label="Sport"
-                value={tournamentForm.sportType}
-                options={["FOOTBALL", "F1", "ESPORTS"]}
-                onChange={(value) =>
-                  setTournamentForm((form) => ({
-                    ...form,
-                    sportType: value as TournamentForm["sportType"],
-                  }))
-                }
-              />
-              <TournamentSelect
                 label="Status"
                 value={tournamentForm.status}
                 options={["UPCOMING", "ACTIVE", "COMPLETED", "CANCELLED"]}
@@ -1212,17 +1190,6 @@ export default function AdminDashboardContent({
                   setTournamentForm((form) => ({
                     ...form,
                     status: value as TournamentForm["status"],
-                  }))
-                }
-              />
-              <TournamentSelect
-                label="Format"
-                value={tournamentForm.format}
-                options={["ROUND_ROBIN", "GROUP_AND_KNOCKOUT", "KNOCKOUT"]}
-                onChange={(value) =>
-                  setTournamentForm((form) => ({
-                    ...form,
-                    format: value as TournamentForm["format"],
                   }))
                 }
               />

@@ -71,7 +71,7 @@ CREATE TABLE users (
     updated_at DATETIME2 NOT NULL DEFAULT SYSDATETIME(),
 
     CONSTRAINT chk_users_role
-    CHECK (role IN ('ADMIN', 'PLAYER')),
+    CHECK (role IN ('SUPER_ADMIN', 'ADMIN', 'PLAYER')),
 
     CONSTRAINT chk_users_status
     CHECK (user_status IN ('ACTIVE', 'INACTIVE', 'PENDING'))

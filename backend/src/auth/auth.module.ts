@@ -1,4 +1,4 @@
-import { Module } from '@nestjs/common';
+import { forwardRef, Module } from '@nestjs/common';
 import { JwtModule } from '@nestjs/jwt';
 import { randomBytes } from 'crypto';
 import { AuthController } from './auth.controller';
@@ -9,7 +9,7 @@ const jwtSecret = process.env.JWT_SECRET || randomBytes(48).toString('hex');
 
 @Module({
   imports: [
-    UsersModule,
+    forwardRef(() => UsersModule),
     JwtModule.register({
       secret: jwtSecret,
       signOptions: { expiresIn: '7d' },

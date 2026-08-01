@@ -1728,8 +1728,8 @@ export class SportsApiSyncService {
     const [admin] = await this.usersRepository.query(`
       SELECT id
       FROM users
-      WHERE role = 'ADMIN'
-      ORDER BY id ASC
+      WHERE role IN ('SUPER_ADMIN', 'ADMIN')
+      ORDER BY CASE WHEN role = 'SUPER_ADMIN' THEN 0 ELSE 1 END, id ASC
       LIMIT 1
     `);
 

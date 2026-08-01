@@ -1,20 +1,39 @@
-import { Body, Controller, Delete, Get, Param, Patch, Post } from '@nestjs/common';
+import {
+  Body,
+  Controller,
+  Delete,
+  Get,
+  Headers,
+  Param,
+  Patch,
+  Post,
+} from '@nestjs/common';
+import { AuthService } from '../auth/auth.service';
 import { UsersService } from './users.service';
 
 @Controller('users')
 export class UsersController {
-  constructor(private readonly usersService: UsersService) {}
+  constructor(
+    private readonly usersService: UsersService,
+    private readonly authService: AuthService,
+  ) {}
 
   @Get()
-  findAll() {
+  async findAll(
+    @Headers('authorization') authorization: string | undefined,
+  ) {
+    await this.authService.verifyAdminToken(authorization);
     return this.usersService.findAll();
   }
 
   @Post('admin/create')
   async createPlayerByAdmin(
-    @Body() body: { email: string; fullName: string },
+    @Headers('authorization') authorization: string | undefined,
+    @Body()
+    body: { email: string; fullName: string; role?: 'ADMIN' | 'PLAYER' },
   ) {
-    const user = await this.usersService.createPlayerByAdmin(body);
+    const admin = await this.authService.verifyAdminToken(authorization);
+    const user = await this.usersService.createPlayerByAdmin(body, admin.role);
 
     return {
       message: 'User created successfully.',
@@ -24,13 +43,17 @@ export class UsersController {
 
   @Patch('admin/:id/rename')
   async renamePlayerByAdmin(
+    @Headers('authorization') authorization: string | undefined,
     @Param('id') id: string,
     @Body() body: { email: string; fullName: string },
   ) {
+    const admin = await this.authService.verifyAdminToken(authorization);
     const user = await this.usersService.renamePlayerByAdmin({
       id: Number(id),
       email: body.email,
       fullName: body.fullName,
+      actorId: admin.sub,
+      actorRole: admin.role,
     });
 
     return {
@@ -41,9 +64,11 @@ export class UsersController {
 
   @Patch('admin/:id/status')
   async updatePlayerStatusByAdmin(
+    @Headers('authorization') authorization: string | undefined,
     @Param('id') id: string,
     @Body() body: { status: 'ACTIVE' | 'INACTIVE' | 'PENDING' },
   ) {
+    await this.authService.verifyAdminToken(authorization);
     const user = await this.usersService.updatePlayerStatusByAdmin(
       Number(id),
       body.status,
@@ -56,12 +81,19 @@ export class UsersController {
   }
 
   @Delete('admin/all')
-  deleteAllPlayersByAdmin() {
+  async deleteAllPlayersByAdmin(
+    @Headers('authorization') authorization: string | undefined,
+  ) {
+    await this.authService.verifyAdminToken(authorization);
     return this.usersService.deleteAllPlayersByAdmin();
   }
 
   @Delete('admin/:id')
-  deletePlayerByAdmin(@Param('id') id: string) {
+  async deletePlayerByAdmin(
+    @Headers('authorization') authorization: string | undefined,
+    @Param('id') id: string,
+  ) {
+    await this.authService.verifyAdminToken(authorization);
     return this.usersService.deletePlayerByAdmin(Number(id));
   }
 }

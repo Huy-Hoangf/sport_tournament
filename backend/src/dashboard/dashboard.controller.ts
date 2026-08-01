@@ -26,7 +26,7 @@ export class DashboardController {
     const user = await this.authService.verifyAccessToken(authorization);
 
     return this.dashboardService.getDashboard({
-      includeAttentionDetails: user.role === 'ADMIN',
+      includeAttentionDetails: ['SUPER_ADMIN', 'ADMIN'].includes(user.role),
     });
   }
 

@@ -6,7 +6,7 @@ export type CurrentUser = {
   id: number;
   email: string;
   fullName: string;
-  role: "ADMIN" | "PLAYER";
+  role: "SUPER_ADMIN" | "ADMIN" | "PLAYER";
 };
 
 export async function apiRequest<T>(

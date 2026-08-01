@@ -20,6 +20,7 @@ import {
   Pencil,
   Search,
   Settings,
+  ShieldPlus,
   SlidersHorizontal,
   Trophy,
   Trash2,
@@ -33,7 +34,7 @@ type BackendUser = {
   memberCode: string | null;
   fullName: string;
   email: string;
-  role: "ADMIN" | "PLAYER";
+  role: "SUPER_ADMIN" | "ADMIN" | "PLAYER";
   status?: "ACTIVE" | "INACTIVE" | "PENDING";
   eventsCount?: number;
   createdAt?: string;
@@ -44,7 +45,7 @@ type Player = {
   memberCode: string;
   fullName: string;
   email: string;
-  role: "ADMIN" | "PLAYER";
+  role: "SUPER_ADMIN" | "ADMIN" | "PLAYER";
   rank: "ELITE" | "PRO" | "ROOKIE";
   points: number;
   status: "ACTIVE" | "INACTIVE" | "PENDING";
@@ -77,6 +78,7 @@ export default function AdminPage() {
   const [currentUser, setCurrentUser] = useState<CurrentUser | null>(null);
   const [fullName, setFullName] = useState("");
   const [email, setEmail] = useState("");
+  const [newUserRole, setNewUserRole] = useState<"ADMIN" | "PLAYER">("PLAYER");
   const [isLoading, setIsLoading] = useState(false);
   const [isNameSearchOpen, setIsNameSearchOpen] = useState(false);
   const [nameSearch, setNameSearch] = useState("");
@@ -101,7 +103,9 @@ export default function AdminPage() {
   const [newPassword, setNewPassword] = useState("");
   const [confirmPassword, setConfirmPassword] = useState("");
   const [notice, setNotice] = useState<Notice | null>(null);
-  const isAdmin = currentUser?.role === "ADMIN";
+  const isAdmin =
+    currentUser?.role === "SUPER_ADMIN" || currentUser?.role === "ADMIN";
+  const isSuperAdmin = currentUser?.role === "SUPER_ADMIN";
 
   const showNotice = useCallback((message: string, tone: Notice["tone"] = "info") => {
     setNotice({ message, tone });
@@ -130,9 +134,9 @@ export default function AdminPage() {
 
     queueMicrotask(() => {
       setCurrentUser(currentUser);
-      setActiveView(currentUser.role === "ADMIN" ? "players" : "dashboard");
+      setActiveView(currentUser.role === "PLAYER" ? "dashboard" : "players");
 
-      if (currentUser.role === "ADMIN") {
+      if (currentUser.role !== "PLAYER") {
         void fetchPlayers();
       }
     });
@@ -201,6 +205,11 @@ export default function AdminPage() {
       return;
     }
 
+    if (newUserRole === "ADMIN" && !isSuperAdmin) {
+      showNotice("Only the super admin can create administrator accounts.");
+      return;
+    }
+
     setIsLoading(true);
 
     try {
@@ -209,6 +218,7 @@ export default function AdminPage() {
         body: JSON.stringify({
           fullName: fullName.trim(),
           email: email.trim().toLowerCase(),
+          role: newUserRole,
         }),
       });
 
@@ -217,6 +227,7 @@ export default function AdminPage() {
       );
       setFullName("");
       setEmail("");
+      setNewUserRole("PLAYER");
       setOpenModal(null);
       await fetchPlayers();
       refreshDashboard();
@@ -232,8 +243,13 @@ export default function AdminPage() {
       return;
     }
 
-    if (currentUser?.role !== "ADMIN") {
-      showNotice("Only admin can rename players.");
+    if (!isAdmin) {
+      showNotice("Only admin can update users.");
+      return;
+    }
+
+    if (!canRenameUser(selectedPlayer, currentUser)) {
+      showNotice("You cannot update this administrator account.");
       return;
     }
 
@@ -359,12 +375,12 @@ export default function AdminPage() {
   }
 
   function openDeletePlayerConfirmation(player: Player) {
-    if (currentUser?.role !== "ADMIN") {
+    if (!isAdmin) {
       showNotice("Only admin can delete players.");
       return;
     }
 
-    if (player.role === "ADMIN") {
+    if (player.role !== "PLAYER") {
       showNotice("Cannot delete the admin account.");
       return;
     }
@@ -399,7 +415,7 @@ export default function AdminPage() {
   }
 
   function openDeleteAllPlayersConfirmation() {
-    if (currentUser?.role !== "ADMIN") {
+    if (!isAdmin) {
       showNotice("Only admin can delete players.");
       return;
     }
@@ -415,7 +431,7 @@ export default function AdminPage() {
   }
 
   async function deleteAllPlayers() {
-    if (currentUser?.role !== "ADMIN") {
+    if (!isAdmin) {
       showNotice("Only admin can delete players.");
       return;
     }
@@ -449,12 +465,12 @@ export default function AdminPage() {
       return;
     }
 
-    if (currentUser?.role !== "ADMIN") {
+    if (!isAdmin) {
       showNotice("Only admin can change player status.");
       return;
     }
 
-    if (selectedPlayer.role === "ADMIN") {
+    if (selectedPlayer.role !== "PLAYER") {
       showNotice("Cannot change the admin account status.");
       return;
     }
@@ -615,12 +631,27 @@ export default function AdminPage() {
 
             <div className="flex flex-wrap justify-end gap-4">
               <button
-                onClick={() => setOpenModal("createUser")}
+                onClick={() => {
+                  setNewUserRole("PLAYER");
+                  setOpenModal("createUser");
+                }}
                 className="flex h-[62px] items-center gap-3 rounded bg-[#84d8e8] px-8 text-lg font-black text-[#06161b]"
               >
                 <UserPlus size={27} />
                 Add Player
               </button>
+              {isSuperAdmin && (
+                <button
+                  onClick={() => {
+                    setNewUserRole("ADMIN");
+                    setOpenModal("createUser");
+                  }}
+                  className="flex h-[62px] items-center gap-3 rounded border border-[#84d8e8] bg-[#143942] px-8 text-lg font-black text-[#84d8e8]"
+                >
+                  <ShieldPlus size={25} />
+                  Add Admin
+                </button>
+              )}
               <button
                 onClick={() => setOpenModal("createUserFromList")}
                 className="flex h-[62px] items-center gap-3 rounded bg-[#84d8e8] px-8 text-lg font-black text-[#06161b]"
@@ -711,7 +742,7 @@ export default function AdminPage() {
                   <th className="w-[48px] px-4 text-left">
                     <span className="block h-4 w-4 border border-[#3d535a]" />
                   </th>
-                  <th className="w-[190px] text-left">Player</th>
+                  <th className="w-[190px] text-left">User</th>
                   <th className="w-[220px] text-left">Email</th>
                   <th className="w-[120px] text-left">Member ID</th>
                   <th className="w-[125px] text-left">Status</th>
@@ -737,8 +768,10 @@ export default function AdminPage() {
                             {player.fullName}
                           </p>
                           <p className="text-[10px] font-black uppercase text-[#d4e3e6]">
-                            {player.role === "ADMIN"
-                              ? "Administrator"
+                            {player.role === "SUPER_ADMIN"
+                              ? "Super Administrator"
+                              : player.role === "ADMIN"
+                                ? "Administrator"
                               : player.rank === "ELITE"
                                 ? "Elite Level"
                                 : "MEMBER"}
@@ -760,55 +793,41 @@ export default function AdminPage() {
                     </td>
                     <td>
                       <div className="flex items-center gap-5 text-[#dce8eb]">
-                        <button
-                          onClick={() => {
-                            if (!isAdmin) {
-                              showNotice("Only admin can rename players.");
-                              return;
-                            }
-
-                            if (player.role === "ADMIN") {
-                              showNotice("Cannot rename the admin account.");
-                              return;
-                            }
-
-                            setSelectedPlayer(player);
-                            setRenameFullName(player.fullName);
-                            setRenameEmail(player.email);
-                            setOpenModal("renamePlayer");
-                          }}
-                          title="Rename player"
-                          className="transition hover:text-[#84d8e8]"
-                        >
-                          <Pencil size={18} />
-                        </button>
-                        <button
-                          onClick={() => openDeletePlayerConfirmation(player)}
-                          title="Delete player"
-                          className="transition hover:text-[#ffab9e]"
-                        >
-                          <Trash2 size={18} />
-                        </button>
-                        <button
-                          onClick={() => {
-                            if (!isAdmin) {
-                              showNotice("Only admin can change player status.");
-                              return;
-                            }
-
-                            if (player.role === "ADMIN") {
-                              showNotice("Cannot change the admin account status.");
-                              return;
-                            }
-
-                            setSelectedPlayer(player);
-                            setOpenModal("changeStatus");
-                          }}
-                          title="Change status"
-                          className="transition hover:text-[#84d8e8]"
-                        >
-                          <MoreVertical size={18} />
-                        </button>
+                        {canRenameUser(player, currentUser) && (
+                          <button
+                            onClick={() => {
+                              setSelectedPlayer(player);
+                              setRenameFullName(player.fullName);
+                              setRenameEmail(player.email);
+                              setOpenModal("renamePlayer");
+                            }}
+                            title="Edit user name and email"
+                            className="transition hover:text-[#84d8e8]"
+                          >
+                            <Pencil size={18} />
+                          </button>
+                        )}
+                        {player.role === "PLAYER" && (
+                          <>
+                            <button
+                              onClick={() => openDeletePlayerConfirmation(player)}
+                              title="Delete player"
+                              className="transition hover:text-[#ffab9e]"
+                            >
+                              <Trash2 size={18} />
+                            </button>
+                            <button
+                              onClick={() => {
+                                setSelectedPlayer(player);
+                                setOpenModal("changeStatus");
+                              }}
+                              title="Change status"
+                              className="transition hover:text-[#84d8e8]"
+                            >
+                              <MoreVertical size={18} />
+                            </button>
+                          </>
+                        )}
                       </div>
                     </td>
                   </tr>
@@ -872,7 +891,10 @@ export default function AdminPage() {
       </section>
 
       {openModal === "createUser" && (
-        <Modal title="New Player">
+        <Modal title={newUserRole === "ADMIN" ? "New Admin" : "New Player"}>
+          <p className="mb-4 text-sm font-black uppercase tracking-[0.12em] text-[#8ed8ec]">
+            Account role: {newUserRole === "ADMIN" ? "Administrator" : "Player"}
+          </p>
           <input
             value={fullName}
             onChange={(event) => setFullName(event.target.value)}
@@ -890,7 +912,10 @@ export default function AdminPage() {
           <p className="mb-6 text-sm text-zinc-400">Default Password</p>
 
           <ModalActions
-            cancel={() => setOpenModal(null)}
+            cancel={() => {
+              setNewUserRole("PLAYER");
+              setOpenModal(null);
+            }}
             confirm={createPlayer}
             confirmText={isLoading ? "Creating..." : "Create User"}
             disabled={isLoading}
@@ -987,7 +1012,7 @@ export default function AdminPage() {
       )}
 
       {openModal === "renamePlayer" && (
-        <Modal title="Rename Player">
+        <Modal title="Edit User">
           <p className="mb-3 text-sm text-zinc-400">
             {selectedPlayer?.email}
           </p>
@@ -995,7 +1020,7 @@ export default function AdminPage() {
           <input
             value={renameFullName}
             onChange={(event) => setRenameFullName(event.target.value)}
-            placeholder="New player name"
+            placeholder="New user name"
             className="mb-4 h-[54px] w-full rounded border border-white/10 bg-[#070d0d] px-4 text-zinc-100 outline-none focus:border-[#8ed8ec]"
           />
 
@@ -1014,7 +1039,7 @@ export default function AdminPage() {
               setOpenModal(null);
             }}
             confirm={renamePlayer}
-            confirmText={isLoading ? "Saving..." : "Save Player"}
+            confirmText={isLoading ? "Saving..." : "Save User"}
             disabled={isLoading}
           />
         </Modal>
@@ -1117,6 +1142,25 @@ export default function AdminPage() {
   );
 }
 
+function canRenameUser(
+  user: Player,
+  currentUser: CurrentUser | null,
+) {
+  if (!currentUser || currentUser.role === "PLAYER") {
+    return false;
+  }
+
+  if (user.role === "SUPER_ADMIN") {
+    return false;
+  }
+
+  if (currentUser.role === "SUPER_ADMIN") {
+    return true;
+  }
+
+  return user.role === "PLAYER" || Number(user.id) === currentUser.id;
+}
+
 function mapUserToPlayer(user: BackendUser): Player {
   return {
     id: String(user.id),
@@ -1124,7 +1168,7 @@ function mapUserToPlayer(user: BackendUser): Player {
     fullName: user.fullName,
     email: user.email,
     role: user.role,
-    rank: user.role === "ADMIN" ? "ELITE" : "ROOKIE",
+    rank: user.role === "PLAYER" ? "ROOKIE" : "ELITE",
     points: 0,
     status: user.status ?? "ACTIVE",
     events: user.eventsCount ?? 0,
