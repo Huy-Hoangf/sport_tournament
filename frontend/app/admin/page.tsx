@@ -64,7 +64,7 @@ type ImportedPlayer = {
   email: string;
 };
 
-type AdminView = 'dashboard' | 'players';
+type AdminView = 'dashboard' | 'tournaments' | 'players';
 type StatusFilter = "ALL" | Player["status"];
 
 const PLAYERS_PER_PAGE = 7;
@@ -81,6 +81,7 @@ export default function AdminPage() {
   const [newUserRole, setNewUserRole] = useState<"ADMIN" | "PLAYER">("PLAYER");
   const [isLoading, setIsLoading] = useState(false);
   const [isNameSearchOpen, setIsNameSearchOpen] = useState(false);
+  const [isPlayerActionsOpen, setIsPlayerActionsOpen] = useState(false);
   const [nameSearch, setNameSearch] = useState("");
   const [statusFilter, setStatusFilter] = useState<StatusFilter>("ALL");
   const [currentPage, setCurrentPage] = useState(1);
@@ -586,7 +587,7 @@ export default function AdminPage() {
 
         <nav className="mt-8 space-y-2 text-sm font-bold">
           <MenuItem active={activeView === "dashboard"} icon={<LayoutDashboard size={21} />} label="Dashboard" onClick={() => setActiveView("dashboard")} />
-          <MenuItem icon={<Trophy size={21} />} label="Tournaments" onClick={() => showNotice("this feature is not ready")} />
+          <MenuItem active={activeView === "tournaments"} icon={<Trophy size={21} />} label="Tournaments" onClick={() => setActiveView("tournaments")} />
           <MenuItem icon={<Gamepad2 size={21} />} label="Matches" onClick={() => showNotice("this feature is not ready")} />
           {isAdmin && (
             <MenuItem active={activeView === "players"} icon={<Users size={18} />} label="Players" onClick={() => setActiveView("players")} />
@@ -618,8 +619,10 @@ export default function AdminPage() {
       </aside>
 
       <section className="ml-[260px] min-h-screen bg-[#06161b]">
-        {activeView === "dashboard" || !isAdmin ? (
-          <AdminDashboardContent isAdmin={isAdmin} refreshKey={dashboardRefreshKey} />
+        {activeView === "dashboard" ? (
+          <AdminDashboardContent isAdmin={isAdmin} refreshKey={dashboardRefreshKey} view="dashboard" />
+        ) : activeView === "tournaments" ? (
+          <AdminDashboardContent isAdmin={isAdmin} refreshKey={dashboardRefreshKey} view="tournaments" />
         ) : (
         <div className="px-8 py-9">
           <div className="mb-8 flex items-start justify-between gap-6">
@@ -636,6 +639,7 @@ export default function AdminPage() {
               <button
                 onClick={() => {
                   setNewUserRole("PLAYER");
+                  setIsPlayerActionsOpen(false);
                   setOpenModal("createUser");
                 }}
                 className="flex h-[62px] items-center gap-3 rounded bg-[#84d8e8] px-8 text-lg font-black text-[#06161b]"
@@ -644,19 +648,41 @@ export default function AdminPage() {
                 Add Player
               </button>
               {isSuperAdmin && (
-                <button
-                  onClick={() => {
-                    setNewUserRole("ADMIN");
-                    setOpenModal("createUser");
-                  }}
-                  className="flex h-[62px] items-center gap-3 rounded border border-[#84d8e8] bg-[#143942] px-8 text-lg font-black text-[#84d8e8]"
-                >
-                  <ShieldPlus size={25} />
-                  Add Admin
-                </button>
+                <div className="relative">
+                  <button
+                    onClick={() =>
+                      setIsPlayerActionsOpen((isOpen) => !isOpen)
+                    }
+                    className="flex h-[62px] w-[62px] items-center justify-center rounded border border-[#3a4d54] bg-[#0d252d] text-[#dce8eb] transition hover:border-[#84d8e8] hover:text-[#84d8e8]"
+                    title="More player actions"
+                    aria-label="More player actions"
+                    aria-expanded={isPlayerActionsOpen}
+                  >
+                    <MoreVertical size={24} />
+                  </button>
+                  {isPlayerActionsOpen && (
+                    <div className="absolute right-0 top-[70px] z-20 w-[190px] rounded border border-[#3a4d54] bg-[#0d252d] p-2 shadow-2xl">
+                      <button
+                        type="button"
+                        onClick={() => {
+                          setNewUserRole("ADMIN");
+                          setOpenModal("createUser");
+                          setIsPlayerActionsOpen(false);
+                        }}
+                        className="flex w-full items-center gap-3 rounded px-3 py-3 text-left text-sm font-black text-[#84d8e8] transition hover:bg-[#143942]"
+                      >
+                        <ShieldPlus size={18} />
+                        Add Admin
+                      </button>
+                    </div>
+                  )}
+                </div>
               )}
               <button
-                onClick={() => setOpenModal("createUserFromList")}
+                onClick={() => {
+                  setIsPlayerActionsOpen(false);
+                  setOpenModal("createUserFromList");
+                }}
                 className="flex h-[62px] items-center gap-3 rounded bg-[#84d8e8] px-8 text-lg font-black text-[#06161b]"
               >
                 <UserPlus size={27} />

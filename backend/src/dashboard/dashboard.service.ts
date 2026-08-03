@@ -12,8 +12,12 @@ export class DashboardService {
 
   async getDashboard({
     includeAttentionDetails = false,
+    includePrivateTournaments = false,
+    scope = 'today',
   }: {
     includeAttentionDetails?: boolean;
+    includePrivateTournaments?: boolean;
+    scope?: 'today' | 'all';
   } = {}) {
     const [
       summaryRows,
@@ -23,11 +27,19 @@ export class DashboardService {
       activities,
       inactivePlayers,
     ] = await Promise.all([
-      this.usersRepository.query(this.summaryQuery()),
-      this.usersRepository.query(this.tournamentsQuery()),
-      this.usersRepository.query(this.tournamentMatchesQuery()),
-      this.usersRepository.query(this.upcomingScheduleQuery()),
-      this.usersRepository.query(this.activitiesQuery()),
+      this.usersRepository.query(
+        this.summaryQuery(scope, includePrivateTournaments),
+      ),
+      this.usersRepository.query(
+        this.tournamentsQuery(scope, includePrivateTournaments),
+      ),
+      this.usersRepository.query(
+        this.tournamentMatchesQuery(scope, includePrivateTournaments),
+      ),
+      this.usersRepository.query(
+        this.upcomingScheduleQuery(scope, includePrivateTournaments),
+      ),
+      this.usersRepository.query(this.activitiesQuery(includePrivateTournaments)),
       includeAttentionDetails
         ? this.usersRepository.query(this.inactivePlayersQuery())
         : Promise.resolve([]),
@@ -62,6 +74,7 @@ export class DashboardService {
         teams: Number(row.teams ?? 0),
         matches: Number(row.matches ?? 0),
         source: row.source ?? 'MANUAL',
+        visibility: row.visibility ?? 'PUBLIC',
       })),
       tournamentMatches: tournamentMatches.map((row) => ({
         id: Number(row.id),
@@ -74,6 +87,8 @@ export class DashboardService {
         deadline: row.deadline,
         source: row.source ?? 'MANUAL',
         status: row.status,
+        actualHomeScore: this.mapNullableNumber(row.actualHomeScore),
+        actualAwayScore: this.mapNullableNumber(row.actualAwayScore),
       })),
       upcomingSchedule: upcomingSchedule.map((row) => ({
         id: Number(row.id),
@@ -85,6 +100,8 @@ export class DashboardService {
         deadline: row.deadline,
         source: row.source ?? 'MANUAL',
         status: row.status,
+        actualHomeScore: this.mapNullableNumber(row.actualHomeScore),
+        actualAwayScore: this.mapNullableNumber(row.actualAwayScore),
       })),
       recentActivity: activities.map((row) => ({
         id: row.id,
@@ -105,34 +122,92 @@ export class DashboardService {
     };
   }
 
-  private summaryQuery() {
+  private summaryQuery(scope: 'today' | 'all', includePrivateTournaments: boolean) {
+    const tournamentVisibilityCondition = includePrivateTournaments
+      ? ''
+      : "AND t.visibility = 'PUBLIC'";
+    const matchVisibilityCondition = includePrivateTournaments
+      ? ''
+      : "AND t.visibility = 'PUBLIC'";
+    const activeTournamentCondition =
+      scope === 'today'
+        ? `AND EXISTS (
+            SELECT 1
+            FROM matches tm
+            WHERE tm.tournament_id = t.id
+              AND ${this.todayDateCondition('tm.scheduled_time')}
+          )`
+        : '';
+    const upcomingMatchCondition =
+      scope === 'today'
+        ? `AND ${this.todayDateCondition('m.scheduled_time')}`
+        : '';
+
     return `
       SELECT
-        (SELECT COUNT(*) FROM tournaments WHERE status = 'ACTIVE') AS "activeTournaments",
+        (
+          SELECT COUNT(*)
+          FROM tournaments t
+          WHERE t.status = 'ACTIVE'
+            ${tournamentVisibilityCondition}
+            ${activeTournamentCondition}
+        ) AS "activeTournaments",
         (SELECT COUNT(*) FROM users WHERE role = 'PLAYER') AS "totalPlayers",
         (SELECT COUNT(*) FROM users WHERE role = 'PLAYER' AND user_status = 'INACTIVE') AS "inactivePlayers",
         (SELECT COUNT(*) FROM users WHERE role = 'PLAYER' AND user_status = 'PENDING') AS "pendingPlayers",
-        (SELECT COUNT(*) FROM matches WHERE scheduled_time >= NOW() AND status IN ('PENDING', 'LIVE')) AS "upcomingMatches",
-        (SELECT COUNT(*) FROM predictions p JOIN matches m ON m.id = p.match_id WHERE m.status IN ('PENDING', 'LIVE')) AS "pendingPredictions",
-        (SELECT COUNT(*) FROM matches WHERE sync_status IS NOT NULL AND sync_status <> 'SYNCED') AS "warningMatches",
+        (
+          SELECT COUNT(*)
+          FROM matches m
+          JOIN tournaments t ON t.id = m.tournament_id
+          WHERE m.scheduled_time >= NOW()
+            AND m.status IN ('PENDING', 'LIVE')
+            ${matchVisibilityCondition}
+            ${upcomingMatchCondition}
+        ) AS "upcomingMatches",
+        (
+          SELECT COUNT(*)
+          FROM predictions p
+          JOIN matches m ON m.id = p.match_id
+          JOIN tournaments t ON t.id = m.tournament_id
+          WHERE m.status IN ('PENDING', 'LIVE')
+            ${matchVisibilityCondition}
+            ${scope === 'today' ? `AND ${this.todayDateCondition('m.scheduled_time')}` : ''}
+        ) AS "pendingPredictions",
+        (
+          SELECT COUNT(*)
+          FROM matches m
+          JOIN tournaments t ON t.id = m.tournament_id
+          WHERE m.sync_status IS NOT NULL
+            AND m.sync_status <> 'SYNCED'
+            ${matchVisibilityCondition}
+            ${scope === 'today' ? `AND ${this.todayDateCondition('m.scheduled_time')}` : ''}
+        ) AS "warningMatches",
         (SELECT MAX(last_synced_at) FROM matches WHERE last_synced_at IS NOT NULL) AS "lastApiSync"
     `;
   }
 
-  private tournamentsQuery() {
+  private tournamentsQuery(scope: 'today' | 'all', includePrivateTournaments: boolean) {
+    const whereClause = this.tournamentWhereClause(scope, includePrivateTournaments);
+    const matchJoinCondition =
+      scope === 'today'
+        ? `m.tournament_id = t.id AND ${this.todayDateCondition('m.scheduled_time')}`
+        : 'm.tournament_id = t.id';
+
     return `
       SELECT
         t.id,
         t.name,
         t.sport_type AS "sportType",
         t.status,
+        t.visibility,
         COUNT(DISTINCT team.id) AS teams,
         COUNT(DISTINCT m.id) AS matches,
         COALESCE(MAX(m.external_source), 'MANUAL') AS source
       FROM tournaments t
       LEFT JOIN teams team ON team.tournament_id = t.id
-      LEFT JOIN matches m ON m.tournament_id = t.id
-      GROUP BY t.id, t.name, t.sport_type, t.status, t.updated_at, t.created_at
+      LEFT JOIN matches m ON ${matchJoinCondition}
+      ${whereClause}
+      GROUP BY t.id, t.name, t.sport_type, t.status, t.visibility, t.updated_at, t.created_at
       ORDER BY
         CASE t.status
           WHEN 'ACTIVE' THEN 0
@@ -167,7 +242,13 @@ export class DashboardService {
     `;
   }
 
-  private upcomingScheduleQuery() {
+  private upcomingScheduleQuery(scope: 'today' | 'all', includePrivateTournaments: boolean) {
+    const visibilityCondition = includePrivateTournaments
+      ? ''
+      : "AND t.visibility = 'PUBLIC'";
+    const scopeCondition =
+      scope === 'today' ? `AND ${this.todayDateCondition('m.scheduled_time')}` : '';
+
     return `
       SELECT
         m.id,
@@ -177,18 +258,28 @@ export class DashboardService {
         m.scheduled_time AS "scheduledTime",
         m.scheduled_time - (m.lock_minutes_before_start * INTERVAL '1 minute') AS deadline,
         COALESCE(m.external_source, 'MANUAL') AS source,
-        m.status
+        m.status,
+        m.actual_home_score AS "actualHomeScore",
+        m.actual_away_score AS "actualAwayScore"
       FROM matches m
       JOIN tournaments t ON t.id = m.tournament_id
       LEFT JOIN teams home ON home.id = m.home_team_id
       LEFT JOIN teams away ON away.id = m.away_team_id
       WHERE m.scheduled_time >= NOW()
+        ${visibilityCondition}
+        ${scopeCondition}
       ORDER BY m.scheduled_time ASC
       LIMIT 8
     `;
   }
 
-  private tournamentMatchesQuery() {
+  private tournamentMatchesQuery(scope: 'today' | 'all', includePrivateTournaments: boolean) {
+    const visibilityCondition = includePrivateTournaments
+      ? ''
+      : "AND t.visibility = 'PUBLIC'";
+    const scopeCondition =
+      scope === 'today' ? `AND ${this.todayDateCondition('m.scheduled_time')}` : '';
+
     return `
       SELECT
         ranked.id,
@@ -199,7 +290,9 @@ export class DashboardService {
         ranked."scheduledTime",
         ranked.deadline,
         ranked.source,
-        ranked.status
+        ranked.status,
+        ranked."actualHomeScore",
+        ranked."actualAwayScore"
       FROM (
         SELECT
           m.id,
@@ -210,6 +303,8 @@ export class DashboardService {
           m.scheduled_time AS "scheduledTime",
           m.scheduled_time - (m.lock_minutes_before_start * INTERVAL '1 minute') AS deadline,
           COALESCE(m.external_source, 'MANUAL') AS source,
+          m.actual_home_score AS "actualHomeScore",
+          m.actual_away_score AS "actualAwayScore",
           m.status,
           ROW_NUMBER() OVER (
             PARTITION BY m.tournament_id
@@ -222,13 +317,23 @@ export class DashboardService {
         JOIN tournaments t ON t.id = m.tournament_id
         LEFT JOIN teams home ON home.id = m.home_team_id
         LEFT JOIN teams away ON away.id = m.away_team_id
+        WHERE 1 = 1
+          ${visibilityCondition}
+          ${scopeCondition}
       ) ranked
       WHERE ranked.row_number <= 20
       ORDER BY ranked."tournamentId", ranked."scheduledTime" ASC
     `;
   }
 
-  private activitiesQuery() {
+  private activitiesQuery(includePrivateTournaments: boolean) {
+    const visibilityCondition = includePrivateTournaments
+      ? ''
+      : "WHERE t.visibility = 'PUBLIC'";
+    const matchVisibilityCondition = includePrivateTournaments
+      ? ''
+      : "WHERE t.visibility = 'PUBLIC'";
+
     return `
       SELECT *
       FROM (
@@ -238,6 +343,8 @@ export class DashboardService {
           CONCAT('Match #', m.id, ' moved to ', m.status) AS message,
           m.updated_at AS "createdAt"
         FROM matches m
+        JOIN tournaments t ON t.id = m.tournament_id
+        ${matchVisibilityCondition}
         UNION ALL
         SELECT
           CONCAT('tournament-', t.id) AS id,
@@ -245,6 +352,7 @@ export class DashboardService {
           CONCAT(t.name, ' tournament updated') AS message,
           t.updated_at AS "createdAt"
         FROM tournaments t
+        ${visibilityCondition}
         UNION ALL
         SELECT
           CONCAT('user-', u.id) AS id,
@@ -289,5 +397,40 @@ export class DashboardService {
     );
 
     return `FD_${String(hash).padStart(5, '0').slice(-5)}`;
+  }
+
+  private tournamentWhereClause(
+    scope: 'today' | 'all',
+    includePrivateTournaments: boolean,
+  ) {
+    const conditions: string[] = [];
+
+    if (!includePrivateTournaments) {
+      conditions.push("t.visibility = 'PUBLIC'");
+    }
+
+    if (scope === 'today') {
+      conditions.push(`EXISTS (
+        SELECT 1
+        FROM matches today_match
+        WHERE today_match.tournament_id = t.id
+          AND ${this.todayDateCondition('today_match.scheduled_time')}
+      )`);
+    }
+
+    return conditions.length > 0 ? `WHERE ${conditions.join(' AND ')}` : '';
+  }
+
+  private todayDateCondition(column: string) {
+    return `(${column} AT TIME ZONE 'Asia/Ho_Chi_Minh')::date = (NOW() AT TIME ZONE 'Asia/Ho_Chi_Minh')::date`;
+  }
+
+  private mapNullableNumber(value: unknown) {
+    if (value === null || value === undefined) {
+      return null;
+    }
+
+    const numberValue = Number(value);
+    return Number.isNaN(numberValue) ? null : numberValue;
   }
 }

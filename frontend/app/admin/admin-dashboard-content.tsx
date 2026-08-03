@@ -15,6 +15,7 @@ import {
   Pencil,
   Plus,
   RefreshCw,
+  Search,
   ShieldCheck,
   Trash2,
   Trophy,
@@ -54,6 +55,7 @@ type TournamentRow = {
   name: string;
   sportType?: string;
   status: string;
+  visibility: "PUBLIC" | "PRIVATE";
   teams: number;
   matches: number;
   source: string;
@@ -111,6 +113,8 @@ type MatchRow = {
   deadline: string;
   source: string;
   status: string;
+  actualHomeScore: number | null;
+  actualAwayScore: number | null;
 };
 
 type ActivityRow = {
@@ -162,9 +166,11 @@ const emptyDashboard: DashboardData = {
 export default function AdminDashboardContent({
   isAdmin,
   refreshKey,
+  view = "dashboard",
 }: {
   isAdmin: boolean;
   refreshKey: number;
+  view?: "dashboard" | "tournaments";
 }) {
   const [dashboard, setDashboard] = useState<DashboardData>(emptyDashboard);
   const [isLoading, setIsLoading] = useState(true);
@@ -201,8 +207,10 @@ export default function AdminDashboardContent({
   const [selectedTournamentId, setSelectedTournamentId] = useState<
     number | null
   >(null);
+  const [tournamentSearch, setTournamentSearch] = useState("");
   const [tournamentForm, setTournamentForm] =
     useState<TournamentForm>(emptyTournamentForm);
+  const isTournamentView = view === "tournaments";
 
   const showNotice = useCallback(
     (message: string, tone: Notice["tone"] = "info") => {
@@ -215,7 +223,9 @@ export default function AdminDashboardContent({
     setIsLoading(true);
 
     try {
-      const data = await apiRequest<DashboardData>("/dashboard");
+      const data = await apiRequest<DashboardData>(
+        `/dashboard?scope=${isTournamentView ? "all" : "today"}`,
+      );
       setDashboard({
         ...data,
         inactivePlayers: data.inactivePlayers ?? [],
@@ -228,7 +238,7 @@ export default function AdminDashboardContent({
     } finally {
       setIsLoading(false);
     }
-  }, [showNotice]);
+  }, [isTournamentView, showNotice]);
 
   useEffect(() => {
     queueMicrotask(() => {
@@ -600,7 +610,7 @@ export default function AdminDashboardContent({
     setTournamentForm({
       name: tournament.name,
       status: normalizeStatus(tournament.status),
-      visibility: "PUBLIC",
+      visibility: tournament.visibility ?? "PUBLIC",
     });
     setOpenTournamentForm(true);
   }
@@ -641,7 +651,24 @@ export default function AdminDashboardContent({
           : 0;
   const allImportItemsSelected =
     importItemCount > 0 && selectedImportCount === importItemCount;
-  const tournamentGroups = getTournamentGroups(dashboard.tournaments);
+  const searchedTournaments = dashboard.tournaments.filter((tournament) => {
+    const keyword = tournamentSearch.trim().toLowerCase();
+
+    if (!keyword) {
+      return true;
+    }
+
+    return (
+      tournament.name.toLowerCase().includes(keyword) ||
+      String(tournament.id).includes(keyword) ||
+      (tournament.source ?? "").toLowerCase().includes(keyword)
+    );
+  });
+  const tournamentGroups = getTournamentGroups(searchedTournaments);
+  const pageTitle = isTournamentView ? "Tournament Management" : "Dashboard";
+  const pageDescription = isTournamentView
+    ? "Oversee competition life cycles, participant metrics, and scheduling parameters."
+    : "Showing tournaments and matches scheduled for today.";
 
   async function saveTournament() {
     if (!isAdmin) {
@@ -715,15 +742,15 @@ export default function AdminDashboardContent({
       <div className="mb-8 flex items-start justify-between gap-6">
         <div>
           <h2 className="text-[34px] font-black leading-none text-white">
-            Dashboard
+            {pageTitle}
           </h2>
           <p className="mt-3 text-[16px] text-[#adbdc2]">
-            Welcome back. System is running within optimal parameters.
+            {pageDescription}
           </p>
         </div>
 
         <div className="flex flex-wrap justify-end gap-4">
-          {isAdmin ? (
+          {isAdmin && isTournamentView ? (
             <>
               <DashboardActionButton
                 icon={<RefreshCw size={18} />}
@@ -743,83 +770,109 @@ export default function AdminDashboardContent({
                 Create Tournament
               </button>
             </>
-          ) : (
+          ) : !isAdmin ? (
             <div className="rounded border border-[#3a4d54] bg-[#0d252d] px-5 py-4 text-sm font-bold text-[#9fb2b8]">
               View-only access
             </div>
-          )}
+          ) : null}
         </div>
       </div>
 
-      <section className="mb-5 rounded border border-[#3a4d54] bg-[#0d252d] p-4">
-        <div className="flex flex-wrap items-center gap-4">
-          <div className="flex h-12 w-12 items-center justify-center bg-[#143942] text-[#84d8e8]">
-            <Cloud size={23} />
+      {isTournamentView && (
+        <section className="mb-5 rounded border border-[#3a4d54] bg-[#0d252d] p-5">
+          <div className="grid gap-4 xl:grid-cols-[minmax(280px,1fr)_220px]">
+            <label className="flex h-12 items-center gap-3 border border-[#3a4d54] bg-[#06161b] px-4 text-[#9fb2b8] focus-within:border-[#84d8e8]">
+              <Search size={18} className="shrink-0 text-[#84d8e8]" />
+              <input
+                value={tournamentSearch}
+                onChange={(event) => setTournamentSearch(event.target.value)}
+                placeholder="Search tournaments by name, source, or ID..."
+                className="h-full min-w-0 flex-1 bg-transparent text-sm font-bold text-white outline-none placeholder:text-[#789098]"
+              />
+            </label>
+            <div className="flex h-12 items-center justify-center border border-[#3a4d54] bg-[#14272e] text-xs font-black uppercase tracking-[0.08em] text-[#84d8e8]">
+              {searchedTournaments.length} tournaments
+            </div>
           </div>
-          <div className="flex-1">
-            <p className="text-sm font-black uppercase text-[#84d8e8]">
-              API Status:{" "}
-              {dashboard.apiStatus.connected ? "Connected" : "Offline"}
-            </p>
-            <p className="mt-1 text-sm text-[#9fb2b8]">
-              {dashboard.apiStatus.provider} - Last sync:{" "}
-              {formatRelative(dashboard.apiStatus.lastSync)}
-            </p>
-          </div>
-          <div className="bg-[#14272e] px-4 py-2 text-xs font-black uppercase text-[#c4d3d8]">
-            ID: {dashboard.apiStatus.externalId}
-          </div>
-          <button
-            onClick={() => void loadDashboard()}
-            title="Refresh dashboard"
-            className="text-[#dce8eb]"
-          >
-            <RefreshCw size={20} className={isLoading ? "animate-spin" : ""} />
-          </button>
-        </div>
-      </section>
+        </section>
+      )}
 
-      <section
-        className={`mb-5 grid gap-6 ${
-          isAdmin ? "md:grid-cols-2 xl:grid-cols-4" : "md:grid-cols-3"
-        }`}
-      >
-        <DashboardStatCard
-          title="Active Tournaments"
-          value={dashboard.stats.activeTournaments}
-          note="Live in database"
-          icon={<Trophy size={22} />}
-        />
-        <DashboardStatCard
-          title="Total Players"
-          value={dashboard.stats.totalPlayers}
-          note="Registered players"
-          icon={<Users size={22} />}
-        />
-        <DashboardStatCard
-          title="Upcoming Matches"
-          value={dashboard.stats.upcomingMatches}
-          note="From now onward"
-          icon={<CalendarDays size={22} />}
-        />
-        {isAdmin && (
-          <DashboardStatCard
-            tone="warning"
-            title="Attention Needed"
-            value={dashboard.stats.attentionNeeded}
-            note={`${dashboard.stats.inactivePlayers} inactive, ${dashboard.stats.pendingPlayers} pending`}
-            icon={<AlertTriangle size={24} />}
-            onClick={() => setOpenAttentionDetails(true)}
-          />
-        )}
-      </section>
+      {!isTournamentView && (
+        <>
+          <section className="mb-5 rounded border border-[#3a4d54] bg-[#0d252d] p-4">
+            <div className="flex flex-wrap items-center gap-4">
+              <div className="flex h-12 w-12 items-center justify-center bg-[#143942] text-[#84d8e8]">
+                <Cloud size={23} />
+              </div>
+              <div className="flex-1">
+                <p className="text-sm font-black uppercase text-[#84d8e8]">
+                  API Status:{" "}
+                  {dashboard.apiStatus.connected ? "Connected" : "Offline"}
+                </p>
+                <p className="mt-1 text-sm text-[#9fb2b8]">
+                  {dashboard.apiStatus.provider} - Last sync:{" "}
+                  {formatRelative(dashboard.apiStatus.lastSync)}
+                </p>
+              </div>
+              <div className="bg-[#14272e] px-4 py-2 text-xs font-black uppercase text-[#c4d3d8]">
+                ID: {dashboard.apiStatus.externalId}
+              </div>
+              <button
+                onClick={() => void loadDashboard()}
+                title="Refresh dashboard"
+                className="text-[#dce8eb]"
+              >
+                <RefreshCw
+                  size={20}
+                  className={isLoading ? "animate-spin" : ""}
+                />
+              </button>
+            </div>
+          </section>
+
+          <section
+            className={`mb-5 grid gap-6 ${
+              isAdmin ? "md:grid-cols-2 xl:grid-cols-4" : "md:grid-cols-3"
+            }`}
+          >
+            <DashboardStatCard
+              title="Active Tournaments"
+              value={dashboard.stats.activeTournaments}
+              note="Today in database"
+              icon={<Trophy size={22} />}
+            />
+            <DashboardStatCard
+              title="Total Players"
+              value={dashboard.stats.totalPlayers}
+              note="Registered players"
+              icon={<Users size={22} />}
+            />
+            <DashboardStatCard
+              title="Today Matches"
+              value={dashboard.stats.upcomingMatches}
+              note="Scheduled today"
+              icon={<CalendarDays size={22} />}
+            />
+            {isAdmin && (
+              <DashboardStatCard
+                tone="warning"
+                title="Attention Needed"
+                value={dashboard.stats.attentionNeeded}
+                note={`${dashboard.stats.inactivePlayers} inactive, ${dashboard.stats.pendingPlayers} pending`}
+                icon={<AlertTriangle size={24} />}
+                onClick={() => setOpenAttentionDetails(true)}
+              />
+            )}
+          </section>
+        </>
+      )}
 
       <div className="grid gap-5 xl:grid-cols-[minmax(0,1fr)_390px]">
         <div className="space-y-5">
           {tournamentGroups.map((group) => (
             <TournamentManagementTable
               key={group.sportType}
-              title={group.title}
+              title={isTournamentView ? group.title : `Today ${group.title}`}
               total={group.total}
               tournaments={group.tournaments}
               emptyMessage={group.emptyMessage}
@@ -1834,6 +1887,7 @@ function TournamentMatchDetails({
                 {isF1 ? "Session Time" : "Match Time"}
               </th>
               <th className="w-48 px-4 py-3">Prediction Lock</th>
+              <th className="w-28 px-4 py-3">Score</th>
               <th className="w-40 px-4 py-3">Source</th>
               <th className="w-32 px-4 py-3">Status</th>
             </tr>
@@ -1862,6 +1916,7 @@ function TournamentMatchDetails({
                 <td className="px-4 text-white">
                   {formatDateTime(match.deadline)}
                 </td>
+                <td className="px-4 text-white">{formatScore(match)}</td>
                 <td className="px-4">
                   <DashboardSourceBadge source={match.source} />
                 </td>
@@ -1873,7 +1928,7 @@ function TournamentMatchDetails({
             {matches.length === 0 && (
               <tr>
                 <td
-                  colSpan={5}
+                  colSpan={6}
                   className="h-[96px] bg-[#0d252d] text-center text-[#9fb2b8]"
                 >
                   No matches found for this tournament.
@@ -2185,6 +2240,14 @@ function formatDateTime(value: string | null) {
     hour: "2-digit",
     minute: "2-digit",
   }).format(date);
+}
+
+function formatScore(match: MatchRow) {
+  if (match.actualHomeScore === null || match.actualAwayScore === null) {
+    return "-";
+  }
+
+  return `${match.actualHomeScore} - ${match.actualAwayScore}`;
 }
 
 function formatRelative(value: string | null) {

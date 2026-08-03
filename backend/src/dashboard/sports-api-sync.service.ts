@@ -635,7 +635,11 @@ export class SportsApiSyncService {
       ...(liveMatchesResponse.response ?? []),
       ...(todayMatchesResponse.response ?? []),
     ]) {
-      if (match.fixture?.id && this.isFootballFixtureCurrentOrFuture(match)) {
+      if (
+        match.fixture?.id &&
+        (this.isFootballFixtureToday(match) ||
+          this.mapMatchStatus(match.fixture.status?.short ?? '') === 'LIVE')
+      ) {
         matchesById.set(String(match.fixture.id), match);
       }
     }
@@ -824,6 +828,19 @@ export class SportsApiSyncService {
     const scheduledTime = new Date(match.fixture.date).getTime();
 
     return Number.isFinite(scheduledTime) && scheduledTime >= Date.now();
+  }
+
+  private isFootballFixtureToday(match: FootballMatch) {
+    const scheduledTime = new Date(match.fixture.date);
+
+    if (Number.isNaN(scheduledTime.getTime())) {
+      return false;
+    }
+
+    return (
+      this.formatVietnamDateKey(scheduledTime) ===
+      this.formatVietnamDateKey(new Date())
+    );
   }
 
   private async syncF1(adminId: number) {
@@ -1721,7 +1738,16 @@ export class SportsApiSyncService {
   }
 
   private formatApiDate(date: Date) {
-    return date.toISOString().slice(0, 10);
+    return this.formatVietnamDateKey(date);
+  }
+
+  private formatVietnamDateKey(date: Date) {
+    return new Intl.DateTimeFormat('en-CA', {
+      timeZone: 'Asia/Ho_Chi_Minh',
+      year: 'numeric',
+      month: '2-digit',
+      day: '2-digit',
+    }).format(date);
   }
 
   private async findAdminId() {
