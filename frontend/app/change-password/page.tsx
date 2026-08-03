@@ -137,11 +137,11 @@ export default function ChangePasswordPage() {
       <NoticeBanner notice={notice} onClose={() => setNotice(null)} />
 
       <header className="flex h-[90px] shrink-0 items-center justify-between border-b border-white/10 px-8">
-        <h1 className="text-[30px] font-black text-[#9ddff2] drop-shadow-[0_0_10px_rgba(142,216,236,0.45)]">
+        <h1 className="text-[30px] font-black text-[#84d8e8] drop-shadow-[0_0_10px_rgba(132,216,232,0.35)]">
           TWENTY-TECH
         </h1>
         <div className="flex items-center gap-3 text-sm font-bold uppercase text-zinc-300">
-          <ShieldCheck size={22} className="text-[#8ed8ec]" />
+          <ShieldCheck size={22} className="text-[#84d8e8]" />
           Secure account setup
         </div>
       </header>
@@ -149,10 +149,10 @@ export default function ChangePasswordPage() {
       <section className="flex flex-1 items-center justify-center px-5 py-10">
         <form
           onSubmit={handleSubmit}
-          className="w-full max-w-[600px] rounded-lg border border-[#8ed8ec44] bg-[#111a1acc] px-10 py-10 shadow-[0_0_55px_rgba(75,190,210,0.12)] backdrop-blur"
+          className="w-full max-w-[600px] rounded-lg border border-[#84d8e844] bg-[#0d1b1ecc] px-10 py-10 shadow-[0_0_45px_rgba(132,216,232,0.1)] backdrop-blur"
         >
           <div className="mb-8 flex items-start gap-4">
-            <div className="flex h-12 w-12 shrink-0 items-center justify-center rounded bg-[#15323a] text-[#8ed8ec]">
+            <div className="flex h-12 w-12 shrink-0 items-center justify-center rounded bg-[#15323a] text-[#84d8e8]">
               <KeyRound size={26} />
             </div>
             <div>
@@ -173,7 +173,7 @@ export default function ChangePasswordPage() {
             <p className="mt-1 font-bold text-zinc-200">
               {pendingUser?.fullName ?? "Player"}
             </p>
-            <p className="text-sm text-[#9ddff2]">{pendingUser?.email}</p>
+            <p className="text-sm text-[#84d8e8]">{pendingUser?.email}</p>
           </div>
 
           <PasswordField
@@ -200,7 +200,7 @@ export default function ChangePasswordPage() {
           <button
             type="submit"
             disabled={isLoading || !pendingUser}
-            className="flex h-[62px] w-full items-center justify-center gap-3 rounded bg-[#8ed8ec] text-base font-black uppercase text-[#122226] shadow-[0_0_22px_rgba(142,216,236,0.3)] transition hover:bg-[#a4e7f5] disabled:opacity-60"
+            className="flex h-[62px] w-full items-center justify-center gap-3 rounded bg-[#84d8e8] text-base font-black uppercase text-[#102026] shadow-[0_0_20px_rgba(132,216,232,0.25)] transition hover:bg-[#a5e9f3] disabled:opacity-60"
           >
             {isLoading ? "Saving..." : "Save password and continue"}
             <LockKeyhole size={21} />
@@ -239,7 +239,7 @@ function PasswordField({
         <LockKeyhole size={16} />
         {label}
       </span>
-      <span className="flex h-[62px] items-center rounded border border-white/10 bg-[#080f0f] px-4 focus-within:border-[#8ed8ec88]">
+      <span className="flex h-[62px] items-center rounded border border-white/10 bg-[#080f0f] px-4 focus-within:border-[#84d8e888]">
         <input
           type={visible ? "text" : "password"}
           value={value}
@@ -250,7 +250,7 @@ function PasswordField({
         <button
           type="button"
           onClick={onToggle}
-          className="ml-3 text-zinc-500 transition hover:text-[#8ed8ec]"
+          className="ml-3 text-zinc-500 transition hover:text-[#84d8e8]"
           aria-label={visible ? `Hide ${label}` : `Show ${label}`}
         >
           {visible ? <EyeOff size={22} /> : <Eye size={22} />}

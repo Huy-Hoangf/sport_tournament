@@ -609,7 +609,7 @@ export default function AdminPage() {
 
           <button
             onClick={logout}
-            className="flex items-center gap-4 text-xl text-[#ffab9e]"
+            className="flex items-center gap-4 text-xl text-[#ff8a8a] transition hover:text-[#ffb0b0]"
           >
             <LogOut size={21} />
             Logout
@@ -665,7 +665,7 @@ export default function AdminPage() {
               <button
                 onClick={openDeleteAllPlayersConfirmation}
                 disabled={isLoading}
-                className="flex h-[62px] items-center gap-3 rounded border border-[#ffab9e66] bg-[#2b1414] px-6 text-lg font-black text-[#ffab9e] transition hover:border-[#ffab9e] disabled:opacity-60"
+                className="flex h-[62px] items-center gap-3 rounded border border-[#ff6b6b99] bg-[#35171b] px-6 text-lg font-black text-[#ff8a8a] transition hover:border-[#ff6b6b] hover:bg-[#421b20] disabled:opacity-60"
               >
                 <Trash2 size={24} />
                 Delete All Players
@@ -818,7 +818,7 @@ export default function AdminPage() {
                             <button
                               onClick={() => openDeletePlayerConfirmation(player)}
                               title="Delete player"
-                              className="transition hover:text-[#ffab9e]"
+                              className="text-[#ff6b6b] transition hover:text-[#ff9b9b]"
                             >
                               <Trash2 size={18} />
                             </button>
@@ -1114,12 +1114,12 @@ export default function AdminPage() {
       )}
 
       {openModal === "deletePlayer" && selectedPlayer && (
-        <Modal title="Delete Player">
+        <Modal title="Delete Player" tone="danger">
           <p className="text-base font-bold text-white">
             Do you want to delete this player?
           </p>
-          <div className="my-5 rounded border border-[#ffab9e55] bg-[#2b1414] px-4 py-4">
-            <p className="font-black text-[#ffab9e]">
+          <div className="my-5 rounded border border-[#ff6b6b66] bg-[#35171b] px-4 py-4">
+            <p className="font-black text-[#ff8a8a]">
               {selectedPlayer.fullName}
             </p>
             <p className="mt-1 text-sm text-zinc-400">
@@ -1143,11 +1143,11 @@ export default function AdminPage() {
       )}
 
       {openModal === "deleteAllPlayers" && (
-        <Modal title="Delete All Players">
+        <Modal title="Delete All Players" tone="danger">
           <p className="text-base font-bold text-white">
             Do you want to delete all players?
           </p>
-          <p className="my-5 rounded border border-[#ffab9e55] bg-[#2b1414] px-4 py-4 text-sm text-[#ffab9e]">
+          <p className="my-5 rounded border border-[#ff6b6b66] bg-[#35171b] px-4 py-4 text-sm text-[#ff8a8a]">
             {players.filter((player) => player.role === "PLAYER").length} player
             accounts will be deleted. The admin account will be kept.
           </p>
@@ -1563,8 +1563,8 @@ function StatusBadge({ status }: { status: Player["status"] }) {
     status === "ACTIVE"
       ? "border-l-2 border-white bg-[#162b32] text-white"
       : status === "INACTIVE"
-        ? "bg-[#334149] text-[#cbd7db]"
-        : "border-l-2 border-white bg-[#1c3037] text-[#dce8eb]";
+        ? "border-l-2 border-[#ff6b6b] bg-[#35171b] text-[#ffb0b0]"
+        : "border-l-2 border-[#f4c95d] bg-[#302713] text-[#ffe8a3]";
 
   return (
     <span
@@ -1602,14 +1602,28 @@ function PageButton({
 function Modal({
   title,
   children,
+  tone = "normal",
 }: {
   title: string;
   children: React.ReactNode;
+  tone?: "normal" | "danger";
 }) {
   return (
     <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/70">
-      <div className="w-[520px] rounded-lg border border-[#8ed8ec55] bg-[#101818] p-7 shadow-[0_0_50px_rgba(142,216,236,0.18)]">
-        <h2 className="mb-6 text-2xl font-black text-[#8ed8ec]">{title}</h2>
+      <div
+        className={`w-[520px] rounded-lg border bg-[#101818] p-7 ${
+          tone === "danger"
+            ? "border-[#ff6b6b66] shadow-[0_0_50px_rgba(255,107,107,0.12)]"
+            : "border-[#84d8e855] shadow-[0_0_50px_rgba(132,216,232,0.18)]"
+        }`}
+      >
+        <h2
+          className={`mb-6 text-2xl font-black ${
+            tone === "danger" ? "text-[#ff6b6b]" : "text-[#84d8e8]"
+          }`}
+        >
+          {title}
+        </h2>
         {children}
       </div>
     </div>
@@ -1645,8 +1659,8 @@ function ModalActions({
         disabled={disabled}
         className={`h-[46px] rounded px-5 font-black disabled:opacity-60 ${
           danger
-            ? "border border-[#ffab9e66] bg-[#7b2929] text-white"
-            : "bg-[#8ed8ec] text-[#102026]"
+            ? "border border-[#ff8a8a] bg-[#d94747] text-white transition hover:bg-[#ef5757]"
+            : "bg-[#84d8e8] text-[#102026] transition hover:bg-[#a5e9f3]"
         }`}
       >
         {confirmText}

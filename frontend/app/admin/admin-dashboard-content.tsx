@@ -804,7 +804,7 @@ export default function AdminDashboardContent({
         />
         {isAdmin && (
           <DashboardStatCard
-            tone="danger"
+            tone="warning"
             title="Attention Needed"
             value={dashboard.stats.attentionNeeded}
             note={`${dashboard.stats.inactivePlayers} inactive, ${dashboard.stats.pendingPlayers} pending`}
@@ -862,10 +862,10 @@ export default function AdminDashboardContent({
 
       {isAdmin && openAttentionDetails && (
         <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/70 px-4">
-          <section className="w-full max-w-[720px] overflow-hidden rounded border border-[#6b4440] bg-[#0d252d] shadow-2xl">
+          <section className="w-full max-w-[720px] overflow-hidden rounded border border-[#8b7133] bg-[#0d252d] shadow-2xl">
             <header className="flex items-center justify-between border-b border-[#3a4d54] bg-[#14272e] px-6 py-5">
               <div>
-                <h3 className="text-xl font-black uppercase text-[#ffab9e]">
+                <h3 className="text-xl font-black uppercase text-[#f4c95d]">
                   Players Needing Attention
                 </h3>
                 <p className="mt-2 text-sm text-[#9fb2b8]">
@@ -967,12 +967,12 @@ export default function AdminDashboardContent({
                 setConfirmResetApiData(true);
               }}
               disabled={isMutating}
-              className="mt-4 w-full rounded border border-[#8f4b45] bg-[#351a19] px-5 py-4 text-left disabled:opacity-60"
+              className="mt-4 w-full rounded border border-[#ff6b6b99] bg-[#35171b] px-5 py-4 text-left transition hover:border-[#ff6b6b] disabled:opacity-60"
             >
-              <span className="block font-black text-[#ffab9e]">
+              <span className="block font-black text-[#ff8a8a]">
                 Delete all imported API data
               </span>
-              <span className="mt-2 block text-xs text-[#c89992]">
+              <span className="mt-2 block text-xs text-[#f0b4b4]">
                 Clears old API tournaments and matches without calling any API.
               </span>
             </button>
@@ -991,8 +991,8 @@ export default function AdminDashboardContent({
 
       {confirmResetApiData && (
         <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/70 px-4">
-          <div className="w-full max-w-[500px] rounded border border-[#8f4b45] bg-[#0d252d] p-7 shadow-2xl">
-            <h3 className="text-2xl font-black text-[#ffab9e]">
+          <div className="w-full max-w-[500px] rounded border border-[#ff6b6b99] bg-[#0d252d] p-7 shadow-2xl">
+            <h3 className="text-2xl font-black text-[#ff6b6b]">
               Delete Imported API Data
             </h3>
             <p className="mt-4 text-sm leading-6 text-[#d7e2e5]">
@@ -1000,7 +1000,7 @@ export default function AdminDashboardContent({
               predictions. Empty tournaments left by the old importer are also
               removed. Players and populated manual tournaments are kept.
             </p>
-            <p className="mt-3 text-sm font-bold text-[#ffab9e]">
+            <p className="mt-3 text-sm font-bold text-[#ff8a8a]">
               This action cannot be undone.
             </p>
             <div className="mt-7 flex justify-end gap-3">
@@ -1014,7 +1014,7 @@ export default function AdminDashboardContent({
               <button
                 onClick={() => void resetImportedApiData()}
                 disabled={isMutating}
-                className="h-12 rounded bg-[#ffab9e] px-6 font-black text-[#2b1414] disabled:opacity-60"
+                className="h-12 rounded border border-[#ff8a8a] bg-[#d94747] px-6 font-black text-white transition hover:bg-[#ef5757] disabled:opacity-60"
               >
                 {isMutating ? "Deleting..." : "Delete API Data"}
               </button>
@@ -1226,12 +1226,12 @@ export default function AdminDashboardContent({
 
       {tournamentToDelete && (
         <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/70 px-4">
-          <div className="w-full max-w-[460px] rounded border border-[#6b4440] bg-[#0d252d] p-7 shadow-2xl">
-            <h3 className="text-2xl font-black text-[#ffab9e]">
+          <div className="w-full max-w-[460px] rounded border border-[#ff6b6b99] bg-[#0d252d] p-7 shadow-2xl">
+            <h3 className="text-2xl font-black text-[#ff6b6b]">
               Delete Tournament
             </h3>
             <p className="mt-4 text-base font-bold text-white">
-              Are you sure you want to delete <span className="text-[#ffab9e]">{tournamentToDelete.name}</span>
+              Are you sure you want to delete <span className="text-[#ff8a8a]">{tournamentToDelete.name}</span>
             </p>
             <p className="mt-2 text-sm text-[#9fb2b8]">
               This action cannot be undone. All matches, predictions and related data will be permanently deleted.
@@ -1247,7 +1247,7 @@ export default function AdminDashboardContent({
               <button
                 onClick={() => void deleteTournament(tournamentToDelete)}
                 disabled={isMutating}
-                className="h-12 rounded bg-[#ffab9e] px-6 font-black text-[#2b1414] disabled:opacity-60"
+                className="h-12 rounded border border-[#ff8a8a] bg-[#d94747] px-6 font-black text-white transition hover:bg-[#ef5757] disabled:opacity-60"
               >
                 {isMutating ? "Deleting..." : "Delete"}
               </button>
@@ -1375,12 +1375,8 @@ function TournamentManagementTable({
   });
   const filteredTotal = filteredTournaments.length;
   const totalPages = Math.max(1, Math.ceil(filteredTotal / pageSize));
-
-  useEffect(() => {
-    setCurrentPage((page) => Math.min(page, totalPages));
-  }, [totalPages]);
-
-  const firstVisibleIndex = (currentPage - 1) * pageSize;
+  const activePage = Math.min(currentPage, totalPages);
+  const firstVisibleIndex = (activePage - 1) * pageSize;
   const visibleTournaments = filteredTournaments.slice(
     firstVisibleIndex,
     firstVisibleIndex + pageSize,
@@ -1393,7 +1389,7 @@ function TournamentManagementTable({
   function changePage(page: number) {
     const nextPage = Math.min(Math.max(page, 1), totalPages);
 
-    if (nextPage === currentPage) {
+    if (nextPage === activePage) {
       return;
     }
 
@@ -1515,7 +1511,7 @@ function TournamentManagementTable({
                           </button>
                           <button
                             onClick={() => onDeleteTournament(tournament)}
-                            className="text-[#ffab9e] transition hover:text-white"
+                            className="text-[#ff6b6b] transition hover:text-[#ff9b9b]"
                             title="Delete tournament"
                           >
                             <Trash2 size={17} />
@@ -1557,7 +1553,7 @@ function TournamentManagementTable({
       {totalPages > 1 && (
         <div className="flex min-h-[64px] flex-wrap items-center justify-between gap-4 border-t border-[#3a4d54] bg-[#10242b] px-6 py-3">
           <span className="text-xs font-black uppercase text-[#9fb2b8]">
-            Page {currentPage} of {totalPages}
+            Page {activePage} of {totalPages}
           </span>
           <nav
             aria-label={`${title} pagination`}
@@ -1565,8 +1561,8 @@ function TournamentManagementTable({
           >
             <button
               type="button"
-              onClick={() => changePage(currentPage - 1)}
-              disabled={currentPage === 1}
+              onClick={() => changePage(activePage - 1)}
+              disabled={activePage === 1}
               aria-label="Previous page"
               title="Previous page"
               className="flex h-9 w-9 items-center justify-center border border-[#3a4d54] text-[#dce8eb] transition hover:border-[#84d8e8] hover:text-[#84d8e8] disabled:cursor-not-allowed disabled:opacity-40"
@@ -1579,9 +1575,9 @@ function TournamentManagementTable({
                 type="button"
                 onClick={() => changePage(page)}
                 aria-label={`Page ${page}`}
-                aria-current={page === currentPage ? "page" : undefined}
+                aria-current={page === activePage ? "page" : undefined}
                 className={`flex h-9 min-w-9 items-center justify-center border px-2 text-xs font-black transition ${
-                  page === currentPage
+                  page === activePage
                     ? "border-[#84d8e8] bg-[#84d8e8] text-[#06161b]"
                     : "border-[#3a4d54] text-[#dce8eb] hover:border-[#84d8e8] hover:text-[#84d8e8]"
                 }`}
@@ -1591,8 +1587,8 @@ function TournamentManagementTable({
             ))}
             <button
               type="button"
-              onClick={() => changePage(currentPage + 1)}
-              disabled={currentPage === totalPages}
+              onClick={() => changePage(activePage + 1)}
+              disabled={activePage === totalPages}
               aria-label="Next page"
               title="Next page"
               className="flex h-9 w-9 items-center justify-center border border-[#3a4d54] text-[#dce8eb] transition hover:border-[#84d8e8] hover:text-[#84d8e8] disabled:cursor-not-allowed disabled:opacity-40"
@@ -1903,7 +1899,7 @@ function DashboardStatCard({
   value: number;
   note: string;
   icon: React.ReactNode;
-  tone?: "normal" | "danger";
+  tone?: "normal" | "warning";
   onClick?: () => void;
 }) {
   const content = (
@@ -1912,21 +1908,27 @@ function DashboardStatCard({
         <div>
           <h3
             className={`text-sm font-black uppercase tracking-[0.1em] ${
-              tone === "danger" ? "text-[#ffab9e]" : "text-[#c8d6db]"
+              tone === "warning" ? "text-[#f4c95d]" : "text-[#c8d6db]"
             }`}
           >
             {title}
           </h3>
           <p
             className={`mt-2 text-[36px] font-black leading-none ${
-              tone === "danger" ? "text-[#ffab9e]" : "text-white"
+              tone === "warning" ? "text-[#f4c95d]" : "text-white"
             }`}
           >
             {value.toLocaleString()}
           </p>
           <p className="mt-4 text-xs font-bold text-white">{note}</p>
         </div>
-        <div className="flex h-[54px] w-[49px] items-center justify-center rounded bg-[#213740] text-white">
+        <div
+          className={`flex h-[54px] w-[49px] items-center justify-center rounded ${
+            tone === "warning"
+              ? "bg-[#302713] text-[#f4c95d]"
+              : "bg-[#213740] text-white"
+          }`}
+        >
           {icon}
         </div>
       </div>
@@ -1934,7 +1936,7 @@ function DashboardStatCard({
   );
 
   const className = `h-[144px] w-full rounded border bg-[#0d252d] px-6 py-6 text-left shadow-[0_2px_0_rgba(255,255,255,0.08)] ${
-    tone === "danger" ? "border-[#6b4440]" : "border-[#3a4d54]"
+    tone === "warning" ? "border-[#8b7133]" : "border-[#3a4d54]"
   }`;
 
   if (onClick) {
@@ -1942,7 +1944,7 @@ function DashboardStatCard({
       <button
         type="button"
         onClick={onClick}
-        className={`${className} cursor-pointer transition hover:border-[#ffab9e] hover:bg-[#102d35] focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-[#84d8e8]`}
+        className={`${className} cursor-pointer transition hover:border-[#f4c95d] hover:bg-[#102d35] focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-[#84d8e8]`}
       >
         {content}
       </button>
@@ -1986,10 +1988,10 @@ function DashboardStatusBadge({ status }: { status: string }) {
     normalized === "ACTIVE" || normalized === "LIVE"
       ? "border-l-2 border-white bg-[#162b32] text-white"
       : normalized === "UPCOMING" || normalized === "PENDING"
-        ? "bg-[#1c3037] text-[#dce8eb]"
+        ? "border-l-2 border-[#f4c95d] bg-[#302713] text-[#ffe8a3]"
         : normalized === "COMPLETED" || normalized === "FINISHED"
           ? "bg-[#183229] text-[#a7e8c0]"
-          : "bg-[#2b1414] text-[#ffab9e]";
+          : "bg-[#35171b] text-[#ff8a8a]";
 
   return (
     <span
@@ -2164,24 +2166,6 @@ function formatDateOnly(value: string | null) {
   }).format(date);
 }
 
-function formatDate(value: string | null) {
-  if (!value) {
-    return "-";
-  }
-
-  const date = new Date(value);
-
-  if (Number.isNaN(date.getTime())) {
-    return "-";
-  }
-
-  return new Intl.DateTimeFormat("en", {
-    month: "short",
-    day: "2-digit",
-    hour: "2-digit",
-    minute: "2-digit",
-  }).format(date);
-}
 
 function formatDateTime(value: string | null) {
   if (!value) {
