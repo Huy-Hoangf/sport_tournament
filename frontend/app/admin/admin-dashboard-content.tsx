@@ -737,7 +737,7 @@ export default function AdminDashboardContent({
   }
 
   return (
-    <div className="px-4 py-6 sm:px-6 lg:px-8 lg:py-9">
+    <div className="px-4 py-6 sm:px-6 xl:px-8 xl:py-9">
       <NoticeBanner notice={notice} onClose={() => setNotice(null)} />
       <div className="mb-8 grid gap-6 xl:grid-cols-[1fr_auto] xl:items-start">
         <div>
@@ -749,7 +749,7 @@ export default function AdminDashboardContent({
           </p>
         </div>
 
-        <div className="grid gap-3 sm:grid-cols-2 lg:flex lg:flex-wrap lg:justify-end lg:gap-4">
+        <div className="grid gap-3 sm:grid-cols-2 xl:flex xl:flex-wrap xl:justify-end xl:gap-4">
           {isAdmin && isTournamentView ? (
             <>
               <DashboardActionButton
@@ -1495,7 +1495,7 @@ function TournamentManagementTable({
               : `0 of ${total}`
         }
       />
-      <div className="divide-y divide-[#243c43] lg:hidden">
+      <div className="divide-y divide-[#243c43] xl:hidden">
         {visibleTournaments.map((tournament) => {
           const isSelected = selectedTournamentId === tournament.id;
           const matches = tournamentMatches.filter(
@@ -1600,7 +1600,7 @@ function TournamentManagementTable({
         )}
       </div>
 
-      <div className="hidden overflow-x-auto lg:block">
+      <div className="hidden overflow-x-auto xl:block">
         <table className="w-full min-w-[980px] table-fixed text-left">
           <thead className="h-[65px] border-b border-[#3a4d54] bg-[#14272e] text-xs uppercase tracking-[0.08em] text-[#d5e0e3]">
             <tr>
@@ -1990,7 +1990,7 @@ function TournamentMatchDetails({
         </span>
       </div>
 
-      <div className="space-y-3 lg:hidden">
+      <div className="space-y-3 xl:hidden">
         {matches.map((match) => (
           <article
             key={match.id}
@@ -2054,7 +2054,7 @@ function TournamentMatchDetails({
         )}
       </div>
 
-      <div className="hidden overflow-x-auto rounded border border-[#243c43] lg:block">
+      <div className="hidden overflow-x-auto rounded border border-[#243c43] xl:block">
         <table className="w-full min-w-[860px] table-fixed text-left">
           <thead className="h-[54px] border-b border-[#3a4d54] bg-[#14272e] text-xs uppercase tracking-[0.08em] text-[#d5e0e3]">
             <tr>

@@ -602,7 +602,7 @@ export default function AdminPage() {
   return (
     <main className="min-h-screen overflow-x-hidden bg-[#06161b] text-[#d9e5e7]">
       <NoticeBanner notice={notice} onClose={() => setNotice(null)} />
-      <header className="sticky top-0 z-40 border-b border-[#3c5056] bg-[#07181d]/95 px-4 py-3 backdrop-blur lg:hidden">
+      <header className="sticky top-0 z-40 border-b border-[#3c5056] bg-[#07181d]/95 px-4 py-3 backdrop-blur xl:hidden">
         <div className="grid grid-cols-[44px_minmax(0,1fr)_92px] items-center gap-3">
           <button
             type="button"
@@ -637,7 +637,7 @@ export default function AdminPage() {
       </header>
 
       {isMobileMenuOpen && (
-        <div className="fixed inset-0 z-50 lg:hidden">
+        <div className="fixed inset-0 z-50 xl:hidden">
           <button
             type="button"
             className="absolute inset-0 bg-black/70"
@@ -714,7 +714,7 @@ export default function AdminPage() {
         </div>
       )}
 
-      <aside className="hidden border-b border-[#3c5056] bg-[#0d252d] lg:fixed lg:left-0 lg:top-0 lg:flex lg:h-screen lg:w-[260px] lg:flex-col lg:border-b-0 lg:border-r">
+      <aside className="hidden border-b border-[#3c5056] bg-[#0d252d] xl:fixed xl:left-0 xl:top-0 xl:flex xl:h-screen xl:w-[260px] xl:flex-col xl:border-b-0 xl:border-r">
         <div className="px-6 pt-8">
           <h1 className="text-sm font-black uppercase leading-3 tracking-[0.08em] text-white">
             TWENTY
@@ -748,7 +748,7 @@ export default function AdminPage() {
           </div>
         </div>
 
-        <nav className="mt-6 flex overflow-x-auto text-sm font-bold lg:mt-8 lg:block lg:space-y-2 lg:overflow-visible">
+        <nav className="mt-6 flex overflow-x-auto text-sm font-bold xl:mt-8 xl:block xl:space-y-2 xl:overflow-visible">
           <MenuItem active={activeView === "dashboard"} icon={<LayoutDashboard size={21} />} label="Dashboard" onClick={() => openAdminView("dashboard")} />
           <MenuItem active={activeView === "tournaments"} icon={<Trophy size={21} />} label="Tournaments" onClick={() => openAdminView("tournaments")} />
           <MenuItem icon={<Gamepad2 size={21} />} label="Matches" onClick={() => showNotice("this feature is not ready")} />
@@ -758,7 +758,7 @@ export default function AdminPage() {
           <MenuItem icon={<BarChart3 size={21} />} label="Leaderboard" onClick={() => showNotice("this feature is not ready")} />
         </nav>
 
-        <div className="hidden lg:mt-auto lg:block lg:border-t lg:border-[#3c5056] lg:p-6">
+        <div className="hidden xl:mt-auto xl:block xl:border-t xl:border-[#3c5056] xl:p-6">
           <button className="mb-8 h-[53px] w-full rounded bg-[#84d8e8] text-sm font-black text-[#06161b]">
             Export Report
           </button>
@@ -781,13 +781,13 @@ export default function AdminPage() {
         </div>
       </aside>
 
-      <section className="min-h-screen bg-[#06161b] lg:ml-[260px]">
+      <section className="min-h-screen bg-[#06161b] xl:ml-[260px]">
         {activeView === "dashboard" ? (
           <DashboardView isAdmin={isAdmin} refreshKey={dashboardRefreshKey} />
         ) : activeView === "tournaments" ? (
           <TournamentView isAdmin={isAdmin} refreshKey={dashboardRefreshKey} />
         ) : (
-        <div className="px-4 py-6 sm:px-6 lg:px-8 lg:py-9">
+        <div className="px-4 py-6 sm:px-6 xl:px-8 xl:py-9">
           <div className="mb-8 grid gap-6 xl:grid-cols-[1fr_auto] xl:items-start">
             <div>
               <h2 className="text-[28px] font-black leading-none text-white sm:text-[34px]">
@@ -798,7 +798,7 @@ export default function AdminPage() {
               </p>
             </div>
 
-            <div className="grid gap-3 sm:grid-cols-2 lg:flex lg:flex-wrap lg:justify-end lg:gap-4">
+            <div className="grid gap-3 sm:grid-cols-2 xl:flex xl:flex-wrap xl:justify-end xl:gap-4">
               <button
                 onClick={() => {
                   setNewUserRole("PLAYER");
@@ -896,7 +896,7 @@ export default function AdminPage() {
             </div>
           )}
 
-          <div className="mb-4 space-y-3 lg:hidden">
+          <div className="mb-4 space-y-3 xl:hidden">
             {paginatedPlayers.map((player) => (
               <article
                 key={player.id}
@@ -1078,7 +1078,7 @@ export default function AdminPage() {
             )}
           </div>
 
-          <div className="hidden overflow-hidden rounded border border-[#3a4d54] bg-[#0d252d] shadow-[0_0_0_1px_rgba(255,255,255,0.02)] lg:block">
+          <div className="hidden overflow-hidden rounded border border-[#3a4d54] bg-[#0d252d] shadow-[0_0_0_1px_rgba(255,255,255,0.02)] xl:block">
             <div className="overflow-x-auto">
             <table className="w-full min-w-[940px] table-fixed">
               <thead className="h-[65px] border-b border-[#3a4d54] bg-[#14272e] text-xs uppercase tracking-[0.08em] text-[#d5e0e3]">
