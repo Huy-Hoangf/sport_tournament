@@ -6,13 +6,17 @@ function readAllowedOrigins(): CorsOptions['origin'] {
   const origins = process.env.FRONTEND_URL?.split(',')
     .map((origin) => origin.trim())
     .filter(Boolean);
+  const allowLocalhost = process.env.NODE_ENV !== 'production';
+
+  if (!allowLocalhost && !origins?.length) {
+    throw new Error('FRONTEND_URL is required in production.');
+  }
 
   return (origin, callback) => {
     if (
       !origin ||
       origins?.includes(origin) ||
-      origin.endsWith('.vercel.app') ||
-      origin.startsWith('http://localhost:')
+      (allowLocalhost && origin.startsWith('http://localhost:'))
     ) {
       callback(null, true);
       return;

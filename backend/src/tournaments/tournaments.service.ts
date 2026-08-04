@@ -32,7 +32,14 @@ export class TournamentsService implements OnModuleInit {
     await this.ensureSportTypeConstraint();
   }
 
-  async findAll() {
+  async findAll({
+    includePrivateTournaments = false,
+  }: {
+    includePrivateTournaments?: boolean;
+  } = {}) {
+    const visibilityCondition = includePrivateTournaments
+      ? ''
+      : "WHERE t.visibility = 'PUBLIC'";
     const rows = await this.usersRepository.query(`
       SELECT
         t.id,
@@ -49,6 +56,7 @@ export class TournamentsService implements OnModuleInit {
       FROM tournaments t
       LEFT JOIN tournament_participants tp ON tp.tournament_id = t.id
       LEFT JOIN matches m ON m.tournament_id = t.id
+      ${visibilityCondition}
       GROUP BY t.id
       ORDER BY t.updated_at DESC, t.created_at DESC
     `);

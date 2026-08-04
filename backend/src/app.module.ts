@@ -20,6 +20,16 @@ function readSslConfig() {
     : { rejectUnauthorized: false };
 }
 
+function requireEnv(name: string) {
+  const value = process.env[name];
+
+  if (!value) {
+    throw new Error(`${name} is required.`);
+  }
+
+  return value;
+}
+
 @Module({
   imports: [
     ConfigModule.forRoot({
@@ -28,11 +38,11 @@ function readSslConfig() {
 
     TypeOrmModule.forRoot({
       type: 'postgres',
-      host: process.env.DB_HOST,
+      host: requireEnv('DB_HOST'),
       port: Number(process.env.DB_PORT ?? 5432),
-      username: process.env.DB_USERNAME,
-      password: process.env.DB_PASSWORD,
-      database: process.env.DB_NAME,
+      username: requireEnv('DB_USERNAME'),
+      password: requireEnv('DB_PASSWORD'),
+      database: requireEnv('DB_NAME'),
       entities: [__dirname + '/**/*.entity{.ts,.js}'],
       synchronize: false,
       ssl: readSslConfig(),

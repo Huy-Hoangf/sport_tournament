@@ -1,6 +1,15 @@
 ﻿const configuredApiBaseUrl = process.env.NEXT_PUBLIC_API_BASE_URL?.trim();
 
-export const API_BASE_URL = configuredApiBaseUrl || "http://localhost:3001";
+const fallbackApiBaseUrl =
+  process.env.NODE_ENV === "production" ? "" : "http://localhost:3001";
+
+export const API_BASE_URL = configuredApiBaseUrl || fallbackApiBaseUrl;
+
+if (!API_BASE_URL) {
+  throw new Error(
+    "NEXT_PUBLIC_API_BASE_URL is required in production. Set it to the deployed backend URL.",
+  );
+}
 
 export type CurrentUser = {
   id: number;
