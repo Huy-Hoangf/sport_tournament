@@ -48,7 +48,7 @@ type FootballMatch = {
       long?: string;
     };
   };
-  league?: { name: string };
+  league?: { id?: number | string; name: string; season?: number | string };
   homeTeam?: { id?: number | string; name?: string; logo?: string };
   awayTeam?: { id?: number | string; name?: string; logo?: string };
   teams?: {
@@ -77,6 +77,8 @@ type EspnSoccerEvent = {
       score?: string;
       team?: {
         displayName?: string;
+        logo?: string;
+        logos?: Array<{ href?: string }>;
       };
     }>;
   }>;
@@ -166,6 +168,11 @@ export class SportsApiSyncService {
   private lolScheduleCache: {
     expiresAt: number;
     snapshot: LolScheduleSnapshot;
+  } | null = null;
+  // LoL team logos are cached separately so imports do not spend one Cito request per team.
+  private lolTeamLogoCache: {
+    expiresAt: number;
+    logosByName: Map<string, string>;
   } | null = null;
 
   constructor(
@@ -517,6 +524,7 @@ export class SportsApiSyncService {
 
     await this.ensureTeamLogoColumn();
     const snapshot = await this.getLolScheduleSnapshot(false);
+    const lolLogosByName = await this.getLolTeamLogosByName(false);
     const selectedMatches = snapshot.matches.filter((match) =>
       selectedIds.has(match.__competitionId),
     );
@@ -541,12 +549,14 @@ export class SportsApiSyncService {
         const homeTeamId = await this.upsertTeam(
           tournamentId,
           match.__homeName,
-          match.__homeLogoUrl ?? null,
+          match.__homeLogoUrl ??
+            this.getLolLogoForTeam(lolLogosByName, match.__homeName),
         );
         const awayTeamId = await this.upsertTeam(
           tournamentId,
           match.__awayName,
-          match.__awayLogoUrl ?? null,
+          match.__awayLogoUrl ??
+            this.getLolLogoForTeam(lolLogosByName, match.__awayName),
         );
 
         await this.upsertMatch({
@@ -783,8 +793,14 @@ export class SportsApiSyncService {
       },
       league: { name: 'ASEAN Championship' },
       teams: {
-        home: { name: home.team.displayName },
-        away: { name: away.team.displayName },
+        home: {
+          name: home.team.displayName,
+          logo: home.team.logo || home.team.logos?.[0]?.href,
+        },
+        away: {
+          name: away.team.displayName,
+          logo: away.team.logo || away.team.logos?.[0]?.href,
+        },
       },
       goals: {
         home: this.parseOptionalScore(home.score),
@@ -827,7 +843,11 @@ export class SportsApiSyncService {
       );
 
       for (const match of response.response ?? []) {
-        if (match.fixture?.id && this.isFootballFixtureCurrentOrFuture(match)) {
+        if (
+          match.fixture?.id &&
+          this.isFootballFixtureFromLeagueSeason(match, leagueId, season) &&
+          this.isFootballFixtureCurrentOrFuture(match)
+        ) {
           fixturesById.set(String(match.fixture.id), match);
         }
       }
@@ -840,6 +860,16 @@ export class SportsApiSyncService {
     return Array.from(fixturesById.values());
   }
 
+  private isFootballFixtureFromLeagueSeason(
+    match: FootballMatch,
+    leagueId: number,
+    season: number,
+  ) {
+    const fixtureLeagueId = Number(match.league?.id);
+    const fixtureSeason = Number(match.league?.season);
+
+    return fixtureLeagueId === leagueId && fixtureSeason === season;
+  }
   private isFootballFixtureCurrentOrFuture(match: FootballMatch) {
     const mappedStatus = this.mapMatchStatus(match.fixture.status?.short ?? '');
 
@@ -1042,7 +1072,7 @@ export class SportsApiSyncService {
     );
 
     if (existing) {
-      if (logoUrl && !existing.logoUrl) {
+      if (logoUrl && existing.logoUrl !== logoUrl) {
         await this.usersRepository.query(
           `
             UPDATE teams
@@ -1319,12 +1349,16 @@ export class SportsApiSyncService {
           ['team1', 'name'],
           ['blueTeam', 'name'],
           ['opponents', 0, 'name'],
+          ['opponents', 0, 'opponent', 'name'],
+          ['opponents', 0, 'opponent', 'acronym'],
           ['teams', 0, 'name'],
+          ['teams', 0, 'team', 'name'],
           ['match', 'teams', 0, 'name'],
           ['participants', 0, 'name'],
         ]) || 'Team 1';
       const homeLogoUrl = this.pickString(rawMatch, [
         ['homeTeam', 'logo'],
+        ['homeTeam', 'logoUrl'],
         ['homeTeam', 'image'],
         ['homeTeam', 'image_url'],
         ['home_team', 'logo'],
@@ -1336,9 +1370,17 @@ export class SportsApiSyncService {
         ['opponents', 0, 'logo'],
         ['opponents', 0, 'image_url'],
         ['opponents', 0, 'opponent', 'logo'],
+        ['opponents', 0, 'opponent', 'logoUrl'],
+        ['opponents', 0, 'opponent', 'image'],
         ['opponents', 0, 'opponent', 'image_url'],
         ['teams', 0, 'logo'],
+        ['teams', 0, 'logoUrl'],
+        ['teams', 0, 'image'],
         ['teams', 0, 'image_url'],
+        ['teams', 0, 'team', 'logo'],
+        ['teams', 0, 'team', 'logoUrl'],
+        ['teams', 0, 'team', 'image'],
+        ['teams', 0, 'team', 'image_url'],
         ['participants', 0, 'logo'],
         ['participants', 0, 'image_url'],
       ]);
@@ -1350,7 +1392,10 @@ export class SportsApiSyncService {
           ['team2', 'name'],
           ['redTeam', 'name'],
           ['opponents', 1, 'name'],
+          ['opponents', 1, 'opponent', 'name'],
+          ['opponents', 1, 'opponent', 'acronym'],
           ['teams', 1, 'name'],
+          ['teams', 1, 'team', 'name'],
           ['match', 'teams', 1, 'name'],
           ['participants', 1, 'name'],
         ]) || 'Team 2';
@@ -1550,6 +1595,141 @@ export class SportsApiSyncService {
 
     visit(payload, 0);
     return matches;
+  }
+
+  private extractRecordArray(payload: unknown): CitoLolMatch[] {
+    const records: CitoLolMatch[] = [];
+    const visited = new Set<unknown>();
+    const envelopeKeys = [
+      'data',
+      'response',
+      'teams',
+      'items',
+      'results',
+      'nodes',
+    ];
+
+    const visit = (value: unknown, depth: number) => {
+      if (depth > 5 || value === null || visited.has(value)) {
+        return;
+      }
+
+      if (typeof value === 'object') {
+        visited.add(value);
+      }
+
+      if (Array.isArray(value)) {
+        for (const item of value) {
+          if (this.isRecord(item)) {
+            records.push(item);
+          } else {
+            visit(item, depth + 1);
+          }
+        }
+        return;
+      }
+
+      if (!this.isRecord(value)) {
+        return;
+      }
+
+      for (const key of envelopeKeys) {
+        if (key in value) {
+          visit(value[key], depth + 1);
+        }
+      }
+    };
+
+    visit(payload, 0);
+    return records;
+  }
+
+  private async getLolTeamLogosByName(force: boolean) {
+    if (
+      !force &&
+      this.lolTeamLogoCache &&
+      this.lolTeamLogoCache.expiresAt > Date.now()
+    ) {
+      return this.lolTeamLogoCache.logosByName;
+    }
+
+    const apiKey = process.env.CITO_API_KEY?.trim();
+
+    if (!apiKey) {
+      return new Map<string, string>();
+    }
+
+    const payload = await this.fetchOptionalJson<unknown>(
+      `${CITO_API_BASE_URL}/lol/teams`,
+      { 'x-api-key': apiKey },
+    );
+    const logosByName = new Map<string, string>();
+
+    for (const team of this.extractRecordArray(payload)) {
+      const logoUrl = this.pickString(team, [
+        ['logo'],
+        ['logoUrl'],
+        ['logo_url'],
+        ['image'],
+        ['imageUrl'],
+        ['image_url'],
+        ['avatar'],
+        ['picture'],
+        ['team', 'logo'],
+        ['team', 'logoUrl'],
+        ['team', 'logo_url'],
+        ['team', 'image'],
+        ['team', 'imageUrl'],
+        ['team', 'image_url'],
+      ]);
+
+      if (!logoUrl) {
+        continue;
+      }
+
+      const identifiers = [
+        this.pickString(team, [['name'], ['teamName'], ['displayName']]),
+        this.pickString(team, [['acronym'], ['code'], ['shortName']]),
+        this.pickString(team, [['slug'], ['id'], ['team', 'slug']]),
+        this.pickString(team, [
+          ['team', 'name'],
+          ['team', 'displayName'],
+        ]),
+        this.pickString(team, [
+          ['team', 'acronym'],
+          ['team', 'code'],
+        ]),
+      ];
+
+      for (const identifier of identifiers) {
+        if (identifier) {
+          logosByName.set(this.normalizeTeamLookupKey(identifier), logoUrl);
+        }
+      }
+    }
+
+    this.lolTeamLogoCache = {
+      expiresAt: Date.now() + LOL_CACHE_MS,
+      logosByName,
+    };
+
+    return logosByName;
+  }
+
+  private getLolLogoForTeam(
+    logosByName: Map<string, string>,
+    teamName: string,
+  ) {
+    return logosByName.get(this.normalizeTeamLookupKey(teamName)) ?? null;
+  }
+
+  private normalizeTeamLookupKey(value: string) {
+    return value
+      .toLowerCase()
+      .replace(/&/g, 'and')
+      .replace(/\b(esports|e-sports|gaming|team)\b/g, '')
+      .replace(/[^a-z0-9]+/g, ' ')
+      .trim();
   }
 
   private isLolMatchCandidate(value: CitoLolMatch) {
