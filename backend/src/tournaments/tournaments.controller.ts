@@ -1,4 +1,13 @@
-import { Body, Controller, Delete, Get, Headers, Param, Patch, Post } from '@nestjs/common';
+import {
+  Body,
+  Controller,
+  Delete,
+  Get,
+  Headers,
+  Param,
+  Patch,
+  Post,
+} from '@nestjs/common';
 import { AuthService } from '../auth/auth.service';
 import { TournamentsService } from './tournaments.service';
 
@@ -10,9 +19,7 @@ export class TournamentsController {
   ) {}
 
   @Get()
-  async findAll(
-    @Headers('authorization') authorization: string | undefined,
-  ) {
+  async findAll(@Headers('authorization') authorization: string | undefined) {
     const user = await this.authService.verifyAccessToken(authorization);
     const includePrivateTournaments = ['SUPER_ADMIN', 'ADMIN'].includes(
       user.role,

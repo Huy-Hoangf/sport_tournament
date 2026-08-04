@@ -2248,6 +2248,7 @@ function TeamLogo({ name, src }: { name: string; src?: string | null }) {
   }
 
   return (
+    // eslint-disable-next-line @next/next/no-img-element
     <img
       src={src}
       alt={`${name} logo`}

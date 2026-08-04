@@ -705,8 +705,16 @@ export class SportsApiSyncService {
         ['teams', 'away', 'logo'],
         ['awayTeam', 'logo'],
       ]);
-      const homeTeamId = await this.upsertTeam(tournamentId, homeName, homeLogoUrl);
-      const awayTeamId = await this.upsertTeam(tournamentId, awayName, awayLogoUrl);
+      const homeTeamId = await this.upsertTeam(
+        tournamentId,
+        homeName,
+        homeLogoUrl,
+      );
+      const awayTeamId = await this.upsertTeam(
+        tournamentId,
+        awayName,
+        awayLogoUrl,
+      );
 
       await this.upsertMatch({
         tournamentId,
@@ -1372,7 +1380,8 @@ export class SportsApiSyncService {
         ['match', 'teams', 1, 'image_url'],
         ['match', 'teams', 1, 'logoUrl'],
         ['participants', 1, 'image'],
-        ['participants', 1, 'logoUrl'],        ['away_team', 'logo'],
+        ['participants', 1, 'logoUrl'],
+        ['away_team', 'logo'],
         ['away_team', 'image_url'],
         ['team2', 'logo'],
         ['team2', 'image_url'],

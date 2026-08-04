@@ -284,53 +284,71 @@ export class UsersService implements OnModuleInit {
       throw new NotFoundException('Admin account not found.');
     }
 
-    const [{ totalPlayers }] = await this.usersRepository.query(`
+    const [{ totalPlayers }] = await this.usersRepository.query(
+      `
       SELECT COUNT(*) AS "totalPlayers"
       FROM users
       WHERE role = 'PLAYER'
         AND email <> $1
-    `, [ADMIN_EMAIL]);
+    `,
+      [ADMIN_EMAIL],
+    );
     const deletedCount = Number(totalPlayers ?? 0);
 
     await this.usersRepository.manager.transaction(async (manager) => {
-      await manager.query(`
+      await manager.query(
+        `
         DELETE FROM predictions p
         USING users u
         WHERE u.id = p.user_id
           AND u.role = 'PLAYER'
           AND u.email <> $1
-      `, [ADMIN_EMAIL]);
+      `,
+        [ADMIN_EMAIL],
+      );
 
-      await manager.query(`
+      await manager.query(
+        `
         DELETE FROM leaderboard_snapshots ls
         USING users u
         WHERE u.id = ls.user_id
           AND u.role = 'PLAYER'
           AND u.email <> $1
-      `, [ADMIN_EMAIL]);
+      `,
+        [ADMIN_EMAIL],
+      );
 
-      await manager.query(`
+      await manager.query(
+        `
         DELETE FROM tournament_participants tp
         USING users u
         WHERE u.id = tp.user_id
           AND u.role = 'PLAYER'
           AND u.email <> $1
-      `, [ADMIN_EMAIL]);
+      `,
+        [ADMIN_EMAIL],
+      );
 
-      await manager.query(`
+      await manager.query(
+        `
         UPDATE tournaments t
         SET created_by = $1
         FROM users u
         WHERE u.id = t.created_by
           AND u.role = 'PLAYER'
           AND u.email <> $2
-      `, [admin.id, ADMIN_EMAIL]);
+      `,
+        [admin.id, ADMIN_EMAIL],
+      );
 
-      await manager.query(`
+      await manager.query(
+        `
         DELETE FROM users
         WHERE role = 'PLAYER'
           AND email <> $1
-      `, [ADMIN_EMAIL]);
+      `,
+        [ADMIN_EMAIL],
+      );
     });
 
     return {
@@ -472,5 +490,3 @@ export class UsersService implements OnModuleInit {
     return `GC-${String(nextNumber).padStart(4, '0')}`;
   }
 }
-
-
