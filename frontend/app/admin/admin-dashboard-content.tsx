@@ -737,7 +737,7 @@ export default function AdminDashboardContent({
   }
 
   return (
-    <div className="px-4 py-6 sm:px-6 md:px-8 md:py-9">
+    <div className="px-4 py-6 sm:px-6 lg:px-8 lg:py-9">
       <NoticeBanner notice={notice} onClose={() => setNotice(null)} />
       <div className="mb-8 grid gap-6 xl:grid-cols-[1fr_auto] xl:items-start">
         <div>
@@ -831,8 +831,8 @@ export default function AdminDashboardContent({
           </section>
 
           <section
-            className={`mb-5 grid gap-6 ${
-              isAdmin ? "md:grid-cols-2 xl:grid-cols-4" : "md:grid-cols-3"
+            className={`mb-5 grid gap-4 sm:grid-cols-2 xl:gap-6 ${
+              isAdmin ? "xl:grid-cols-4" : "xl:grid-cols-3"
             }`}
           >
             <DashboardStatCard
@@ -867,7 +867,7 @@ export default function AdminDashboardContent({
         </>
       )}
 
-      <div className="grid gap-5 xl:grid-cols-[minmax(0,1fr)_390px]">
+      <div className="grid min-w-0 gap-5 xl:grid-cols-[minmax(0,1fr)_390px]">
         <div className="space-y-5">
           {tournamentGroups.map((group) => (
             <TournamentManagementTable
@@ -1464,7 +1464,7 @@ function TournamentManagementTable({
       <DashboardPanelTitle
         title={title}
         icon={
-          <label className="relative block w-[150px]">
+          <label className="relative block w-full min-w-[150px] sm:w-[150px]">
             <Filter
               size={16}
               className="pointer-events-none absolute left-3 top-1/2 -translate-y-1/2 text-[#84d8e8]"
@@ -2197,17 +2197,17 @@ function DashboardPanelTitle({
   right?: string;
 }) {
   return (
-    <div className="flex min-h-[65px] items-center border-b border-[#3a4d54] bg-[#14272e] px-6 py-3">
+    <div className="flex min-h-[65px] flex-col gap-3 border-b border-[#3a4d54] bg-[#14272e] px-4 py-4 sm:flex-row sm:items-center sm:px-6">
       <h2 className="min-w-0 flex-1 text-sm font-black uppercase tracking-[0.08em] text-[#d5e0e3]">
         {title}
       </h2>
       {icon && (
-        <div className="flex w-[170px] shrink-0 justify-center text-[#dce8eb]">
+        <div className="flex w-full text-[#dce8eb] sm:w-[170px] sm:shrink-0 sm:justify-center">
           {icon}
         </div>
       )}
       {right && (
-        <span className="w-[170px] shrink-0 text-right text-xs font-black uppercase text-[#84d8e8]">
+        <span className="w-full text-left text-xs font-black uppercase text-[#84d8e8] sm:w-[170px] sm:shrink-0 sm:text-right">
           {right}
         </span>
       )}

@@ -602,8 +602,8 @@ export default function AdminPage() {
   return (
     <main className="min-h-screen overflow-x-hidden bg-[#06161b] text-[#d9e5e7]">
       <NoticeBanner notice={notice} onClose={() => setNotice(null)} />
-      <header className="sticky top-0 z-40 border-b border-[#3c5056] bg-[#07181d]/95 px-4 py-3 backdrop-blur md:hidden">
-        <div className="flex items-center justify-between gap-3">
+      <header className="sticky top-0 z-40 border-b border-[#3c5056] bg-[#07181d]/95 px-4 py-3 backdrop-blur lg:hidden">
+        <div className="grid grid-cols-[44px_minmax(0,1fr)_92px] items-center gap-3">
           <button
             type="button"
             onClick={() => setIsMobileMenuOpen(true)}
@@ -612,7 +612,7 @@ export default function AdminPage() {
           >
             <Menu size={23} />
           </button>
-          <div className="min-w-0 flex-1">
+          <div className="min-w-0 text-center">
             <h1 className="truncate text-lg font-black uppercase tracking-[0.04em] text-[#84d8e8]">
               TWENTY-TECH
             </h1>
@@ -620,22 +620,24 @@ export default function AdminPage() {
               A game for company
             </p>
           </div>
-          <button
-            type="button"
-            onClick={() => showNotice("this feature is not ready")}
-            className="flex h-11 w-11 items-center justify-center rounded border border-[#3a4d54] bg-[#0d252d] text-[#dce8eb]"
-            aria-label="Notifications"
-          >
-            <Bell size={20} />
-          </button>
-          <div className="flex h-11 w-11 shrink-0 items-center justify-center rounded border border-[#41636d] bg-[#143942] text-sm font-black uppercase text-[#84d8e8]">
-            {currentUser?.fullName?.trim().charAt(0) || "A"}
+          <div className="flex items-center justify-end gap-2">
+            <button
+              type="button"
+              onClick={() => showNotice("this feature is not ready")}
+              className="flex h-11 w-11 items-center justify-center rounded border border-[#3a4d54] bg-[#0d252d] text-[#dce8eb]"
+              aria-label="Notifications"
+            >
+              <Bell size={20} />
+            </button>
+            <div className="flex h-11 w-11 shrink-0 items-center justify-center rounded border border-[#41636d] bg-[#143942] text-sm font-black uppercase text-[#84d8e8]">
+              {currentUser?.fullName?.trim().charAt(0) || "A"}
+            </div>
           </div>
         </div>
       </header>
 
       {isMobileMenuOpen && (
-        <div className="fixed inset-0 z-50 md:hidden">
+        <div className="fixed inset-0 z-50 lg:hidden">
           <button
             type="button"
             className="absolute inset-0 bg-black/70"
@@ -712,7 +714,7 @@ export default function AdminPage() {
         </div>
       )}
 
-      <aside className="hidden border-b border-[#3c5056] bg-[#0d252d] md:fixed md:left-0 md:top-0 md:flex md:h-screen md:w-[260px] md:flex-col md:border-b-0 md:border-r">
+      <aside className="hidden border-b border-[#3c5056] bg-[#0d252d] lg:fixed lg:left-0 lg:top-0 lg:flex lg:h-screen lg:w-[260px] lg:flex-col lg:border-b-0 lg:border-r">
         <div className="px-6 pt-8">
           <h1 className="text-sm font-black uppercase leading-3 tracking-[0.08em] text-white">
             TWENTY
@@ -746,7 +748,7 @@ export default function AdminPage() {
           </div>
         </div>
 
-        <nav className="mt-6 flex overflow-x-auto text-sm font-bold md:mt-8 md:block md:space-y-2 md:overflow-visible">
+        <nav className="mt-6 flex overflow-x-auto text-sm font-bold lg:mt-8 lg:block lg:space-y-2 lg:overflow-visible">
           <MenuItem active={activeView === "dashboard"} icon={<LayoutDashboard size={21} />} label="Dashboard" onClick={() => openAdminView("dashboard")} />
           <MenuItem active={activeView === "tournaments"} icon={<Trophy size={21} />} label="Tournaments" onClick={() => openAdminView("tournaments")} />
           <MenuItem icon={<Gamepad2 size={21} />} label="Matches" onClick={() => showNotice("this feature is not ready")} />
@@ -756,7 +758,7 @@ export default function AdminPage() {
           <MenuItem icon={<BarChart3 size={21} />} label="Leaderboard" onClick={() => showNotice("this feature is not ready")} />
         </nav>
 
-        <div className="hidden md:mt-auto md:block md:border-t md:border-[#3c5056] md:p-6">
+        <div className="hidden lg:mt-auto lg:block lg:border-t lg:border-[#3c5056] lg:p-6">
           <button className="mb-8 h-[53px] w-full rounded bg-[#84d8e8] text-sm font-black text-[#06161b]">
             Export Report
           </button>
@@ -779,13 +781,13 @@ export default function AdminPage() {
         </div>
       </aside>
 
-      <section className="min-h-screen bg-[#06161b] md:ml-[260px]">
+      <section className="min-h-screen bg-[#06161b] lg:ml-[260px]">
         {activeView === "dashboard" ? (
           <DashboardView isAdmin={isAdmin} refreshKey={dashboardRefreshKey} />
         ) : activeView === "tournaments" ? (
           <TournamentView isAdmin={isAdmin} refreshKey={dashboardRefreshKey} />
         ) : (
-        <div className="px-4 py-6 sm:px-6 md:px-8 md:py-9">
+        <div className="px-4 py-6 sm:px-6 lg:px-8 lg:py-9">
           <div className="mb-8 grid gap-6 xl:grid-cols-[1fr_auto] xl:items-start">
             <div>
               <h2 className="text-[28px] font-black leading-none text-white sm:text-[34px]">
