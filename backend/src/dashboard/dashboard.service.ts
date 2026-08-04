@@ -292,10 +292,17 @@ export class DashboardService {
         t.visibility,
         COUNT(DISTINCT team.id) AS teams,
         COUNT(DISTINCT m.id) AS matches,
-        COALESCE(MAX(m.external_source), 'MANUAL') AS source
+        COALESCE(
+          MAX(m.external_source),
+          CASE
+            WHEN BOOL_OR(s.name = 'API Feed') THEN 'FOOTBALL_DATA'
+            ELSE 'MANUAL'
+          END
+        ) AS source
       FROM tournaments t
       LEFT JOIN teams team ON team.tournament_id = t.id
       LEFT JOIN matches m ON ${matchJoinCondition}
+      LEFT JOIN stages s ON s.tournament_id = t.id
       ${whereClause}
       GROUP BY t.id, t.name, t.sport_type, t.status, t.visibility, t.updated_at, t.created_at
       ORDER BY
