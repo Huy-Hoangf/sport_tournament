@@ -1,4 +1,4 @@
-﻿"use client";
+"use client";
 
 import { apiRequest } from "../api";
 import NoticeBanner, { type Notice } from "../notice-banner";
@@ -24,6 +24,7 @@ import {
   Zap,
 } from "lucide-react";
 
+// Dashboard auto-refresh matches the earlier API budget rule: one refresh every 14.4 minutes.
 const DASHBOARD_REFRESH_MS = 14.4 * 60 * 1000;
 
 type DashboardData = {
@@ -224,6 +225,7 @@ export default function AdminDashboardContent({
 
     try {
       const data = await apiRequest<DashboardData>(
+        // Dashboard shows today only; tournament management needs the full list.
         `/dashboard?scope=${isTournamentView ? "all" : "today"}`,
       );
       setDashboard({
@@ -1433,6 +1435,7 @@ function TournamentManagementTable({
   const totalPages = Math.max(1, Math.ceil(filteredTotal / pageSize));
   const activePage = Math.min(currentPage, totalPages);
   const firstVisibleIndex = (activePage - 1) * pageSize;
+  // Keep each tournament table paginated so iPad/mobile layouts do not clip long imported lists.
   const visibleTournaments = filteredTournaments.slice(
     firstVisibleIndex,
     firstVisibleIndex + pageSize,

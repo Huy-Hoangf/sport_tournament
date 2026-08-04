@@ -3,6 +3,7 @@ import { InjectRepository } from '@nestjs/typeorm';
 import { Repository } from 'typeorm';
 import { User } from '../users/user.entity';
 
+// Cito LoL free tier is limited, so list calls are cached for a day unless an import forces fresh data.
 const LOL_CACHE_MS = 24 * 60 * 60 * 1000;
 const FOOTBALL_API_BASE_URL = 'https://v3.football.api-sports.io';
 const OPENF1_API_BASE_URL = 'https://api.openf1.org/v1';
@@ -261,6 +262,7 @@ export class SportsApiSyncService {
     return this.syncF1(adminId);
   }
 
+  // Import options intentionally list competitions first; matches are fetched only after admin selection to protect quota.
   async listFootballCompetitions() {
     const apiKey = process.env.FOOTBALL_DATA_API_KEY?.trim();
 
@@ -419,6 +421,7 @@ export class SportsApiSyncService {
       .slice(0, 60);
   }
 
+  // OpenF1 is queried separately from API-SPORTS football so F1 imports do not consume football quota.
   async syncSelectedF1Meetings(meetingKeys: number[]) {
     await this.ensureSportTypeConstraint();
 
