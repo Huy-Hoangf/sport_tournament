@@ -737,11 +737,11 @@ export default function AdminDashboardContent({
   }
 
   return (
-    <div className="px-8 py-9">
+    <div className="px-4 py-6 sm:px-6 md:px-8 md:py-9">
       <NoticeBanner notice={notice} onClose={() => setNotice(null)} />
-      <div className="mb-8 flex items-start justify-between gap-6">
+      <div className="mb-8 grid gap-6 xl:grid-cols-[1fr_auto] xl:items-start">
         <div>
-          <h2 className="text-[34px] font-black leading-none text-white">
+          <h2 className="text-[28px] font-black leading-none text-white sm:text-[34px]">
             {pageTitle}
           </h2>
           <p className="mt-3 text-[16px] text-[#adbdc2]">
@@ -749,7 +749,7 @@ export default function AdminDashboardContent({
           </p>
         </div>
 
-        <div className="flex flex-wrap justify-end gap-4">
+        <div className="grid gap-3 sm:grid-cols-2 lg:flex lg:flex-wrap lg:justify-end lg:gap-4">
           {isAdmin && isTournamentView ? (
             <>
               <DashboardActionButton
@@ -764,14 +764,14 @@ export default function AdminDashboardContent({
               />
               <button
                 onClick={openCreateTournament}
-                className="flex h-[62px] items-center gap-3 rounded bg-[#84d8e8] px-8 text-lg font-black text-[#06161b]"
+                className="flex h-[56px] items-center justify-center gap-3 rounded bg-[#84d8e8] px-5 text-base font-black text-[#06161b] sm:h-[62px] sm:px-8 sm:text-lg"
               >
                 <Plus size={22} />
                 Create Tournament
               </button>
             </>
           ) : !isAdmin ? (
-            <div className="rounded border border-[#3a4d54] bg-[#0d252d] px-5 py-4 text-sm font-bold text-[#9fb2b8]">
+            <div className="rounded border border-[#3a4d54] bg-[#0d252d] px-5 py-4 text-center text-sm font-bold text-[#9fb2b8]">
               View-only access
             </div>
           ) : null}
@@ -1378,7 +1378,7 @@ function DashboardActionButton({
   return (
     <button
       onClick={onClick}
-      className="flex h-[62px] items-center gap-3 rounded border border-[#3a4d54] bg-[#0d252d] px-7 text-lg font-black text-[#dce8eb] transition hover:border-[#84d8e8] hover:text-[#84d8e8]"
+      className="flex h-[56px] items-center justify-center gap-3 rounded border border-[#3a4d54] bg-[#0d252d] px-5 text-base font-black text-[#dce8eb] transition hover:border-[#84d8e8] hover:text-[#84d8e8] sm:h-[62px] sm:px-7 sm:text-lg"
     >
       {icon}
       {label}

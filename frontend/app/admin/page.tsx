@@ -3,7 +3,8 @@
 import { apiRequest, type CurrentUser } from "../api";
 import { logoutAll, readCurrentUser } from "../auth-sync";
 import NoticeBanner, { type Notice } from "../notice-banner";
-import AdminDashboardContent from "./admin-dashboard-content";
+import DashboardView from "./dashboard-view";
+import TournamentView from "./tournament-view";
 import { useCallback, useEffect, useMemo, useState } from "react";
 import { useRouter } from "next/navigation";
 import * as XLSX from "xlsx";
@@ -81,7 +82,9 @@ export default function AdminPage() {
   const [newUserRole, setNewUserRole] = useState<"ADMIN" | "PLAYER">("PLAYER");
   const [isLoading, setIsLoading] = useState(false);
   const [isNameSearchOpen, setIsNameSearchOpen] = useState(false);
-  const [isPlayerActionsOpen, setIsPlayerActionsOpen] = useState(false);
+  const [openPlayerActionId, setOpenPlayerActionId] = useState<string | null>(
+    null,
+  );
   const [nameSearch, setNameSearch] = useState("");
   const [statusFilter, setStatusFilter] = useState<StatusFilter>("ALL");
   const [currentPage, setCurrentPage] = useState(1);
@@ -290,6 +293,45 @@ export default function AdminPage() {
       refreshDashboard();
     } catch (error) {
       showNotice(error instanceof Error ? error.message : "Update player failed.");
+    } finally {
+      setIsLoading(false);
+    }
+  }
+
+  async function promotePlayerToAdmin(player: Player) {
+    if (!isSuperAdmin) {
+      showNotice("Only the super admin can add administrator accounts.");
+      return;
+    }
+
+    if (player.role !== "PLAYER") {
+      showNotice("This user is already an administrator.");
+      return;
+    }
+
+    setIsLoading(true);
+
+    try {
+      await apiRequest<{ message: string; user: BackendUser }>(
+        `/users/admin/${player.id}/rename`,
+        {
+          method: "PATCH",
+          body: JSON.stringify({
+            fullName: player.fullName,
+            email: player.email,
+            role: "ADMIN",
+          }),
+        },
+      );
+
+      showNotice(`${player.fullName} promoted to admin successfully.`);
+      setOpenPlayerActionId(null);
+      await fetchPlayers();
+      refreshDashboard();
+    } catch (error) {
+      showNotice(
+        error instanceof Error ? error.message : "Promote user failed.",
+      );
     } finally {
       setIsLoading(false);
     }
@@ -551,7 +593,7 @@ export default function AdminPage() {
   return (
     <main className="min-h-screen bg-[#06161b] text-[#d9e5e7]">
       <NoticeBanner notice={notice} onClose={() => setNotice(null)} />
-      <aside className="fixed left-0 top-0 flex h-screen w-[260px] flex-col border-r border-[#3c5056] bg-[#0d252d]">
+      <aside className="border-b border-[#3c5056] bg-[#0d252d] md:fixed md:left-0 md:top-0 md:flex md:h-screen md:w-[260px] md:flex-col md:border-b-0 md:border-r">
         <div className="px-6 pt-8">
           <h1 className="text-sm font-black uppercase leading-3 tracking-[0.08em] text-white">
             TWENTY
@@ -585,7 +627,7 @@ export default function AdminPage() {
           </div>
         </div>
 
-        <nav className="mt-8 space-y-2 text-sm font-bold">
+        <nav className="mt-6 flex overflow-x-auto text-sm font-bold md:mt-8 md:block md:space-y-2 md:overflow-visible">
           <MenuItem active={activeView === "dashboard"} icon={<LayoutDashboard size={21} />} label="Dashboard" onClick={() => setActiveView("dashboard")} />
           <MenuItem active={activeView === "tournaments"} icon={<Trophy size={21} />} label="Tournaments" onClick={() => setActiveView("tournaments")} />
           <MenuItem icon={<Gamepad2 size={21} />} label="Matches" onClick={() => showNotice("this feature is not ready")} />
@@ -595,7 +637,7 @@ export default function AdminPage() {
           <MenuItem icon={<BarChart3 size={21} />} label="Leaderboard" onClick={() => showNotice("this feature is not ready")} />
         </nav>
 
-        <div className="mt-auto border-t border-[#3c5056] p-6">
+        <div className="hidden md:mt-auto md:block md:border-t md:border-[#3c5056] md:p-6">
           <button className="mb-8 h-[53px] w-full rounded bg-[#84d8e8] text-sm font-black text-[#06161b]">
             Export Report
           </button>
@@ -618,16 +660,16 @@ export default function AdminPage() {
         </div>
       </aside>
 
-      <section className="ml-[260px] min-h-screen bg-[#06161b]">
+      <section className="min-h-screen bg-[#06161b] md:ml-[260px]">
         {activeView === "dashboard" ? (
-          <AdminDashboardContent isAdmin={isAdmin} refreshKey={dashboardRefreshKey} view="dashboard" />
+          <DashboardView isAdmin={isAdmin} refreshKey={dashboardRefreshKey} />
         ) : activeView === "tournaments" ? (
-          <AdminDashboardContent isAdmin={isAdmin} refreshKey={dashboardRefreshKey} view="tournaments" />
+          <TournamentView isAdmin={isAdmin} refreshKey={dashboardRefreshKey} />
         ) : (
-        <div className="px-8 py-9">
-          <div className="mb-8 flex items-start justify-between gap-6">
+        <div className="px-4 py-6 sm:px-6 md:px-8 md:py-9">
+          <div className="mb-8 grid gap-6 xl:grid-cols-[1fr_auto] xl:items-start">
             <div>
-              <h2 className="text-[34px] font-black leading-none text-white">
+              <h2 className="text-[28px] font-black leading-none text-white sm:text-[34px]">
                 Player Management
               </h2>
               <p className="mt-3 text-[16px] text-[#adbdc2]">
@@ -635,55 +677,24 @@ export default function AdminPage() {
               </p>
             </div>
 
-            <div className="flex flex-wrap justify-end gap-4">
+            <div className="grid gap-3 sm:grid-cols-2 lg:flex lg:flex-wrap lg:justify-end lg:gap-4">
               <button
                 onClick={() => {
                   setNewUserRole("PLAYER");
-                  setIsPlayerActionsOpen(false);
+                  setOpenPlayerActionId(null);
                   setOpenModal("createUser");
                 }}
-                className="flex h-[62px] items-center gap-3 rounded bg-[#84d8e8] px-8 text-lg font-black text-[#06161b]"
+                className="flex h-[56px] items-center justify-center gap-3 rounded bg-[#84d8e8] px-5 text-base font-black text-[#06161b] sm:h-[62px] sm:px-8 sm:text-lg"
               >
                 <UserPlus size={27} />
                 Add Player
               </button>
-              {isSuperAdmin && (
-                <div className="relative">
-                  <button
-                    onClick={() =>
-                      setIsPlayerActionsOpen((isOpen) => !isOpen)
-                    }
-                    className="flex h-[62px] w-[62px] items-center justify-center rounded border border-[#3a4d54] bg-[#0d252d] text-[#dce8eb] transition hover:border-[#84d8e8] hover:text-[#84d8e8]"
-                    title="More player actions"
-                    aria-label="More player actions"
-                    aria-expanded={isPlayerActionsOpen}
-                  >
-                    <MoreVertical size={24} />
-                  </button>
-                  {isPlayerActionsOpen && (
-                    <div className="absolute right-0 top-[70px] z-20 w-[190px] rounded border border-[#3a4d54] bg-[#0d252d] p-2 shadow-2xl">
-                      <button
-                        type="button"
-                        onClick={() => {
-                          setNewUserRole("ADMIN");
-                          setOpenModal("createUser");
-                          setIsPlayerActionsOpen(false);
-                        }}
-                        className="flex w-full items-center gap-3 rounded px-3 py-3 text-left text-sm font-black text-[#84d8e8] transition hover:bg-[#143942]"
-                      >
-                        <ShieldPlus size={18} />
-                        Add Admin
-                      </button>
-                    </div>
-                  )}
-                </div>
-              )}
               <button
                 onClick={() => {
-                  setIsPlayerActionsOpen(false);
+                  setOpenPlayerActionId(null);
                   setOpenModal("createUserFromList");
                 }}
-                className="flex h-[62px] items-center gap-3 rounded bg-[#84d8e8] px-8 text-lg font-black text-[#06161b]"
+                className="flex h-[56px] items-center justify-center gap-3 rounded bg-[#84d8e8] px-5 text-base font-black text-[#06161b] sm:h-[62px] sm:px-8 sm:text-lg"
               >
                 <UserPlus size={27} />
                 Add Player From List
@@ -691,7 +702,7 @@ export default function AdminPage() {
               <button
                 onClick={openDeleteAllPlayersConfirmation}
                 disabled={isLoading}
-                className="flex h-[62px] items-center gap-3 rounded border border-[#ff6b6b99] bg-[#35171b] px-6 text-lg font-black text-[#ff8a8a] transition hover:border-[#ff6b6b] hover:bg-[#421b20] disabled:opacity-60"
+                className="flex h-[56px] items-center justify-center gap-3 rounded border border-[#ff6b6b99] bg-[#35171b] px-5 text-base font-black text-[#ff8a8a] transition hover:border-[#ff6b6b] hover:bg-[#421b20] disabled:opacity-60 sm:h-[62px] sm:px-6 sm:text-lg"
               >
                 <Trash2 size={24} />
                 Delete All Players
@@ -699,7 +710,7 @@ export default function AdminPage() {
             </div>
           </div>
 
-          <div className="mb-8 grid grid-cols-3 gap-6">
+          <div className="mb-8 grid gap-4 md:grid-cols-2 xl:grid-cols-3 xl:gap-6">
             <StatCard
               title="Total Players"
               value={players.length.toLocaleString()}
@@ -719,7 +730,7 @@ export default function AdminPage() {
             />
           </div>
 
-          <div className="mb-6 flex items-center gap-3">
+          <div className="mb-6 flex flex-wrap items-center gap-3">
             <StatusFilterSelect
               value={statusFilter}
               onChange={(value) => {
@@ -765,7 +776,8 @@ export default function AdminPage() {
           )}
 
           <div className="overflow-hidden rounded border border-[#3a4d54] bg-[#0d252d] shadow-[0_0_0_1px_rgba(255,255,255,0.02)]">
-            <table className="w-full table-fixed">
+            <div className="overflow-x-auto">
+            <table className="w-full min-w-[940px] table-fixed">
               <thead className="h-[65px] border-b border-[#3a4d54] bg-[#14272e] text-xs uppercase tracking-[0.08em] text-[#d5e0e3]">
                 <tr>
                   <th className="w-[48px] px-4 text-left">
@@ -821,7 +833,7 @@ export default function AdminPage() {
                       {player.events.toString().padStart(2, "0")}
                     </td>
                     <td>
-                      <div className="flex items-center gap-5 text-[#dce8eb]">
+                      <div className="relative flex items-center gap-5 text-[#dce8eb]">
                         {canRenameUser(player, currentUser) && (
                           <button
                             onClick={() => {
@@ -849,15 +861,44 @@ export default function AdminPage() {
                               <Trash2 size={18} />
                             </button>
                             <button
-                              onClick={() => {
-                                setSelectedPlayer(player);
-                                setOpenModal("changeStatus");
-                              }}
-                              title="Change status"
+                              onClick={() =>
+                                setOpenPlayerActionId((currentId) =>
+                                  currentId === player.id ? null : player.id,
+                                )
+                              }
+                              title="More actions"
+                              aria-expanded={openPlayerActionId === player.id}
                               className="transition hover:text-[#84d8e8]"
                             >
                               <MoreVertical size={18} />
                             </button>
+                            {openPlayerActionId === player.id && (
+                              <div className="absolute right-4 top-8 z-20 w-[190px] rounded border border-[#3a4d54] bg-[#0d252d] p-2 shadow-2xl">
+                                {isSuperAdmin && (
+                                  <button
+                                    type="button"
+                                    onClick={() => void promotePlayerToAdmin(player)}
+                                    disabled={isLoading}
+                                    className="flex w-full items-center gap-3 rounded px-3 py-3 text-left text-sm font-black text-[#84d8e8] transition hover:bg-[#143942] disabled:opacity-60"
+                                  >
+                                    <ShieldPlus size={18} />
+                                    Add Admin
+                                  </button>
+                                )}
+                                <button
+                                  type="button"
+                                  onClick={() => {
+                                    setSelectedPlayer(player);
+                                    setOpenPlayerActionId(null);
+                                    setOpenModal("changeStatus");
+                                  }}
+                                  className="flex w-full items-center gap-3 rounded px-3 py-3 text-left text-sm font-black text-[#dce8eb] transition hover:bg-[#143942] hover:text-[#84d8e8]"
+                                >
+                                  <SlidersHorizontal size={18} />
+                                  Change Status
+                                </button>
+                              </div>
+                            )}
                           </>
                         )}
                       </div>
@@ -877,8 +918,9 @@ export default function AdminPage() {
                 )}
               </tbody>
             </table>
+            </div>
 
-            <div className="flex h-[65px] items-center justify-between px-4 text-xs uppercase text-white">
+            <div className="flex min-h-[65px] flex-col gap-3 px-4 py-4 text-xs uppercase text-white sm:flex-row sm:items-center sm:justify-between sm:py-0">
               <p>
                 Showing{" "}
                 {visiblePlayers.length > 0
@@ -889,7 +931,7 @@ export default function AdminPage() {
                 of {visiblePlayers.length}
               </p>
 
-              <div className="flex items-center gap-2">
+              <div className="flex max-w-full items-center gap-2 overflow-x-auto pb-1">
                 <PageButton
                   onClick={() => setCurrentPage((page) => Math.max(1, page - 1))}
                   disabled={currentSafePage === 1}
@@ -1498,7 +1540,7 @@ function MenuItem({
     <button
       type="button"
       onClick={onClick}
-      className={`flex h-[49px] w-full items-center gap-4 px-6 text-left tracking-[0.03em] ${
+      className={`flex h-[49px] w-max min-w-[160px] items-center gap-4 px-6 text-left tracking-[0.03em] md:w-full ${
         active
           ? "border-l-4 border-[#e9feff] bg-[#263b43] text-white"
           : "text-[#d7e4e8]"
@@ -1635,9 +1677,9 @@ function Modal({
   tone?: "normal" | "danger";
 }) {
   return (
-    <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/70">
+    <div className="fixed inset-0 z-50 flex items-center justify-center overflow-y-auto bg-black/70 p-4">
       <div
-        className={`w-[520px] rounded-lg border bg-[#101818] p-7 ${
+        className={`w-full max-w-[520px] rounded-lg border bg-[#101818] p-5 sm:p-7 ${
           tone === "danger"
             ? "border-[#ff6b6b66] shadow-[0_0_50px_rgba(255,107,107,0.12)]"
             : "border-[#84d8e855] shadow-[0_0_50px_rgba(132,216,232,0.18)]"
