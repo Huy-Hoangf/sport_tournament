@@ -49,11 +49,11 @@ type FootballMatch = {
     };
   };
   league?: { name: string };
-  homeTeam?: { name?: string };
-  awayTeam?: { name?: string };
+  homeTeam?: { id?: number | string; name?: string; logo?: string };
+  awayTeam?: { id?: number | string; name?: string; logo?: string };
   teams?: {
-    home?: { name?: string };
-    away?: { name?: string };
+    home?: { id?: number | string; name?: string; logo?: string };
+    away?: { id?: number | string; name?: string; logo?: string };
   };
   goals?: {
     home?: number | null;
@@ -153,6 +153,8 @@ type LolScheduleSnapshot = {
       __matchId: string;
       __homeName: string;
       __awayName: string;
+      __homeLogoUrl: string | null;
+      __awayLogoUrl: string | null;
       __scheduledTime: string;
       __status: 'PENDING' | 'LIVE' | 'FINISHED' | 'CANCELLED';
     }
@@ -486,6 +488,7 @@ export class SportsApiSyncService {
   }
 
   async listLolCompetitions() {
+    await this.ensureTeamLogoColumn();
     const snapshot = await this.getLolScheduleSnapshot(false);
 
     return snapshot.competitions.slice(0, 80);
@@ -512,6 +515,7 @@ export class SportsApiSyncService {
       );
     }
 
+    await this.ensureTeamLogoColumn();
     const snapshot = await this.getLolScheduleSnapshot(false);
     const selectedMatches = snapshot.matches.filter((match) =>
       selectedIds.has(match.__competitionId),
@@ -537,10 +541,12 @@ export class SportsApiSyncService {
         const homeTeamId = await this.upsertTeam(
           tournamentId,
           match.__homeName,
+          match.__homeLogoUrl ?? null,
         );
         const awayTeamId = await this.upsertTeam(
           tournamentId,
           match.__awayName,
+          match.__awayLogoUrl ?? null,
         );
 
         await this.upsertMatch({
@@ -672,6 +678,7 @@ export class SportsApiSyncService {
     matches: Iterable<FootballMatch>,
     source: 'FOOTBALL_DATA' | 'ESPN_ASEAN' = 'FOOTBALL_DATA',
   ) {
+    await this.ensureTeamLogoColumn();
     let matchCount = 0;
 
     for (const match of matches) {
@@ -690,8 +697,16 @@ export class SportsApiSyncService {
         match.teams?.home?.name || match.homeTeam?.name || 'Home team';
       const awayName =
         match.teams?.away?.name || match.awayTeam?.name || 'Away team';
-      const homeTeamId = await this.upsertTeam(tournamentId, homeName);
-      const awayTeamId = await this.upsertTeam(tournamentId, awayName);
+      const homeLogoUrl = this.pickString(match, [
+        ['teams', 'home', 'logo'],
+        ['homeTeam', 'logo'],
+      ]);
+      const awayLogoUrl = this.pickString(match, [
+        ['teams', 'away', 'logo'],
+        ['awayTeam', 'logo'],
+      ]);
+      const homeTeamId = await this.upsertTeam(tournamentId, homeName, homeLogoUrl);
+      const awayTeamId = await this.upsertTeam(tournamentId, awayName, awayLogoUrl);
 
       await this.upsertMatch({
         tournamentId,
@@ -1002,10 +1017,14 @@ export class SportsApiSyncService {
     return Number(created.id);
   }
 
-  private async upsertTeam(tournamentId: number, name: string) {
+  private async upsertTeam(
+    tournamentId: number,
+    name: string,
+    logoUrl: string | null = null,
+  ) {
     const [existing] = await this.usersRepository.query(
       `
-        SELECT id
+        SELECT id, logo_url AS "logoUrl"
         FROM teams
         WHERE tournament_id = $1
           AND LOWER(name) = LOWER($2)
@@ -1015,21 +1034,31 @@ export class SportsApiSyncService {
     );
 
     if (existing) {
+      if (logoUrl && !existing.logoUrl) {
+        await this.usersRepository.query(
+          `
+            UPDATE teams
+            SET logo_url = $1
+            WHERE id = $2
+          `,
+          [logoUrl, Number(existing.id)],
+        );
+      }
+
       return Number(existing.id);
     }
 
     const [created] = await this.usersRepository.query(
       `
-        INSERT INTO teams (tournament_id, name)
-        VALUES ($1, $2)
+        INSERT INTO teams (tournament_id, name, logo_url)
+        VALUES ($1, $2, $3)
         RETURNING id
       `,
-      [tournamentId, name],
+      [tournamentId, name, logoUrl],
     );
 
     return Number(created.id);
   }
-
   private async upsertMatch(data: {
     tournamentId: number;
     stageId: number;
@@ -1286,6 +1315,26 @@ export class SportsApiSyncService {
           ['match', 'teams', 0, 'name'],
           ['participants', 0, 'name'],
         ]) || 'Team 1';
+      const homeLogoUrl = this.pickString(rawMatch, [
+        ['homeTeam', 'logo'],
+        ['homeTeam', 'image'],
+        ['homeTeam', 'image_url'],
+        ['home_team', 'logo'],
+        ['home_team', 'image_url'],
+        ['team1', 'logo'],
+        ['team1', 'image_url'],
+        ['blueTeam', 'logo'],
+        ['blueTeam', 'image_url'],
+        ['opponents', 0, 'logo'],
+        ['opponents', 0, 'image_url'],
+        ['opponents', 0, 'opponent', 'logo'],
+        ['opponents', 0, 'opponent', 'image_url'],
+        ['teams', 0, 'logo'],
+        ['teams', 0, 'image_url'],
+        ['participants', 0, 'logo'],
+        ['participants', 0, 'image_url'],
+      ]);
+
       const awayName =
         this.pickString(rawMatch, [
           ['awayTeam', 'name'],
@@ -1297,6 +1346,47 @@ export class SportsApiSyncService {
           ['match', 'teams', 1, 'name'],
           ['participants', 1, 'name'],
         ]) || 'Team 2';
+      const awayLogoUrl = this.pickString(rawMatch, [
+        ['awayTeam', 'logo'],
+        ['awayTeam', 'image'],
+        ['awayTeam', 'image_url'],
+        ['awayTeam', 'logoUrl'],
+        ['away_team', 'image'],
+        ['away_team', 'logoUrl'],
+        ['team2', 'image'],
+        ['team2', 'logoUrl'],
+        ['redTeam', 'image'],
+        ['redTeam', 'logoUrl'],
+        ['opponents', 1, 'image'],
+        ['opponents', 1, 'logoUrl'],
+        ['opponents', 1, 'opponent', 'image'],
+        ['opponents', 1, 'opponent', 'logoUrl'],
+        ['teams', 1, 'image'],
+        ['teams', 1, 'logoUrl'],
+        ['teams', 1, 'team', 'logo'],
+        ['teams', 1, 'team', 'image'],
+        ['teams', 1, 'team', 'image_url'],
+        ['teams', 1, 'team', 'logoUrl'],
+        ['match', 'teams', 1, 'logo'],
+        ['match', 'teams', 1, 'image'],
+        ['match', 'teams', 1, 'image_url'],
+        ['match', 'teams', 1, 'logoUrl'],
+        ['participants', 1, 'image'],
+        ['participants', 1, 'logoUrl'],        ['away_team', 'logo'],
+        ['away_team', 'image_url'],
+        ['team2', 'logo'],
+        ['team2', 'image_url'],
+        ['redTeam', 'logo'],
+        ['redTeam', 'image_url'],
+        ['opponents', 1, 'logo'],
+        ['opponents', 1, 'image_url'],
+        ['opponents', 1, 'opponent', 'logo'],
+        ['opponents', 1, 'opponent', 'image_url'],
+        ['teams', 1, 'logo'],
+        ['teams', 1, 'image_url'],
+        ['participants', 1, 'logo'],
+        ['participants', 1, 'image_url'],
+      ]);
       const resolvedCompetition = this.resolveLolCompetitionIdentity(
         rawMatch,
         String(competitionId),
@@ -1332,6 +1422,8 @@ export class SportsApiSyncService {
         __matchId: String(matchId),
         __homeName: homeName,
         __awayName: awayName,
+        __homeLogoUrl: homeLogoUrl,
+        __awayLogoUrl: awayLogoUrl,
         __scheduledTime: scheduledTime,
         __status: status,
       });
@@ -1826,6 +1918,12 @@ export class SportsApiSyncService {
     return new Date(startValue) <= now && new Date(endValue) >= now;
   }
 
+  private async ensureTeamLogoColumn() {
+    await this.usersRepository.query(`
+      ALTER TABLE teams
+      ADD COLUMN IF NOT EXISTS logo_url VARCHAR(500) NULL
+    `);
+  }
   private async ensureSportTypeConstraint() {
     await this.usersRepository.query(`
       ALTER TABLE tournaments

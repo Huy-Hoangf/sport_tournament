@@ -1,4 +1,4 @@
-﻿import { Injectable } from '@nestjs/common';
+import { Injectable } from '@nestjs/common';
 import { InjectRepository } from '@nestjs/typeorm';
 import { Repository } from 'typeorm';
 import { User } from '../users/user.entity';
@@ -81,6 +81,8 @@ export class DashboardService {
         tournamentId: Number(row.tournamentId),
         homeName: row.homeTeam ?? 'TBD',
         awayName: row.awayTeam ?? 'TBD',
+        homeLogoUrl: row.homeLogoUrl ?? null,
+        awayLogoUrl: row.awayLogoUrl ?? null,
         encounter: `${row.homeTeam ?? 'TBD'} vs ${row.awayTeam ?? 'TBD'}`,
         tournamentName: row.tournamentName,
         scheduledTime: row.scheduledTime,
@@ -94,6 +96,8 @@ export class DashboardService {
         id: Number(row.id),
         homeName: row.homeTeam ?? 'TBD',
         awayName: row.awayTeam ?? 'TBD',
+        homeLogoUrl: row.homeLogoUrl ?? null,
+        awayLogoUrl: row.awayLogoUrl ?? null,
         encounter: `${row.homeTeam ?? 'TBD'} vs ${row.awayTeam ?? 'TBD'}`,
         tournamentName: row.tournamentName,
         scheduledTime: row.scheduledTime,
@@ -122,6 +126,12 @@ export class DashboardService {
     };
   }
 
+  private async ensureTeamLogoColumn() {
+    await this.usersRepository.query(`
+      ALTER TABLE teams
+      ADD COLUMN IF NOT EXISTS logo_url VARCHAR(500) NULL
+    `);
+  }
   private summaryQuery(scope: 'today' | 'all', includePrivateTournaments: boolean) {
     const tournamentVisibilityCondition = includePrivateTournaments
       ? ''
@@ -255,6 +265,8 @@ export class DashboardService {
         t.name AS "tournamentName",
         COALESCE(home.name, m.home_placeholder) AS "homeTeam",
         COALESCE(away.name, m.away_placeholder) AS "awayTeam",
+        home.logo_url AS "homeLogoUrl",
+        away.logo_url AS "awayLogoUrl",
         m.scheduled_time AS "scheduledTime",
         m.scheduled_time - (m.lock_minutes_before_start * INTERVAL '1 minute') AS deadline,
         COALESCE(m.external_source, 'MANUAL') AS source,
@@ -287,6 +299,8 @@ export class DashboardService {
         ranked."tournamentName",
         ranked."homeTeam",
         ranked."awayTeam",
+        ranked."homeLogoUrl",
+        ranked."awayLogoUrl",
         ranked."scheduledTime",
         ranked.deadline,
         ranked.source,
@@ -300,6 +314,8 @@ export class DashboardService {
           t.name AS "tournamentName",
           COALESCE(home.name, m.home_placeholder) AS "homeTeam",
           COALESCE(away.name, m.away_placeholder) AS "awayTeam",
+          home.logo_url AS "homeLogoUrl",
+          away.logo_url AS "awayLogoUrl",
           m.scheduled_time AS "scheduledTime",
           m.scheduled_time - (m.lock_minutes_before_start * INTERVAL '1 minute') AS deadline,
           COALESCE(m.external_source, 'MANUAL') AS source,

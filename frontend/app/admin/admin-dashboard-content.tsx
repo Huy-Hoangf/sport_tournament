@@ -108,6 +108,8 @@ type MatchRow = {
   tournamentId?: number;
   homeName?: string;
   awayName?: string;
+  homeLogoUrl?: string | null;
+  awayLogoUrl?: string | null;
   encounter: string;
   tournamentName: string;
   scheduledTime: string;
@@ -2001,9 +2003,13 @@ function TournamentMatchDetails({
           >
             <div className="flex flex-wrap items-start justify-between gap-3">
               <div className="min-w-0">
-                <p className="break-words font-black text-white">
-                  {isF1 ? (match.homeName ?? match.encounter) : match.encounter}
-                </p>
+                {isF1 ? (
+                  <p className="break-words font-black text-white">
+                    {match.homeName ?? match.encounter}
+                  </p>
+                ) : (
+                  <MatchTeams match={match} />
+                )}
                 {isF1 && (
                   <p className="mt-1 text-xs font-bold uppercase tracking-[0.08em] text-[#9fb2b8]">
                     Circuit: {match.awayName ?? "TBD"}
@@ -2088,7 +2094,7 @@ function TournamentMatchDetails({
                       </p>
                     </div>
                   ) : (
-                    match.encounter
+                    <MatchTeams match={match} />
                   )}
                 </td>
                 <td className="px-4 text-white">
@@ -2218,6 +2224,39 @@ function DashboardPanelTitle({
   );
 }
 
+function MatchTeams({ match }: { match: MatchRow }) {
+  return (
+    <div className="flex min-w-0 flex-wrap items-center gap-2 font-black text-white">
+      <TeamLogo name={match.homeName ?? "Home team"} src={match.homeLogoUrl} />
+      <span className="min-w-0 truncate">{match.homeName ?? "TBD"}</span>
+      <span className="text-xs uppercase text-[#84d8e8]">vs</span>
+      <TeamLogo name={match.awayName ?? "Away team"} src={match.awayLogoUrl} />
+      <span className="min-w-0 truncate">{match.awayName ?? "TBD"}</span>
+    </div>
+  );
+}
+
+function TeamLogo({ name, src }: { name: string; src?: string | null }) {
+  const initial = name.trim().charAt(0).toUpperCase() || "?";
+
+  if (!src) {
+    return (
+      <span className="flex h-7 w-7 shrink-0 items-center justify-center rounded border border-[#31505a] bg-[#143943] text-[11px] text-[#84d8e8]">
+        {initial}
+      </span>
+    );
+  }
+
+  return (
+    <img
+      src={src}
+      alt={`${name} logo`}
+      loading="lazy"
+      referrerPolicy="no-referrer"
+      className="h-7 w-7 shrink-0 rounded bg-white/90 object-contain p-0.5"
+    />
+  );
+}
 function DashboardStatusBadge({ status }: { status: string }) {
   const normalized = status.toUpperCase();
   const className =
