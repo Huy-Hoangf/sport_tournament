@@ -3,7 +3,8 @@
 import { apiRequest, type CurrentUser } from "../api";
 import { logoutAll, readCurrentUser } from "../auth-sync";
 import NoticeBanner, { type Notice } from "../notice-banner";
-import AdminDashboardContent from "./admin-dashboard-content";
+import DashboardView from "./dashboard-view";
+import TournamentView from "./tournament-view";
 import { useCallback, useEffect, useMemo, useState } from "react";
 import { useRouter } from "next/navigation";
 import * as XLSX from "xlsx";
@@ -16,6 +17,7 @@ import {
   Gamepad2,
   LayoutDashboard,
   LogOut,
+  Menu,
   MoreVertical,
   Pencil,
   Search,
@@ -27,6 +29,7 @@ import {
   UserPlus,
   Users,
   Wifi,
+  X,
 } from "lucide-react";
 
 type BackendUser = {
@@ -80,8 +83,11 @@ export default function AdminPage() {
   const [email, setEmail] = useState("");
   const [newUserRole, setNewUserRole] = useState<"ADMIN" | "PLAYER">("PLAYER");
   const [isLoading, setIsLoading] = useState(false);
+  const [isMobileMenuOpen, setIsMobileMenuOpen] = useState(false);
   const [isNameSearchOpen, setIsNameSearchOpen] = useState(false);
-  const [isPlayerActionsOpen, setIsPlayerActionsOpen] = useState(false);
+  const [openPlayerActionId, setOpenPlayerActionId] = useState<string | null>(
+    null,
+  );
   const [nameSearch, setNameSearch] = useState("");
   const [statusFilter, setStatusFilter] = useState<StatusFilter>("ALL");
   const [currentPage, setCurrentPage] = useState(1);
@@ -290,6 +296,45 @@ export default function AdminPage() {
       refreshDashboard();
     } catch (error) {
       showNotice(error instanceof Error ? error.message : "Update player failed.");
+    } finally {
+      setIsLoading(false);
+    }
+  }
+
+  async function promotePlayerToAdmin(player: Player) {
+    if (!isSuperAdmin) {
+      showNotice("Only the super admin can add administrator accounts.");
+      return;
+    }
+
+    if (player.role !== "PLAYER") {
+      showNotice("This user is already an administrator.");
+      return;
+    }
+
+    setIsLoading(true);
+
+    try {
+      await apiRequest<{ message: string; user: BackendUser }>(
+        `/users/admin/${player.id}/rename`,
+        {
+          method: "PATCH",
+          body: JSON.stringify({
+            fullName: player.fullName,
+            email: player.email,
+            role: "ADMIN",
+          }),
+        },
+      );
+
+      showNotice(`${player.fullName} promoted to admin successfully.`);
+      setOpenPlayerActionId(null);
+      await fetchPlayers();
+      refreshDashboard();
+    } catch (error) {
+      showNotice(
+        error instanceof Error ? error.message : "Promote user failed.",
+      );
     } finally {
       setIsLoading(false);
     }
@@ -548,10 +593,126 @@ export default function AdminPage() {
     router.push("/login");
   }
 
+  function openAdminView(view: AdminView) {
+    setActiveView(view);
+    setIsMobileMenuOpen(false);
+    setOpenPlayerActionId(null);
+  }
+
   return (
-    <main className="min-h-screen bg-[#06161b] text-[#d9e5e7]">
+    <main className="min-h-screen overflow-x-hidden bg-[#06161b] text-[#d9e5e7]">
       <NoticeBanner notice={notice} onClose={() => setNotice(null)} />
-      <aside className="fixed left-0 top-0 flex h-screen w-[260px] flex-col border-r border-[#3c5056] bg-[#0d252d]">
+      <header className="sticky top-0 z-40 border-b border-[#3c5056] bg-[#07181d]/95 px-4 py-3 backdrop-blur md:hidden">
+        <div className="flex items-center justify-between gap-3">
+          <button
+            type="button"
+            onClick={() => setIsMobileMenuOpen(true)}
+            className="flex h-11 w-11 items-center justify-center rounded border border-[#3a4d54] bg-[#0d252d] text-[#dce8eb]"
+            aria-label="Open navigation menu"
+          >
+            <Menu size={23} />
+          </button>
+          <div className="min-w-0 flex-1">
+            <h1 className="truncate text-lg font-black uppercase tracking-[0.04em] text-[#84d8e8]">
+              TWENTY-TECH
+            </h1>
+            <p className="text-[10px] font-bold uppercase tracking-[0.08em] text-[#9fb2b8]">
+              A game for company
+            </p>
+          </div>
+          <button
+            type="button"
+            onClick={() => showNotice("this feature is not ready")}
+            className="flex h-11 w-11 items-center justify-center rounded border border-[#3a4d54] bg-[#0d252d] text-[#dce8eb]"
+            aria-label="Notifications"
+          >
+            <Bell size={20} />
+          </button>
+          <div className="flex h-11 w-11 shrink-0 items-center justify-center rounded border border-[#41636d] bg-[#143942] text-sm font-black uppercase text-[#84d8e8]">
+            {currentUser?.fullName?.trim().charAt(0) || "A"}
+          </div>
+        </div>
+      </header>
+
+      {isMobileMenuOpen && (
+        <div className="fixed inset-0 z-50 md:hidden">
+          <button
+            type="button"
+            className="absolute inset-0 bg-black/70"
+            aria-label="Close navigation menu"
+            onClick={() => setIsMobileMenuOpen(false)}
+          />
+          <aside className="relative flex h-full w-[min(320px,86vw)] flex-col overflow-y-auto border-r border-[#3c5056] bg-[#0d252d] shadow-2xl">
+            <div className="flex items-start justify-between gap-4 px-5 py-5">
+              <div>
+                <h1 className="text-base font-black uppercase leading-4 tracking-[0.08em] text-white">
+                  TWENTY
+                  <br />
+                  TECH
+                </h1>
+                <p className="mt-1 text-[10px] font-bold uppercase tracking-[0.06em] text-[#9fb2b8]">
+                  A GAME FOR COMPANY
+                </p>
+              </div>
+              <button
+                type="button"
+                onClick={() => setIsMobileMenuOpen(false)}
+                className="flex h-10 w-10 items-center justify-center rounded border border-[#3a4d54] text-[#dce8eb]"
+                aria-label="Close navigation menu"
+              >
+                <X size={21} />
+              </button>
+            </div>
+
+            <div className="mx-5 flex items-center justify-between border-y border-[#3c5056] py-4">
+              <div className="min-w-0">
+                <p className="truncate text-xs font-black uppercase text-white">
+                  {currentUser?.fullName ?? "Admin_01"}
+                </p>
+                <p className="text-[10px] uppercase text-[#c4d3d8]">Online</p>
+              </div>
+              <div className="flex h-[42px] w-[42px] shrink-0 items-center justify-center border border-[#41636d] bg-[#143942] text-sm font-black uppercase text-[#84d8e8]">
+                {currentUser?.fullName?.trim().charAt(0) || "A"}
+              </div>
+            </div>
+
+            <nav className="mt-5 space-y-2 text-sm font-bold">
+              <MenuItem active={activeView === "dashboard"} icon={<LayoutDashboard size={21} />} label="Dashboard" onClick={() => openAdminView("dashboard")} />
+              <MenuItem active={activeView === "tournaments"} icon={<Trophy size={21} />} label="Tournaments" onClick={() => openAdminView("tournaments")} />
+              <MenuItem icon={<Gamepad2 size={21} />} label="Matches" onClick={() => showNotice("this feature is not ready")} />
+              {isAdmin && (
+                <MenuItem active={activeView === "players"} icon={<Users size={18} />} label="Players" onClick={() => openAdminView("players")} />
+              )}
+              <MenuItem icon={<BarChart3 size={21} />} label="Leaderboard" onClick={() => showNotice("this feature is not ready")} />
+            </nav>
+
+            <div className="mt-auto border-t border-[#3c5056] p-5">
+              <button className="mb-5 h-[50px] w-full rounded bg-[#84d8e8] text-sm font-black text-[#06161b]">
+                Export Report
+              </button>
+              <button
+                onClick={() => {
+                  setOpenModal("changePassword");
+                  setIsMobileMenuOpen(false);
+                }}
+                className="mb-5 flex w-full items-center gap-4 text-lg text-[#e2edf0]"
+              >
+                <Settings size={21} />
+                Setting
+              </button>
+              <button
+                onClick={logout}
+                className="flex w-full items-center gap-4 text-lg text-[#ff8a8a]"
+              >
+                <LogOut size={21} />
+                Logout
+              </button>
+            </div>
+          </aside>
+        </div>
+      )}
+
+      <aside className="hidden border-b border-[#3c5056] bg-[#0d252d] md:fixed md:left-0 md:top-0 md:flex md:h-screen md:w-[260px] md:flex-col md:border-b-0 md:border-r">
         <div className="px-6 pt-8">
           <h1 className="text-sm font-black uppercase leading-3 tracking-[0.08em] text-white">
             TWENTY
@@ -585,17 +746,17 @@ export default function AdminPage() {
           </div>
         </div>
 
-        <nav className="mt-8 space-y-2 text-sm font-bold">
-          <MenuItem active={activeView === "dashboard"} icon={<LayoutDashboard size={21} />} label="Dashboard" onClick={() => setActiveView("dashboard")} />
-          <MenuItem active={activeView === "tournaments"} icon={<Trophy size={21} />} label="Tournaments" onClick={() => setActiveView("tournaments")} />
+        <nav className="mt-6 flex overflow-x-auto text-sm font-bold md:mt-8 md:block md:space-y-2 md:overflow-visible">
+          <MenuItem active={activeView === "dashboard"} icon={<LayoutDashboard size={21} />} label="Dashboard" onClick={() => openAdminView("dashboard")} />
+          <MenuItem active={activeView === "tournaments"} icon={<Trophy size={21} />} label="Tournaments" onClick={() => openAdminView("tournaments")} />
           <MenuItem icon={<Gamepad2 size={21} />} label="Matches" onClick={() => showNotice("this feature is not ready")} />
           {isAdmin && (
-            <MenuItem active={activeView === "players"} icon={<Users size={18} />} label="Players" onClick={() => setActiveView("players")} />
+            <MenuItem active={activeView === "players"} icon={<Users size={18} />} label="Players" onClick={() => openAdminView("players")} />
           )}
           <MenuItem icon={<BarChart3 size={21} />} label="Leaderboard" onClick={() => showNotice("this feature is not ready")} />
         </nav>
 
-        <div className="mt-auto border-t border-[#3c5056] p-6">
+        <div className="hidden md:mt-auto md:block md:border-t md:border-[#3c5056] md:p-6">
           <button className="mb-8 h-[53px] w-full rounded bg-[#84d8e8] text-sm font-black text-[#06161b]">
             Export Report
           </button>
@@ -618,16 +779,16 @@ export default function AdminPage() {
         </div>
       </aside>
 
-      <section className="ml-[260px] min-h-screen bg-[#06161b]">
+      <section className="min-h-screen bg-[#06161b] md:ml-[260px]">
         {activeView === "dashboard" ? (
-          <AdminDashboardContent isAdmin={isAdmin} refreshKey={dashboardRefreshKey} view="dashboard" />
+          <DashboardView isAdmin={isAdmin} refreshKey={dashboardRefreshKey} />
         ) : activeView === "tournaments" ? (
-          <AdminDashboardContent isAdmin={isAdmin} refreshKey={dashboardRefreshKey} view="tournaments" />
+          <TournamentView isAdmin={isAdmin} refreshKey={dashboardRefreshKey} />
         ) : (
-        <div className="px-8 py-9">
-          <div className="mb-8 flex items-start justify-between gap-6">
+        <div className="px-4 py-6 sm:px-6 md:px-8 md:py-9">
+          <div className="mb-8 grid gap-6 xl:grid-cols-[1fr_auto] xl:items-start">
             <div>
-              <h2 className="text-[34px] font-black leading-none text-white">
+              <h2 className="text-[28px] font-black leading-none text-white sm:text-[34px]">
                 Player Management
               </h2>
               <p className="mt-3 text-[16px] text-[#adbdc2]">
@@ -635,55 +796,24 @@ export default function AdminPage() {
               </p>
             </div>
 
-            <div className="flex flex-wrap justify-end gap-4">
+            <div className="grid gap-3 sm:grid-cols-2 lg:flex lg:flex-wrap lg:justify-end lg:gap-4">
               <button
                 onClick={() => {
                   setNewUserRole("PLAYER");
-                  setIsPlayerActionsOpen(false);
+                  setOpenPlayerActionId(null);
                   setOpenModal("createUser");
                 }}
-                className="flex h-[62px] items-center gap-3 rounded bg-[#84d8e8] px-8 text-lg font-black text-[#06161b]"
+                className="flex h-[56px] items-center justify-center gap-3 rounded bg-[#84d8e8] px-5 text-base font-black text-[#06161b] sm:h-[62px] sm:px-8 sm:text-lg"
               >
                 <UserPlus size={27} />
                 Add Player
               </button>
-              {isSuperAdmin && (
-                <div className="relative">
-                  <button
-                    onClick={() =>
-                      setIsPlayerActionsOpen((isOpen) => !isOpen)
-                    }
-                    className="flex h-[62px] w-[62px] items-center justify-center rounded border border-[#3a4d54] bg-[#0d252d] text-[#dce8eb] transition hover:border-[#84d8e8] hover:text-[#84d8e8]"
-                    title="More player actions"
-                    aria-label="More player actions"
-                    aria-expanded={isPlayerActionsOpen}
-                  >
-                    <MoreVertical size={24} />
-                  </button>
-                  {isPlayerActionsOpen && (
-                    <div className="absolute right-0 top-[70px] z-20 w-[190px] rounded border border-[#3a4d54] bg-[#0d252d] p-2 shadow-2xl">
-                      <button
-                        type="button"
-                        onClick={() => {
-                          setNewUserRole("ADMIN");
-                          setOpenModal("createUser");
-                          setIsPlayerActionsOpen(false);
-                        }}
-                        className="flex w-full items-center gap-3 rounded px-3 py-3 text-left text-sm font-black text-[#84d8e8] transition hover:bg-[#143942]"
-                      >
-                        <ShieldPlus size={18} />
-                        Add Admin
-                      </button>
-                    </div>
-                  )}
-                </div>
-              )}
               <button
                 onClick={() => {
-                  setIsPlayerActionsOpen(false);
+                  setOpenPlayerActionId(null);
                   setOpenModal("createUserFromList");
                 }}
-                className="flex h-[62px] items-center gap-3 rounded bg-[#84d8e8] px-8 text-lg font-black text-[#06161b]"
+                className="flex h-[56px] items-center justify-center gap-3 rounded bg-[#84d8e8] px-5 text-base font-black text-[#06161b] sm:h-[62px] sm:px-8 sm:text-lg"
               >
                 <UserPlus size={27} />
                 Add Player From List
@@ -691,7 +821,7 @@ export default function AdminPage() {
               <button
                 onClick={openDeleteAllPlayersConfirmation}
                 disabled={isLoading}
-                className="flex h-[62px] items-center gap-3 rounded border border-[#ff6b6b99] bg-[#35171b] px-6 text-lg font-black text-[#ff8a8a] transition hover:border-[#ff6b6b] hover:bg-[#421b20] disabled:opacity-60"
+                className="flex h-[56px] items-center justify-center gap-3 rounded border border-[#ff6b6b99] bg-[#35171b] px-5 text-base font-black text-[#ff8a8a] transition hover:border-[#ff6b6b] hover:bg-[#421b20] disabled:opacity-60 sm:h-[62px] sm:px-6 sm:text-lg"
               >
                 <Trash2 size={24} />
                 Delete All Players
@@ -699,7 +829,7 @@ export default function AdminPage() {
             </div>
           </div>
 
-          <div className="mb-8 grid grid-cols-3 gap-6">
+          <div className="mb-8 grid gap-4 md:grid-cols-2 xl:grid-cols-3 xl:gap-6">
             <StatCard
               title="Total Players"
               value={players.length.toLocaleString()}
@@ -719,7 +849,7 @@ export default function AdminPage() {
             />
           </div>
 
-          <div className="mb-6 flex items-center gap-3">
+          <div className="mb-6 flex flex-wrap items-center gap-3">
             <StatusFilterSelect
               value={statusFilter}
               onChange={(value) => {
@@ -739,7 +869,7 @@ export default function AdminPage() {
           </div>
 
           {isNameSearchOpen && (
-            <div className="mb-6 flex h-[52px] max-w-[430px] items-center gap-3 rounded border border-[#3a4d54] bg-[#0d252d] px-4 text-[#e3eef0]">
+            <div className="mb-6 flex h-[52px] w-full max-w-[430px] items-center gap-3 rounded border border-[#3a4d54] bg-[#0d252d] px-4 text-[#e3eef0]">
               <Search size={20} />
               <input
                 value={nameSearch}
@@ -764,8 +894,191 @@ export default function AdminPage() {
             </div>
           )}
 
-          <div className="overflow-hidden rounded border border-[#3a4d54] bg-[#0d252d] shadow-[0_0_0_1px_rgba(255,255,255,0.02)]">
-            <table className="w-full table-fixed">
+          <div className="mb-4 space-y-3 lg:hidden">
+            {paginatedPlayers.map((player) => (
+              <article
+                key={player.id}
+                className="rounded border border-[#3a4d54] bg-[#0d252d] p-4 shadow-[0_0_0_1px_rgba(255,255,255,0.02)]"
+              >
+                <div className="flex items-start gap-3">
+                  <div className="flex h-11 w-11 shrink-0 items-center justify-center border border-[#35535c] bg-[#123641] text-sm font-black uppercase text-[#84d8e8]">
+                    {player.fullName.trim().charAt(0)}
+                  </div>
+                  <div className="min-w-0 flex-1">
+                    <p className="truncate text-base font-black text-white">
+                      {player.fullName}
+                    </p>
+                    <p className="mt-1 truncate text-xs text-[#9fb2b8]">
+                      {player.email}
+                    </p>
+                    <p className="mt-1 text-[10px] font-black uppercase tracking-[0.08em] text-[#d4e3e6]">
+                      {player.role === "SUPER_ADMIN"
+                        ? "Super Administrator"
+                        : player.role === "ADMIN"
+                          ? "Administrator"
+                          : "Member"}
+                    </p>
+                  </div>
+                  <div className="relative shrink-0">
+                    {player.role === "PLAYER" && (
+                      <button
+                        type="button"
+                        onClick={() =>
+                          setOpenPlayerActionId((currentId) =>
+                            currentId === player.id ? null : player.id,
+                          )
+                        }
+                        className="flex h-10 w-10 items-center justify-center rounded border border-[#3a4d54] text-[#dce8eb]"
+                        aria-label={`Open actions for ${player.fullName}`}
+                        aria-expanded={openPlayerActionId === player.id}
+                      >
+                        <MoreVertical size={19} />
+                      </button>
+                    )}
+                    {player.role === "PLAYER" &&
+                      openPlayerActionId === player.id && (
+                        <div className="absolute right-0 top-12 z-20 w-[210px] rounded border border-[#3a4d54] bg-[#0d252d] p-2 shadow-2xl">
+                          {isSuperAdmin && (
+                            <button
+                              type="button"
+                              onClick={() => void promotePlayerToAdmin(player)}
+                              disabled={isLoading}
+                              className="flex w-full items-center gap-3 rounded px-3 py-3 text-left text-sm font-black text-[#84d8e8] transition hover:bg-[#143942] disabled:opacity-60"
+                            >
+                              <ShieldPlus size={18} />
+                              Add Admin
+                            </button>
+                          )}
+                          <button
+                            type="button"
+                            onClick={() => {
+                              setSelectedPlayer(player);
+                              setOpenPlayerActionId(null);
+                              setOpenModal("changeStatus");
+                            }}
+                            className="flex w-full items-center gap-3 rounded px-3 py-3 text-left text-sm font-black text-[#dce8eb] transition hover:bg-[#143942] hover:text-[#84d8e8]"
+                          >
+                            <SlidersHorizontal size={18} />
+                            Change Status
+                          </button>
+                          <button
+                            type="button"
+                            onClick={() => openDeletePlayerConfirmation(player)}
+                            className="flex w-full items-center gap-3 rounded px-3 py-3 text-left text-sm font-black text-[#ff8a8a] transition hover:bg-[#35171b]"
+                          >
+                            <Trash2 size={18} />
+                            Delete Player
+                          </button>
+                        </div>
+                      )}
+                  </div>
+                </div>
+
+                <div className="mt-4 grid gap-2 text-xs sm:grid-cols-3">
+                  <div className="rounded border border-[#243c43] bg-[#07181d] p-3">
+                    <p className="text-[10px] uppercase tracking-[0.08em] text-[#789098]">
+                      Member ID
+                    </p>
+                    <p className="mt-1 truncate font-black text-white">
+                      {player.memberCode}
+                    </p>
+                  </div>
+                  <div className="rounded border border-[#243c43] bg-[#07181d] p-3">
+                    <p className="text-[10px] uppercase tracking-[0.08em] text-[#789098]">
+                      Status
+                    </p>
+                    <div className="mt-1">
+                      <StatusBadge status={player.status} />
+                    </div>
+                  </div>
+                  <div className="rounded border border-[#243c43] bg-[#07181d] p-3">
+                    <p className="text-[10px] uppercase tracking-[0.08em] text-[#789098]">
+                      Events
+                    </p>
+                    <p className="mt-1 font-black text-white">
+                      {player.events.toString().padStart(2, "0")}
+                    </p>
+                  </div>
+                </div>
+
+                {canRenameUser(player, currentUser) && (
+                  <button
+                    type="button"
+                    onClick={() => {
+                      setSelectedPlayer(player);
+                      setRenameFullName(player.fullName);
+                      setRenameEmail(player.email);
+                      setRenameRole(
+                        player.role === "ADMIN" ? "ADMIN" : "PLAYER",
+                      );
+                      setOpenModal("renamePlayer");
+                    }}
+                    className="mt-4 flex h-11 w-full items-center justify-center gap-2 rounded border border-[#3a4d54] text-sm font-black text-[#dce8eb] transition hover:border-[#84d8e8] hover:text-[#84d8e8]"
+                  >
+                    <Pencil size={17} />
+                    Edit User
+                  </button>
+                )}
+              </article>
+            ))}
+
+            {visiblePlayers.length === 0 && (
+              <div className="rounded border border-[#3a4d54] bg-[#0d252d] px-4 py-10 text-center text-[#9fb2b8]">
+                No users found.
+              </div>
+            )}
+
+            {visiblePlayers.length > 0 && (
+              <div className="flex flex-col gap-3 rounded border border-[#3a4d54] bg-[#0d252d] px-4 py-4 text-xs uppercase text-white">
+                <p>
+                  Showing{" "}
+                  {(currentSafePage - 1) * PLAYERS_PER_PAGE + 1}-
+                  {Math.min(
+                    currentSafePage * PLAYERS_PER_PAGE,
+                    visiblePlayers.length,
+                  )}{" "}
+                  of {visiblePlayers.length}
+                </p>
+
+                <div className="flex max-w-full items-center gap-2 overflow-x-auto pb-1">
+                  <PageButton
+                    onClick={() =>
+                      setCurrentPage((page) => Math.max(1, page - 1))
+                    }
+                    disabled={currentSafePage === 1}
+                  >
+                    <ChevronLeft size={15} />
+                  </PageButton>
+                  {Array.from(
+                    { length: totalPages },
+                    (_, index) => index + 1,
+                  ).map((page) => (
+                    <PageButton
+                      key={page}
+                      active={page === currentSafePage}
+                      onClick={() => setCurrentPage(page)}
+                    >
+                      {page}
+                    </PageButton>
+                  ))}
+                  <PageButton
+                    onClick={() =>
+                      setCurrentPage((page) =>
+                        Math.min(totalPages, page + 1),
+                      )
+                    }
+                    disabled={currentSafePage === totalPages}
+                  >
+                    <ChevronRight size={15} />
+                  </PageButton>
+                </div>
+              </div>
+            )}
+          </div>
+
+          <div className="hidden overflow-hidden rounded border border-[#3a4d54] bg-[#0d252d] shadow-[0_0_0_1px_rgba(255,255,255,0.02)] lg:block">
+            <div className="overflow-x-auto">
+            <table className="w-full min-w-[940px] table-fixed">
               <thead className="h-[65px] border-b border-[#3a4d54] bg-[#14272e] text-xs uppercase tracking-[0.08em] text-[#d5e0e3]">
                 <tr>
                   <th className="w-[48px] px-4 text-left">
@@ -821,7 +1134,7 @@ export default function AdminPage() {
                       {player.events.toString().padStart(2, "0")}
                     </td>
                     <td>
-                      <div className="flex items-center gap-5 text-[#dce8eb]">
+                      <div className="relative flex items-center gap-5 text-[#dce8eb]">
                         {canRenameUser(player, currentUser) && (
                           <button
                             onClick={() => {
@@ -849,15 +1162,44 @@ export default function AdminPage() {
                               <Trash2 size={18} />
                             </button>
                             <button
-                              onClick={() => {
-                                setSelectedPlayer(player);
-                                setOpenModal("changeStatus");
-                              }}
-                              title="Change status"
+                              onClick={() =>
+                                setOpenPlayerActionId((currentId) =>
+                                  currentId === player.id ? null : player.id,
+                                )
+                              }
+                              title="More actions"
+                              aria-expanded={openPlayerActionId === player.id}
                               className="transition hover:text-[#84d8e8]"
                             >
                               <MoreVertical size={18} />
                             </button>
+                            {openPlayerActionId === player.id && (
+                              <div className="absolute right-4 top-8 z-20 w-[190px] rounded border border-[#3a4d54] bg-[#0d252d] p-2 shadow-2xl">
+                                {isSuperAdmin && (
+                                  <button
+                                    type="button"
+                                    onClick={() => void promotePlayerToAdmin(player)}
+                                    disabled={isLoading}
+                                    className="flex w-full items-center gap-3 rounded px-3 py-3 text-left text-sm font-black text-[#84d8e8] transition hover:bg-[#143942] disabled:opacity-60"
+                                  >
+                                    <ShieldPlus size={18} />
+                                    Add Admin
+                                  </button>
+                                )}
+                                <button
+                                  type="button"
+                                  onClick={() => {
+                                    setSelectedPlayer(player);
+                                    setOpenPlayerActionId(null);
+                                    setOpenModal("changeStatus");
+                                  }}
+                                  className="flex w-full items-center gap-3 rounded px-3 py-3 text-left text-sm font-black text-[#dce8eb] transition hover:bg-[#143942] hover:text-[#84d8e8]"
+                                >
+                                  <SlidersHorizontal size={18} />
+                                  Change Status
+                                </button>
+                              </div>
+                            )}
                           </>
                         )}
                       </div>
@@ -877,8 +1219,9 @@ export default function AdminPage() {
                 )}
               </tbody>
             </table>
+            </div>
 
-            <div className="flex h-[65px] items-center justify-between px-4 text-xs uppercase text-white">
+            <div className="flex min-h-[65px] flex-col gap-3 px-4 py-4 text-xs uppercase text-white sm:flex-row sm:items-center sm:justify-between sm:py-0">
               <p>
                 Showing{" "}
                 {visiblePlayers.length > 0
@@ -889,7 +1232,7 @@ export default function AdminPage() {
                 of {visiblePlayers.length}
               </p>
 
-              <div className="flex items-center gap-2">
+              <div className="flex max-w-full items-center gap-2 overflow-x-auto pb-1">
                 <PageButton
                   onClick={() => setCurrentPage((page) => Math.max(1, page - 1))}
                   disabled={currentSafePage === 1}
@@ -1523,7 +1866,7 @@ function StatCard({
   meter?: boolean;
 }) {
   return (
-    <div className="h-[144px] rounded border border-[#3a4d54] bg-[#0d252d] px-6 py-6 shadow-[0_2px_0_rgba(255,255,255,0.08)]">
+    <div className="min-h-[144px] rounded border border-[#3a4d54] bg-[#0d252d] px-6 py-6 shadow-[0_2px_0_rgba(255,255,255,0.08)]">
       <div className="flex items-start justify-between">
         <div>
           <h3 className="text-sm font-black uppercase tracking-[0.1em] text-[#c8d6db]">
@@ -1557,7 +1900,7 @@ function StatusFilterSelect({
   onChange: (value: StatusFilter) => void;
 }) {
   return (
-    <label className="relative flex h-[35px] w-[244px] items-center rounded border border-[#3a4d54] bg-[#0d252d] px-4 text-sm font-black uppercase tracking-[0.08em] text-[#dce8eb]">
+    <label className="relative flex h-[38px] w-full max-w-[244px] items-center rounded border border-[#3a4d54] bg-[#0d252d] px-4 text-sm font-black uppercase tracking-[0.08em] text-[#dce8eb]">
       <select
         value={value}
         onChange={(event) => onChange(event.target.value as StatusFilter)}
@@ -1635,9 +1978,9 @@ function Modal({
   tone?: "normal" | "danger";
 }) {
   return (
-    <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/70">
+    <div className="fixed inset-0 z-50 flex items-center justify-center overflow-y-auto bg-black/70 p-4">
       <div
-        className={`w-[520px] rounded-lg border bg-[#101818] p-7 ${
+        className={`w-full max-w-[520px] rounded-lg border bg-[#101818] p-5 sm:p-7 ${
           tone === "danger"
             ? "border-[#ff6b6b66] shadow-[0_0_50px_rgba(255,107,107,0.12)]"
             : "border-[#84d8e855] shadow-[0_0_50px_rgba(132,216,232,0.18)]"
