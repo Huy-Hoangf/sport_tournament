@@ -1,4 +1,5 @@
 import { Test, TestingModule } from '@nestjs/testing';
+import { AuthService } from '../auth/auth.service';
 import { UsersService } from './users.service';
 import { UsersController } from './users.controller';
 
@@ -16,6 +17,12 @@ describe('UsersController', () => {
             createPlayerByAdmin: jest.fn(),
             renamePlayerByAdmin: jest.fn(),
             deletePlayerByAdmin: jest.fn(),
+          },
+        },
+        {
+          provide: AuthService,
+          useValue: {
+            verifyAdminToken: jest.fn(),
           },
         },
       ],

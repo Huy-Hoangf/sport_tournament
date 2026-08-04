@@ -1,8 +1,35 @@
 @import "tailwindcss";
 
+:root {
+  --app-bg: #06161b;
+  --app-surface: #0d252d;
+  --app-surface-raised: #14272e;
+  --app-border: #3a4d54;
+  --app-accent: #84d8e8;
+  --app-danger: #ff6b6b;
+  --app-danger-bg: #35171b;
+  --app-warning: #f4c95d;
+  --app-warning-bg: #302713;
+}
+
 body {
   margin: 0;
   font-family: "Rajdhani", "Segoe UI", Arial, sans-serif;
+  background: var(--app-bg);
+  color: #dce8eb;
+}
+
+::selection {
+  background: rgba(132, 216, 232, 0.28);
+  color: #ffffff;
+}
+
+button:focus-visible,
+a:focus-visible,
+input:focus-visible,
+select:focus-visible {
+  outline: 2px solid var(--app-accent);
+  outline-offset: 2px;
 }
 
 input:-webkit-autofill,
@@ -17,9 +44,6 @@ input:-webkit-autofill:active {
 
 .auth-page {
   min-height: 100vh;
-  background:
-    radial-gradient(circle at 42% 38%, rgba(97, 185, 197, 0.12), transparent 28%),
-    radial-gradient(circle at 76% 58%, rgba(139, 94, 63, 0.2), transparent 20%),
-    linear-gradient(180deg, #10191a 0%, #071010 58%, #050909 100%);
+  background: #071418;
   color: #d7dddd;
 }

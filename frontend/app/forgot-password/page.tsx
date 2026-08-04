@@ -87,13 +87,13 @@ export default function ForgotPasswordPage() {
     <main className="auth-page flex min-h-screen flex-col overflow-hidden bg-[#0c1111] text-zinc-200">
       <NoticeBanner notice={notice} onClose={() => setNotice(null)} />
       <header className="flex h-[90px] shrink-0 items-center justify-between border-b border-white/10 px-8">
-        <h1 className="text-[30px] font-black tracking-[-0.06em] text-[#9ddff2] drop-shadow-[0_0_10px_rgba(142,216,236,0.45)]">
+        <h1 className="text-[30px] font-black tracking-[-0.06em] text-[#84d8e8] drop-shadow-[0_0_10px_rgba(132,216,232,0.35)]">
           TWENTY-TECH
         </h1>
 
         <Link
           href="/login"
-          className="flex items-center gap-2 text-sm font-bold uppercase tracking-[0.18em] text-zinc-300 hover:text-[#8ed8ec]"
+          className="flex items-center gap-2 text-sm font-bold uppercase tracking-[0.18em] text-zinc-300 hover:text-[#84d8e8]"
         >
           <ArrowLeft size={18} />
           Back to login
@@ -101,7 +101,7 @@ export default function ForgotPasswordPage() {
       </header>
 
       <section className="flex flex-1 items-center justify-center px-5 py-12">
-        <div className="w-full max-w-[560px] rounded-lg border border-[#8ed8ec44] bg-[#111a1acc] px-10 py-11 shadow-[0_0_55px_rgba(75,190,210,0.12)] backdrop-blur">
+        <div className="w-full max-w-[560px] rounded-lg border border-[#84d8e844] bg-[#0d1b1ecc] px-10 py-11 shadow-[0_0_45px_rgba(132,216,232,0.1)] backdrop-blur">
           <h2 className="mb-3 text-center text-[38px] font-bold tracking-[-0.02em] text-zinc-200">
             Forgot Password
           </h2>
@@ -120,14 +120,14 @@ export default function ForgotPasswordPage() {
             onChange={(event) => setEmail(event.target.value)}
             disabled={isVerified}
             placeholder="YOUR COMPANY EMAIL"
-            className="mb-6 h-[64px] w-full rounded border border-white/10 bg-[#080f0f] px-5 text-lg font-bold text-zinc-200 outline-none transition placeholder:text-zinc-600 focus:border-[#8ed8ec88] disabled:opacity-60"
+            className="mb-6 h-[64px] w-full rounded border border-white/10 bg-[#080f0f] px-5 text-lg font-bold text-zinc-200 outline-none transition placeholder:text-zinc-600 focus:border-[#84d8e888] disabled:opacity-60"
           />
 
           {!isVerified ? (
             <button
               onClick={verifyEmail}
               disabled={isLoading}
-              className="flex h-[64px] w-full items-center justify-center gap-3 rounded bg-[#8ed8ec] text-[16px] font-black uppercase tracking-[0.22em] text-[#122226] shadow-[0_0_22px_rgba(142,216,236,0.35)] transition hover:bg-[#a4e7f5] disabled:opacity-60"
+              className="flex h-[64px] w-full items-center justify-center gap-3 rounded bg-[#84d8e8] text-[16px] font-black uppercase tracking-[0.22em] text-[#102026] shadow-[0_0_20px_rgba(132,216,232,0.28)] transition hover:bg-[#a5e9f3] disabled:opacity-60"
             >
               {isLoading ? "Verifying..." : "Verify Email"}
               <KeyRound size={22} />
@@ -143,7 +143,7 @@ export default function ForgotPasswordPage() {
                 type="password"
                 value={newPassword}
                 onChange={(event) => setNewPassword(event.target.value)}
-                className="mb-6 h-[64px] w-full rounded border border-white/10 bg-[#080f0f] px-5 text-lg font-bold text-zinc-200 outline-none transition focus:border-[#8ed8ec88]"
+                className="mb-6 h-[64px] w-full rounded border border-white/10 bg-[#080f0f] px-5 text-lg font-bold text-zinc-200 outline-none transition focus:border-[#84d8e888]"
               />
 
               <label className="mb-3 flex items-center gap-2 text-sm font-bold uppercase tracking-[0.18em] text-zinc-400">
@@ -155,13 +155,13 @@ export default function ForgotPasswordPage() {
                 type="password"
                 value={confirmPassword}
                 onChange={(event) => setConfirmPassword(event.target.value)}
-                className="mb-8 h-[64px] w-full rounded border border-white/10 bg-[#080f0f] px-5 text-lg font-bold text-zinc-200 outline-none transition focus:border-[#8ed8ec88]"
+                className="mb-8 h-[64px] w-full rounded border border-white/10 bg-[#080f0f] px-5 text-lg font-bold text-zinc-200 outline-none transition focus:border-[#84d8e888]"
               />
 
               <button
                 onClick={resetPassword}
                 disabled={isLoading}
-                className="flex h-[64px] w-full items-center justify-center gap-3 rounded bg-[#8ed8ec] text-[16px] font-black uppercase tracking-[0.22em] text-[#122226] shadow-[0_0_22px_rgba(142,216,236,0.35)] transition hover:bg-[#a4e7f5] disabled:opacity-60"
+                className="flex h-[64px] w-full items-center justify-center gap-3 rounded bg-[#84d8e8] text-[16px] font-black uppercase tracking-[0.22em] text-[#102026] shadow-[0_0_20px_rgba(132,216,232,0.28)] transition hover:bg-[#a5e9f3] disabled:opacity-60"
               >
                 {isLoading ? "Resetting..." : "Reset Password"}
                 <KeyRound size={22} />

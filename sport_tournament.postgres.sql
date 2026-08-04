@@ -26,7 +26,7 @@ CREATE TABLE users (
     created_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
     updated_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
 
-    CONSTRAINT chk_users_role CHECK (role IN ('ADMIN', 'PLAYER')),
+    CONSTRAINT chk_users_role CHECK (role IN ('SUPER_ADMIN', 'ADMIN', 'PLAYER')),
     CONSTRAINT chk_users_status CHECK (user_status IN ('ACTIVE', 'INACTIVE', 'PENDING'))
 );
 

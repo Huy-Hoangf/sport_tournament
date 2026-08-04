@@ -15,6 +15,7 @@ import {
   Pencil,
   Plus,
   RefreshCw,
+  Search,
   ShieldCheck,
   Trash2,
   Trophy,
@@ -54,6 +55,7 @@ type TournamentRow = {
   name: string;
   sportType?: string;
   status: string;
+  visibility: "PUBLIC" | "PRIVATE";
   teams: number;
   matches: number;
   source: string;
@@ -61,8 +63,6 @@ type TournamentRow = {
 
 type TournamentForm = {
   name: string;
-  sportType: "FOOTBALL" | "F1" | "ESPORTS";
-  format: "ROUND_ROBIN" | "GROUP_AND_KNOCKOUT" | "KNOCKOUT";
   status: "UPCOMING" | "ACTIVE" | "COMPLETED" | "CANCELLED";
   visibility: "PUBLIC" | "PRIVATE";
 };
@@ -113,6 +113,8 @@ type MatchRow = {
   deadline: string;
   source: string;
   status: string;
+  actualHomeScore: number | null;
+  actualAwayScore: number | null;
 };
 
 type ActivityRow = {
@@ -133,8 +135,6 @@ type InactivePlayerRow = {
 
 const emptyTournamentForm: TournamentForm = {
   name: "",
-  sportType: "FOOTBALL",
-  format: "ROUND_ROBIN",
   status: "UPCOMING",
   visibility: "PUBLIC",
 };
@@ -166,9 +166,11 @@ const emptyDashboard: DashboardData = {
 export default function AdminDashboardContent({
   isAdmin,
   refreshKey,
+  view = "dashboard",
 }: {
   isAdmin: boolean;
   refreshKey: number;
+  view?: "dashboard" | "tournaments";
 }) {
   const [dashboard, setDashboard] = useState<DashboardData>(emptyDashboard);
   const [isLoading, setIsLoading] = useState(true);
@@ -205,8 +207,10 @@ export default function AdminDashboardContent({
   const [selectedTournamentId, setSelectedTournamentId] = useState<
     number | null
   >(null);
+  const [tournamentSearch, setTournamentSearch] = useState("");
   const [tournamentForm, setTournamentForm] =
     useState<TournamentForm>(emptyTournamentForm);
+  const isTournamentView = view === "tournaments";
 
   const showNotice = useCallback(
     (message: string, tone: Notice["tone"] = "info") => {
@@ -219,7 +223,9 @@ export default function AdminDashboardContent({
     setIsLoading(true);
 
     try {
-      const data = await apiRequest<DashboardData>("/dashboard");
+      const data = await apiRequest<DashboardData>(
+        `/dashboard?scope=${isTournamentView ? "all" : "today"}`,
+      );
       setDashboard({
         ...data,
         inactivePlayers: data.inactivePlayers ?? [],
@@ -232,7 +238,7 @@ export default function AdminDashboardContent({
     } finally {
       setIsLoading(false);
     }
-  }, [showNotice]);
+  }, [isTournamentView, showNotice]);
 
   useEffect(() => {
     queueMicrotask(() => {
@@ -603,15 +609,8 @@ export default function AdminDashboardContent({
     setEditingTournamentId(tournament.id);
     setTournamentForm({
       name: tournament.name,
-      sportType:
-        tournament.sportType === "F1"
-          ? "F1"
-          : normalizeSportType(tournament.sportType) === "ESPORTS"
-            ? "ESPORTS"
-            : "FOOTBALL",
-      format: "ROUND_ROBIN",
       status: normalizeStatus(tournament.status),
-      visibility: "PUBLIC",
+      visibility: tournament.visibility ?? "PUBLIC",
     });
     setOpenTournamentForm(true);
   }
@@ -652,7 +651,24 @@ export default function AdminDashboardContent({
           : 0;
   const allImportItemsSelected =
     importItemCount > 0 && selectedImportCount === importItemCount;
-  const tournamentGroups = getTournamentGroups(dashboard.tournaments);
+  const searchedTournaments = dashboard.tournaments.filter((tournament) => {
+    const keyword = tournamentSearch.trim().toLowerCase();
+
+    if (!keyword) {
+      return true;
+    }
+
+    return (
+      tournament.name.toLowerCase().includes(keyword) ||
+      String(tournament.id).includes(keyword) ||
+      (tournament.source ?? "").toLowerCase().includes(keyword)
+    );
+  });
+  const tournamentGroups = getTournamentGroups(searchedTournaments);
+  const pageTitle = isTournamentView ? "Tournament Management" : "Dashboard";
+  const pageDescription = isTournamentView
+    ? "Oversee competition life cycles, participant metrics, and scheduling parameters."
+    : "Showing tournaments and matches scheduled for today.";
 
   async function saveTournament() {
     if (!isAdmin) {
@@ -726,15 +742,15 @@ export default function AdminDashboardContent({
       <div className="mb-8 flex items-start justify-between gap-6">
         <div>
           <h2 className="text-[34px] font-black leading-none text-white">
-            Dashboard
+            {pageTitle}
           </h2>
           <p className="mt-3 text-[16px] text-[#adbdc2]">
-            Welcome back. System is running within optimal parameters.
+            {pageDescription}
           </p>
         </div>
 
         <div className="flex flex-wrap justify-end gap-4">
-          {isAdmin ? (
+          {isAdmin && isTournamentView ? (
             <>
               <DashboardActionButton
                 icon={<RefreshCw size={18} />}
@@ -754,83 +770,109 @@ export default function AdminDashboardContent({
                 Create Tournament
               </button>
             </>
-          ) : (
+          ) : !isAdmin ? (
             <div className="rounded border border-[#3a4d54] bg-[#0d252d] px-5 py-4 text-sm font-bold text-[#9fb2b8]">
               View-only access
             </div>
-          )}
+          ) : null}
         </div>
       </div>
 
-      <section className="mb-5 rounded border border-[#3a4d54] bg-[#0d252d] p-4">
-        <div className="flex flex-wrap items-center gap-4">
-          <div className="flex h-12 w-12 items-center justify-center bg-[#143942] text-[#84d8e8]">
-            <Cloud size={23} />
+      {isTournamentView && (
+        <section className="mb-5 rounded border border-[#3a4d54] bg-[#0d252d] p-5">
+          <div className="grid gap-4 xl:grid-cols-[minmax(280px,1fr)_220px]">
+            <label className="flex h-12 items-center gap-3 border border-[#3a4d54] bg-[#06161b] px-4 text-[#9fb2b8] focus-within:border-[#84d8e8]">
+              <Search size={18} className="shrink-0 text-[#84d8e8]" />
+              <input
+                value={tournamentSearch}
+                onChange={(event) => setTournamentSearch(event.target.value)}
+                placeholder="Search tournaments by name, source, or ID..."
+                className="h-full min-w-0 flex-1 bg-transparent text-sm font-bold text-white outline-none placeholder:text-[#789098]"
+              />
+            </label>
+            <div className="flex h-12 items-center justify-center border border-[#3a4d54] bg-[#14272e] text-xs font-black uppercase tracking-[0.08em] text-[#84d8e8]">
+              {searchedTournaments.length} tournaments
+            </div>
           </div>
-          <div className="flex-1">
-            <p className="text-sm font-black uppercase text-[#84d8e8]">
-              API Status:{" "}
-              {dashboard.apiStatus.connected ? "Connected" : "Offline"}
-            </p>
-            <p className="mt-1 text-sm text-[#9fb2b8]">
-              {dashboard.apiStatus.provider} - Last sync:{" "}
-              {formatRelative(dashboard.apiStatus.lastSync)}
-            </p>
-          </div>
-          <div className="bg-[#14272e] px-4 py-2 text-xs font-black uppercase text-[#c4d3d8]">
-            ID: {dashboard.apiStatus.externalId}
-          </div>
-          <button
-            onClick={() => void loadDashboard()}
-            title="Refresh dashboard"
-            className="text-[#dce8eb]"
-          >
-            <RefreshCw size={20} className={isLoading ? "animate-spin" : ""} />
-          </button>
-        </div>
-      </section>
+        </section>
+      )}
 
-      <section
-        className={`mb-5 grid gap-6 ${
-          isAdmin ? "md:grid-cols-2 xl:grid-cols-4" : "md:grid-cols-3"
-        }`}
-      >
-        <DashboardStatCard
-          title="Active Tournaments"
-          value={dashboard.stats.activeTournaments}
-          note="Live in database"
-          icon={<Trophy size={22} />}
-        />
-        <DashboardStatCard
-          title="Total Players"
-          value={dashboard.stats.totalPlayers}
-          note="Registered players"
-          icon={<Users size={22} />}
-        />
-        <DashboardStatCard
-          title="Upcoming Matches"
-          value={dashboard.stats.upcomingMatches}
-          note="From now onward"
-          icon={<CalendarDays size={22} />}
-        />
-        {isAdmin && (
-          <DashboardStatCard
-            tone="danger"
-            title="Attention Needed"
-            value={dashboard.stats.attentionNeeded}
-            note={`${dashboard.stats.inactivePlayers} inactive, ${dashboard.stats.pendingPlayers} pending`}
-            icon={<AlertTriangle size={24} />}
-            onClick={() => setOpenAttentionDetails(true)}
-          />
-        )}
-      </section>
+      {!isTournamentView && (
+        <>
+          <section className="mb-5 rounded border border-[#3a4d54] bg-[#0d252d] p-4">
+            <div className="flex flex-wrap items-center gap-4">
+              <div className="flex h-12 w-12 items-center justify-center bg-[#143942] text-[#84d8e8]">
+                <Cloud size={23} />
+              </div>
+              <div className="flex-1">
+                <p className="text-sm font-black uppercase text-[#84d8e8]">
+                  API Status:{" "}
+                  {dashboard.apiStatus.connected ? "Connected" : "Offline"}
+                </p>
+                <p className="mt-1 text-sm text-[#9fb2b8]">
+                  {dashboard.apiStatus.provider} - Last sync:{" "}
+                  {formatRelative(dashboard.apiStatus.lastSync)}
+                </p>
+              </div>
+              <div className="bg-[#14272e] px-4 py-2 text-xs font-black uppercase text-[#c4d3d8]">
+                ID: {dashboard.apiStatus.externalId}
+              </div>
+              <button
+                onClick={() => void loadDashboard()}
+                title="Refresh dashboard"
+                className="text-[#dce8eb]"
+              >
+                <RefreshCw
+                  size={20}
+                  className={isLoading ? "animate-spin" : ""}
+                />
+              </button>
+            </div>
+          </section>
+
+          <section
+            className={`mb-5 grid gap-6 ${
+              isAdmin ? "md:grid-cols-2 xl:grid-cols-4" : "md:grid-cols-3"
+            }`}
+          >
+            <DashboardStatCard
+              title="Active Tournaments"
+              value={dashboard.stats.activeTournaments}
+              note="Today in database"
+              icon={<Trophy size={22} />}
+            />
+            <DashboardStatCard
+              title="Total Players"
+              value={dashboard.stats.totalPlayers}
+              note="Registered players"
+              icon={<Users size={22} />}
+            />
+            <DashboardStatCard
+              title="Today Matches"
+              value={dashboard.stats.upcomingMatches}
+              note="Scheduled today"
+              icon={<CalendarDays size={22} />}
+            />
+            {isAdmin && (
+              <DashboardStatCard
+                tone="warning"
+                title="Attention Needed"
+                value={dashboard.stats.attentionNeeded}
+                note={`${dashboard.stats.inactivePlayers} inactive, ${dashboard.stats.pendingPlayers} pending`}
+                icon={<AlertTriangle size={24} />}
+                onClick={() => setOpenAttentionDetails(true)}
+              />
+            )}
+          </section>
+        </>
+      )}
 
       <div className="grid gap-5 xl:grid-cols-[minmax(0,1fr)_390px]">
         <div className="space-y-5">
           {tournamentGroups.map((group) => (
             <TournamentManagementTable
               key={group.sportType}
-              title={group.title}
+              title={isTournamentView ? group.title : `Today ${group.title}`}
               total={group.total}
               tournaments={group.tournaments}
               emptyMessage={group.emptyMessage}
@@ -873,10 +915,10 @@ export default function AdminDashboardContent({
 
       {isAdmin && openAttentionDetails && (
         <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/70 px-4">
-          <section className="w-full max-w-[720px] overflow-hidden rounded border border-[#6b4440] bg-[#0d252d] shadow-2xl">
+          <section className="w-full max-w-[720px] overflow-hidden rounded border border-[#8b7133] bg-[#0d252d] shadow-2xl">
             <header className="flex items-center justify-between border-b border-[#3a4d54] bg-[#14272e] px-6 py-5">
               <div>
-                <h3 className="text-xl font-black uppercase text-[#ffab9e]">
+                <h3 className="text-xl font-black uppercase text-[#f4c95d]">
                   Players Needing Attention
                 </h3>
                 <p className="mt-2 text-sm text-[#9fb2b8]">
@@ -978,12 +1020,12 @@ export default function AdminDashboardContent({
                 setConfirmResetApiData(true);
               }}
               disabled={isMutating}
-              className="mt-4 w-full rounded border border-[#8f4b45] bg-[#351a19] px-5 py-4 text-left disabled:opacity-60"
+              className="mt-4 w-full rounded border border-[#ff6b6b99] bg-[#35171b] px-5 py-4 text-left transition hover:border-[#ff6b6b] disabled:opacity-60"
             >
-              <span className="block font-black text-[#ffab9e]">
+              <span className="block font-black text-[#ff8a8a]">
                 Delete all imported API data
               </span>
-              <span className="mt-2 block text-xs text-[#c89992]">
+              <span className="mt-2 block text-xs text-[#f0b4b4]">
                 Clears old API tournaments and matches without calling any API.
               </span>
             </button>
@@ -1002,8 +1044,8 @@ export default function AdminDashboardContent({
 
       {confirmResetApiData && (
         <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/70 px-4">
-          <div className="w-full max-w-[500px] rounded border border-[#8f4b45] bg-[#0d252d] p-7 shadow-2xl">
-            <h3 className="text-2xl font-black text-[#ffab9e]">
+          <div className="w-full max-w-[500px] rounded border border-[#ff6b6b99] bg-[#0d252d] p-7 shadow-2xl">
+            <h3 className="text-2xl font-black text-[#ff6b6b]">
               Delete Imported API Data
             </h3>
             <p className="mt-4 text-sm leading-6 text-[#d7e2e5]">
@@ -1011,7 +1053,7 @@ export default function AdminDashboardContent({
               predictions. Empty tournaments left by the old importer are also
               removed. Players and populated manual tournaments are kept.
             </p>
-            <p className="mt-3 text-sm font-bold text-[#ffab9e]">
+            <p className="mt-3 text-sm font-bold text-[#ff8a8a]">
               This action cannot be undone.
             </p>
             <div className="mt-7 flex justify-end gap-3">
@@ -1025,7 +1067,7 @@ export default function AdminDashboardContent({
               <button
                 onClick={() => void resetImportedApiData()}
                 disabled={isMutating}
-                className="h-12 rounded bg-[#ffab9e] px-6 font-black text-[#2b1414] disabled:opacity-60"
+                className="h-12 rounded border border-[#ff8a8a] bg-[#d94747] px-6 font-black text-white transition hover:bg-[#ef5757] disabled:opacity-60"
               >
                 {isMutating ? "Deleting..." : "Delete API Data"}
               </button>
@@ -1194,17 +1236,6 @@ export default function AdminDashboardContent({
             />
             <div className="grid gap-4 sm:grid-cols-2">
               <TournamentSelect
-                label="Sport"
-                value={tournamentForm.sportType}
-                options={["FOOTBALL", "F1", "ESPORTS"]}
-                onChange={(value) =>
-                  setTournamentForm((form) => ({
-                    ...form,
-                    sportType: value as TournamentForm["sportType"],
-                  }))
-                }
-              />
-              <TournamentSelect
                 label="Status"
                 value={tournamentForm.status}
                 options={["UPCOMING", "ACTIVE", "COMPLETED", "CANCELLED"]}
@@ -1212,17 +1243,6 @@ export default function AdminDashboardContent({
                   setTournamentForm((form) => ({
                     ...form,
                     status: value as TournamentForm["status"],
-                  }))
-                }
-              />
-              <TournamentSelect
-                label="Format"
-                value={tournamentForm.format}
-                options={["ROUND_ROBIN", "GROUP_AND_KNOCKOUT", "KNOCKOUT"]}
-                onChange={(value) =>
-                  setTournamentForm((form) => ({
-                    ...form,
-                    format: value as TournamentForm["format"],
                   }))
                 }
               />
@@ -1259,12 +1279,12 @@ export default function AdminDashboardContent({
 
       {tournamentToDelete && (
         <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/70 px-4">
-          <div className="w-full max-w-[460px] rounded border border-[#6b4440] bg-[#0d252d] p-7 shadow-2xl">
-            <h3 className="text-2xl font-black text-[#ffab9e]">
+          <div className="w-full max-w-[460px] rounded border border-[#ff6b6b99] bg-[#0d252d] p-7 shadow-2xl">
+            <h3 className="text-2xl font-black text-[#ff6b6b]">
               Delete Tournament
             </h3>
             <p className="mt-4 text-base font-bold text-white">
-              Are you sure you want to delete <span className="text-[#ffab9e]">{tournamentToDelete.name}</span>
+              Are you sure you want to delete <span className="text-[#ff8a8a]">{tournamentToDelete.name}</span>
             </p>
             <p className="mt-2 text-sm text-[#9fb2b8]">
               This action cannot be undone. All matches, predictions and related data will be permanently deleted.
@@ -1280,7 +1300,7 @@ export default function AdminDashboardContent({
               <button
                 onClick={() => void deleteTournament(tournamentToDelete)}
                 disabled={isMutating}
-                className="h-12 rounded bg-[#ffab9e] px-6 font-black text-[#2b1414] disabled:opacity-60"
+                className="h-12 rounded border border-[#ff8a8a] bg-[#d94747] px-6 font-black text-white transition hover:bg-[#ef5757] disabled:opacity-60"
               >
                 {isMutating ? "Deleting..." : "Delete"}
               </button>
@@ -1408,12 +1428,8 @@ function TournamentManagementTable({
   });
   const filteredTotal = filteredTournaments.length;
   const totalPages = Math.max(1, Math.ceil(filteredTotal / pageSize));
-
-  useEffect(() => {
-    setCurrentPage((page) => Math.min(page, totalPages));
-  }, [totalPages]);
-
-  const firstVisibleIndex = (currentPage - 1) * pageSize;
+  const activePage = Math.min(currentPage, totalPages);
+  const firstVisibleIndex = (activePage - 1) * pageSize;
   const visibleTournaments = filteredTournaments.slice(
     firstVisibleIndex,
     firstVisibleIndex + pageSize,
@@ -1426,7 +1442,7 @@ function TournamentManagementTable({
   function changePage(page: number) {
     const nextPage = Math.min(Math.max(page, 1), totalPages);
 
-    if (nextPage === currentPage) {
+    if (nextPage === activePage) {
       return;
     }
 
@@ -1548,7 +1564,7 @@ function TournamentManagementTable({
                           </button>
                           <button
                             onClick={() => onDeleteTournament(tournament)}
-                            className="text-[#ffab9e] transition hover:text-white"
+                            className="text-[#ff6b6b] transition hover:text-[#ff9b9b]"
                             title="Delete tournament"
                           >
                             <Trash2 size={17} />
@@ -1590,7 +1606,7 @@ function TournamentManagementTable({
       {totalPages > 1 && (
         <div className="flex min-h-[64px] flex-wrap items-center justify-between gap-4 border-t border-[#3a4d54] bg-[#10242b] px-6 py-3">
           <span className="text-xs font-black uppercase text-[#9fb2b8]">
-            Page {currentPage} of {totalPages}
+            Page {activePage} of {totalPages}
           </span>
           <nav
             aria-label={`${title} pagination`}
@@ -1598,8 +1614,8 @@ function TournamentManagementTable({
           >
             <button
               type="button"
-              onClick={() => changePage(currentPage - 1)}
-              disabled={currentPage === 1}
+              onClick={() => changePage(activePage - 1)}
+              disabled={activePage === 1}
               aria-label="Previous page"
               title="Previous page"
               className="flex h-9 w-9 items-center justify-center border border-[#3a4d54] text-[#dce8eb] transition hover:border-[#84d8e8] hover:text-[#84d8e8] disabled:cursor-not-allowed disabled:opacity-40"
@@ -1612,9 +1628,9 @@ function TournamentManagementTable({
                 type="button"
                 onClick={() => changePage(page)}
                 aria-label={`Page ${page}`}
-                aria-current={page === currentPage ? "page" : undefined}
+                aria-current={page === activePage ? "page" : undefined}
                 className={`flex h-9 min-w-9 items-center justify-center border px-2 text-xs font-black transition ${
-                  page === currentPage
+                  page === activePage
                     ? "border-[#84d8e8] bg-[#84d8e8] text-[#06161b]"
                     : "border-[#3a4d54] text-[#dce8eb] hover:border-[#84d8e8] hover:text-[#84d8e8]"
                 }`}
@@ -1624,8 +1640,8 @@ function TournamentManagementTable({
             ))}
             <button
               type="button"
-              onClick={() => changePage(currentPage + 1)}
-              disabled={currentPage === totalPages}
+              onClick={() => changePage(activePage + 1)}
+              disabled={activePage === totalPages}
               aria-label="Next page"
               title="Next page"
               className="flex h-9 w-9 items-center justify-center border border-[#3a4d54] text-[#dce8eb] transition hover:border-[#84d8e8] hover:text-[#84d8e8] disabled:cursor-not-allowed disabled:opacity-40"
@@ -1871,6 +1887,7 @@ function TournamentMatchDetails({
                 {isF1 ? "Session Time" : "Match Time"}
               </th>
               <th className="w-48 px-4 py-3">Prediction Lock</th>
+              <th className="w-28 px-4 py-3">Score</th>
               <th className="w-40 px-4 py-3">Source</th>
               <th className="w-32 px-4 py-3">Status</th>
             </tr>
@@ -1899,6 +1916,7 @@ function TournamentMatchDetails({
                 <td className="px-4 text-white">
                   {formatDateTime(match.deadline)}
                 </td>
+                <td className="px-4 text-white">{formatScore(match)}</td>
                 <td className="px-4">
                   <DashboardSourceBadge source={match.source} />
                 </td>
@@ -1910,7 +1928,7 @@ function TournamentMatchDetails({
             {matches.length === 0 && (
               <tr>
                 <td
-                  colSpan={5}
+                  colSpan={6}
                   className="h-[96px] bg-[#0d252d] text-center text-[#9fb2b8]"
                 >
                   No matches found for this tournament.
@@ -1936,7 +1954,7 @@ function DashboardStatCard({
   value: number;
   note: string;
   icon: React.ReactNode;
-  tone?: "normal" | "danger";
+  tone?: "normal" | "warning";
   onClick?: () => void;
 }) {
   const content = (
@@ -1945,21 +1963,27 @@ function DashboardStatCard({
         <div>
           <h3
             className={`text-sm font-black uppercase tracking-[0.1em] ${
-              tone === "danger" ? "text-[#ffab9e]" : "text-[#c8d6db]"
+              tone === "warning" ? "text-[#f4c95d]" : "text-[#c8d6db]"
             }`}
           >
             {title}
           </h3>
           <p
             className={`mt-2 text-[36px] font-black leading-none ${
-              tone === "danger" ? "text-[#ffab9e]" : "text-white"
+              tone === "warning" ? "text-[#f4c95d]" : "text-white"
             }`}
           >
             {value.toLocaleString()}
           </p>
           <p className="mt-4 text-xs font-bold text-white">{note}</p>
         </div>
-        <div className="flex h-[54px] w-[49px] items-center justify-center rounded bg-[#213740] text-white">
+        <div
+          className={`flex h-[54px] w-[49px] items-center justify-center rounded ${
+            tone === "warning"
+              ? "bg-[#302713] text-[#f4c95d]"
+              : "bg-[#213740] text-white"
+          }`}
+        >
           {icon}
         </div>
       </div>
@@ -1967,7 +1991,7 @@ function DashboardStatCard({
   );
 
   const className = `h-[144px] w-full rounded border bg-[#0d252d] px-6 py-6 text-left shadow-[0_2px_0_rgba(255,255,255,0.08)] ${
-    tone === "danger" ? "border-[#6b4440]" : "border-[#3a4d54]"
+    tone === "warning" ? "border-[#8b7133]" : "border-[#3a4d54]"
   }`;
 
   if (onClick) {
@@ -1975,7 +1999,7 @@ function DashboardStatCard({
       <button
         type="button"
         onClick={onClick}
-        className={`${className} cursor-pointer transition hover:border-[#ffab9e] hover:bg-[#102d35] focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-[#84d8e8]`}
+        className={`${className} cursor-pointer transition hover:border-[#f4c95d] hover:bg-[#102d35] focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-[#84d8e8]`}
       >
         {content}
       </button>
@@ -2019,10 +2043,10 @@ function DashboardStatusBadge({ status }: { status: string }) {
     normalized === "ACTIVE" || normalized === "LIVE"
       ? "border-l-2 border-white bg-[#162b32] text-white"
       : normalized === "UPCOMING" || normalized === "PENDING"
-        ? "bg-[#1c3037] text-[#dce8eb]"
+        ? "border-l-2 border-[#f4c95d] bg-[#302713] text-[#ffe8a3]"
         : normalized === "COMPLETED" || normalized === "FINISHED"
           ? "bg-[#183229] text-[#a7e8c0]"
-          : "bg-[#2b1414] text-[#ffab9e]";
+          : "bg-[#35171b] text-[#ff8a8a]";
 
   return (
     <span
@@ -2197,24 +2221,6 @@ function formatDateOnly(value: string | null) {
   }).format(date);
 }
 
-function formatDate(value: string | null) {
-  if (!value) {
-    return "-";
-  }
-
-  const date = new Date(value);
-
-  if (Number.isNaN(date.getTime())) {
-    return "-";
-  }
-
-  return new Intl.DateTimeFormat("en", {
-    month: "short",
-    day: "2-digit",
-    hour: "2-digit",
-    minute: "2-digit",
-  }).format(date);
-}
 
 function formatDateTime(value: string | null) {
   if (!value) {
@@ -2234,6 +2240,14 @@ function formatDateTime(value: string | null) {
     hour: "2-digit",
     minute: "2-digit",
   }).format(date);
+}
+
+function formatScore(match: MatchRow) {
+  if (match.actualHomeScore === null || match.actualAwayScore === null) {
+    return "-";
+  }
+
+  return `${match.actualHomeScore} - ${match.actualAwayScore}`;
 }
 
 function formatRelative(value: string | null) {

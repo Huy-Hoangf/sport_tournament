@@ -14,7 +14,7 @@ export default function PlayerPage() {
 
   return (
     <main className="auth-page flex min-h-screen items-center justify-center px-5 text-zinc-200">
-      <p className="text-sm font-black uppercase tracking-[0.18em] text-[#9ddff2]">
+      <p className="text-sm font-black uppercase tracking-[0.18em] text-[#84d8e8]">
         Opening dashboard...
       </p>
     </main>

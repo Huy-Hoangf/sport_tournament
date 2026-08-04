@@ -10,8 +10,17 @@ export class TournamentsController {
   ) {}
 
   @Get()
-  findAll() {
-    return this.tournamentsService.findAll();
+  async findAll(
+    @Headers('authorization') authorization: string | undefined,
+  ) {
+    const user = await this.authService.verifyAccessToken(authorization);
+    const includePrivateTournaments = ['SUPER_ADMIN', 'ADMIN'].includes(
+      user.role,
+    );
+
+    return this.tournamentsService.findAll({
+      includePrivateTournaments,
+    });
   }
 
   @Post('admin')

@@ -6,6 +6,7 @@ import {
   Get,
   Headers,
   Post,
+  Query,
 } from '@nestjs/common';
 import { AuthService } from '../auth/auth.service';
 import { DashboardService } from './dashboard.service';
@@ -22,11 +23,15 @@ export class DashboardController {
   @Get()
   async getDashboard(
     @Headers('authorization') authorization: string | undefined,
+    @Query('scope') scope: string | undefined,
   ) {
     const user = await this.authService.verifyAccessToken(authorization);
+    const isAdmin = ['SUPER_ADMIN', 'ADMIN'].includes(user.role);
 
     return this.dashboardService.getDashboard({
-      includeAttentionDetails: user.role === 'ADMIN',
+      includeAttentionDetails: isAdmin,
+      includePrivateTournaments: isAdmin,
+      scope: scope === 'all' ? 'all' : 'today',
     });
   }
 

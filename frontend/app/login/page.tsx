@@ -86,7 +86,7 @@ export default function LoginPage() {
     <main className="auth-page flex min-h-screen flex-col overflow-hidden">
       <NoticeBanner notice={notice} onClose={() => setNotice(null)} />
       <header className="flex h-[90px] shrink-0 items-center justify-between border-b border-white/10 px-8">
-        <h1 className="text-[30px] font-black tracking-[-0.06em] text-[#9ddff2] drop-shadow-[0_0_10px_rgba(142,216,236,0.45)]">
+        <h1 className="text-[30px] font-black tracking-[-0.06em] text-[#84d8e8] drop-shadow-[0_0_10px_rgba(132,216,232,0.35)]">
           TWENTY-TECH
         </h1>
 
@@ -99,7 +99,7 @@ export default function LoginPage() {
       <section className="flex flex-1 items-center justify-center px-5 py-12">
         <form
           onSubmit={handleLogin}
-          className="w-full max-w-[560px] rounded-lg border border-[#8ed8ec44] bg-[#111a1acc] px-10 py-11 shadow-[0_0_55px_rgba(75,190,210,0.12)] backdrop-blur"
+          className="w-full max-w-[560px] rounded-lg border border-[#84d8e844] bg-[#0d1b1ecc] px-10 py-11 shadow-[0_0_45px_rgba(132,216,232,0.1)] backdrop-blur"
         >
           <h2 className="mb-12 text-center text-[40px] font-bold tracking-[-0.02em] text-zinc-200">
             System Access
@@ -115,7 +115,7 @@ export default function LoginPage() {
             value={username}
             onChange={(event) => setUsername(event.target.value)}
             placeholder="YOUR COMPANY EMAIL"
-            className="mb-8 h-[72px] w-full rounded border border-white/10 bg-[#080f0f] px-5 text-xl font-bold text-zinc-200 outline-none transition placeholder:text-zinc-600 focus:border-[#8ed8ec88]"
+            className="mb-8 h-[72px] w-full rounded border border-white/10 bg-[#080f0f] px-5 text-xl font-bold text-zinc-200 outline-none transition placeholder:text-zinc-600 focus:border-[#84d8e888]"
           />
 
           <label className="mb-3 flex items-center gap-2 text-sm font-bold uppercase tracking-[0.18em] text-zinc-400">
@@ -123,7 +123,7 @@ export default function LoginPage() {
             Password
           </label>
 
-          <div className="mb-8 flex h-[72px] items-center rounded border border-white/10 bg-[#080f0f] px-5 focus-within:border-[#8ed8ec88]">
+          <div className="mb-8 flex h-[72px] items-center rounded border border-white/10 bg-[#080f0f] px-5 focus-within:border-[#84d8e888]">
             <input
               type={showPassword ? "text" : "password"}
               value={password}
@@ -135,7 +135,7 @@ export default function LoginPage() {
             <button
               type="button"
               onClick={() => setShowPassword(!showPassword)}
-              className="text-zinc-400 hover:text-[#8ed8ec]"
+              className="text-zinc-400 hover:text-[#84d8e8]"
             >
               <EyeOff size={28} />
             </button>
@@ -144,20 +144,20 @@ export default function LoginPage() {
           <button
             type="submit"
             disabled={isLoading}
-            className="flex h-[72px] w-full items-center justify-center gap-4 rounded bg-[#8ed8ec] text-[18px] font-black uppercase tracking-[0.28em] text-[#122226] shadow-[0_0_22px_rgba(142,216,236,0.35)] transition hover:bg-[#a4e7f5] disabled:opacity-60"
+            className="flex h-[72px] w-full items-center justify-center gap-4 rounded bg-[#84d8e8] text-[18px] font-black uppercase tracking-[0.28em] text-[#102026] shadow-[0_0_20px_rgba(132,216,232,0.28)] transition hover:bg-[#a5e9f3] disabled:opacity-60"
           >
             {isLoading ? "Logging in..." : "Login"}
             <LogIn size={24} />
           </button>
 
           <div className="mt-12 flex items-center justify-between gap-4 text-sm font-semibold text-zinc-300">
-            <Link href="/forgot-password" className="hover:text-[#8ed8ec]">
+            <Link href="/forgot-password" className="hover:text-[#84d8e8]">
               Forgot password?
             </Link>
             <button
               type="button"
               onClick={() => showNotice("this feature is not ready")}
-              className="flex h-9 items-center gap-2 rounded border border-white/10 bg-[#080f0f] px-3 text-xs font-black uppercase tracking-[0.08em] text-zinc-300 transition hover:border-[#8ed8ec88] hover:text-[#8ed8ec]"
+              className="flex h-9 items-center gap-2 rounded border border-white/10 bg-[#080f0f] px-3 text-xs font-black uppercase tracking-[0.08em] text-zinc-300 transition hover:border-[#84d8e888] hover:text-[#84d8e8]"
             >
               <GoogleLogo />
               Login with Google

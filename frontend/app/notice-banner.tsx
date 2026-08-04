@@ -1,8 +1,8 @@
 "use client";
 
-import { CheckCircle2, Info, X, XCircle } from "lucide-react";
+import { AlertTriangle, CheckCircle2, Info, X, XCircle } from "lucide-react";
 
-export type NoticeTone = "info" | "success" | "error";
+export type NoticeTone = "info" | "success" | "warning" | "error";
 
 export type Notice = {
   message: string;
@@ -21,13 +21,21 @@ export default function NoticeBanner({ notice, onClose }: NoticeBannerProps) {
 
   const tone = notice.tone ?? "info";
   const Icon =
-    tone === "success" ? CheckCircle2 : tone === "error" ? XCircle : Info;
+    tone === "success"
+      ? CheckCircle2
+      : tone === "warning"
+        ? AlertTriangle
+        : tone === "error"
+          ? XCircle
+          : Info;
   const toneClass =
     tone === "success"
       ? "border-emerald-300/40 bg-emerald-950/90 text-emerald-100"
+      : tone === "warning"
+        ? "border-[#f4c95d80] bg-[#302713]/95 text-[#ffe8a3]"
       : tone === "error"
-        ? "border-red-300/40 bg-red-950/90 text-red-100"
-        : "border-[#8ed8ec66] bg-[#0f2529]/95 text-[#d7f7ff]";
+        ? "border-[#ff6b6b80] bg-[#35171b]/95 text-[#ffd4d4]"
+        : "border-[#84d8e866] bg-[#0f2529]/95 text-[#d7f7ff]";
 
   return (
     <div className="fixed left-1/2 top-5 z-[100] w-[min(560px,calc(100vw-32px))] -translate-x-1/2">

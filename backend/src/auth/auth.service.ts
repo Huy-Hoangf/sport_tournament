@@ -6,6 +6,7 @@ import {
 } from '@nestjs/common';
 import { JwtService } from '@nestjs/jwt';
 import * as bcrypt from 'bcrypt';
+import type { UserRole } from '../users/user.entity';
 import { UsersService } from '../users/users.service';
 import {
   ADMIN_EMAIL,
@@ -18,7 +19,7 @@ import {
 type AccessTokenPayload = {
   sub: number;
   email: string;
-  role: string;
+  role: UserRole;
   purpose?: string;
 };
 
@@ -52,7 +53,7 @@ export class AuthService {
       id: user.id,
       email: user.email,
       fullName: user.fullName,
-      role: normalizedEmail === ADMIN_EMAIL ? 'ADMIN' : user.role,
+      role: normalizedEmail === ADMIN_EMAIL ? 'SUPER_ADMIN' : user.role,
     };
     const requiresPasswordChange =
       responseUser.role === 'PLAYER' && password === DEFAULT_PLAYER_PASSWORD;
@@ -101,7 +102,7 @@ export class AuthService {
     let payload: {
       sub: number;
       email: string;
-      role: string;
+      role: UserRole;
       purpose?: string;
     };
 
@@ -185,8 +186,20 @@ export class AuthService {
   async verifyAdminToken(authorization?: string) {
     const payload = await this.verifyAccessToken(authorization);
 
-    if (payload.role !== 'ADMIN') {
+    if (!['SUPER_ADMIN', 'ADMIN'].includes(payload.role)) {
       throw new ForbiddenException('Only admin can perform this action.');
+    }
+
+    return payload;
+  }
+
+  async verifySuperAdminToken(authorization?: string) {
+    const payload = await this.verifyAccessToken(authorization);
+
+    if (payload.role !== 'SUPER_ADMIN') {
+      throw new ForbiddenException(
+        'Only the super admin can perform this action.',
+      );
     }
 
     return payload;
@@ -275,7 +288,11 @@ export class AuthService {
     };
   }
 
-  private signAccessToken(user: { id: number; email: string; role: string }) {
+  private signAccessToken(user: {
+    id: number;
+    email: string;
+    role: UserRole;
+  }) {
     return this.jwtService.signAsync({
       sub: user.id,
       email: user.email,
