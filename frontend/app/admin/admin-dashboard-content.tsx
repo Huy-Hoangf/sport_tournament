@@ -1,4 +1,4 @@
-﻿"use client";
+"use client";
 
 import { apiRequest } from "../api";
 import NoticeBanner, { type Notice } from "../notice-banner";
@@ -24,6 +24,7 @@ import {
   Zap,
 } from "lucide-react";
 
+// Dashboard auto-refresh matches the earlier API budget rule: one refresh every 14.4 minutes.
 const DASHBOARD_REFRESH_MS = 14.4 * 60 * 1000;
 
 type DashboardData = {
@@ -107,6 +108,8 @@ type MatchRow = {
   tournamentId?: number;
   homeName?: string;
   awayName?: string;
+  homeLogoUrl?: string | null;
+  awayLogoUrl?: string | null;
   encounter: string;
   tournamentName: string;
   scheduledTime: string;
@@ -224,6 +227,7 @@ export default function AdminDashboardContent({
 
     try {
       const data = await apiRequest<DashboardData>(
+        // Dashboard shows today only; tournament management needs the full list.
         `/dashboard?scope=${isTournamentView ? "all" : "today"}`,
       );
       setDashboard({
@@ -737,7 +741,7 @@ export default function AdminDashboardContent({
   }
 
   return (
-    <div className="px-4 py-6 sm:px-6 md:px-8 md:py-9">
+    <div className="px-4 py-6 sm:px-6 xl:px-8 xl:py-9">
       <NoticeBanner notice={notice} onClose={() => setNotice(null)} />
       <div className="mb-8 grid gap-6 xl:grid-cols-[1fr_auto] xl:items-start">
         <div>
@@ -749,7 +753,7 @@ export default function AdminDashboardContent({
           </p>
         </div>
 
-        <div className="grid gap-3 sm:grid-cols-2 lg:flex lg:flex-wrap lg:justify-end lg:gap-4">
+        <div className="grid gap-3 sm:grid-cols-2 xl:flex xl:flex-wrap xl:justify-end xl:gap-4">
           {isAdmin && isTournamentView ? (
             <>
               <DashboardActionButton
@@ -831,8 +835,8 @@ export default function AdminDashboardContent({
           </section>
 
           <section
-            className={`mb-5 grid gap-6 ${
-              isAdmin ? "md:grid-cols-2 xl:grid-cols-4" : "md:grid-cols-3"
+            className={`mb-5 grid gap-4 sm:grid-cols-2 xl:gap-6 ${
+              isAdmin ? "xl:grid-cols-4" : "xl:grid-cols-3"
             }`}
           >
             <DashboardStatCard
@@ -867,7 +871,7 @@ export default function AdminDashboardContent({
         </>
       )}
 
-      <div className="grid gap-5 xl:grid-cols-[minmax(0,1fr)_390px]">
+      <div className="grid min-w-0 gap-5 xl:grid-cols-[minmax(0,1fr)_390px]">
         <div className="space-y-5">
           {tournamentGroups.map((group) => (
             <TournamentManagementTable
@@ -880,6 +884,7 @@ export default function AdminDashboardContent({
               selectedTournamentId={selectedTournamentId}
               onSelectTournament={setSelectedTournamentId}
               isAdmin={isAdmin}
+              isTodayScope={!isTournamentView}
               onEditTournament={openEditTournament}
               onDeleteTournament={setTournamentToDelete}
             />
@@ -1395,6 +1400,7 @@ function TournamentManagementTable({
   selectedTournamentId,
   onSelectTournament,
   isAdmin,
+  isTodayScope,
   onEditTournament,
   onDeleteTournament,
 }: {
@@ -1406,6 +1412,7 @@ function TournamentManagementTable({
   selectedTournamentId: number | null;
   onSelectTournament: React.Dispatch<React.SetStateAction<number | null>>;
   isAdmin: boolean;
+  isTodayScope: boolean;
   onEditTournament: (tournament: TournamentRow) => void;
   onDeleteTournament: (tournament: TournamentRow) => void;
 }) {
@@ -1430,6 +1437,7 @@ function TournamentManagementTable({
   const totalPages = Math.max(1, Math.ceil(filteredTotal / pageSize));
   const activePage = Math.min(currentPage, totalPages);
   const firstVisibleIndex = (activePage - 1) * pageSize;
+  // Keep each tournament table paginated so iPad/mobile layouts do not clip long imported lists.
   const visibleTournaments = filteredTournaments.slice(
     firstVisibleIndex,
     firstVisibleIndex + pageSize,
@@ -1461,7 +1469,7 @@ function TournamentManagementTable({
       <DashboardPanelTitle
         title={title}
         icon={
-          <label className="relative block w-[150px]">
+          <label className="relative block w-full min-w-[150px] sm:w-[150px]">
             <Filter
               size={16}
               className="pointer-events-none absolute left-3 top-1/2 -translate-y-1/2 text-[#84d8e8]"
@@ -1492,7 +1500,112 @@ function TournamentManagementTable({
               : `0 of ${total}`
         }
       />
-      <div className="overflow-x-auto">
+      <div className="divide-y divide-[#243c43] xl:hidden">
+        {visibleTournaments.map((tournament) => {
+          const isSelected = selectedTournamentId === tournament.id;
+          const matches = tournamentMatches.filter(
+            (match) => match.tournamentId === tournament.id,
+          );
+
+          return (
+            <article key={tournament.id} className="bg-[#0d252d]">
+              <button
+                type="button"
+                onClick={() =>
+                  onSelectTournament((currentId) =>
+                    currentId === tournament.id ? null : tournament.id,
+                  )
+                }
+                className={`w-full px-4 py-4 text-left transition ${
+                  isSelected ? "bg-[#12333c]" : "hover:bg-[#102d35]"
+                }`}
+              >
+                <div className="flex items-start gap-3">
+                  <span className="flex h-9 w-9 shrink-0 items-center justify-center bg-[#143942] text-[#84d8e8]">
+                    <ShieldCheck size={17} />
+                  </span>
+                  <div className="min-w-0 flex-1">
+                    <p className="break-words text-base font-black text-white">
+                      {tournament.name}
+                    </p>
+                    <div className="mt-3 flex flex-wrap items-center gap-2">
+                      <span className="rounded bg-[#07181d] px-2 py-1 text-xs font-black uppercase text-[#dce8eb]">
+                        {tournament.sportType ?? "FOOTBALL"}
+                      </span>
+                      <DashboardStatusBadge status={tournament.status} />
+                      <DashboardSourceBadge source={tournament.source} />
+                    </div>
+                  </div>
+                </div>
+
+                <div className="mt-4 grid grid-cols-2 gap-2 text-xs sm:grid-cols-3">
+                  <div className="rounded border border-[#243c43] bg-[#07181d] p-3">
+                    <p className="uppercase tracking-[0.08em] text-[#789098]">
+                      Teams
+                    </p>
+                    <p className="mt-1 text-lg font-black text-white">
+                      {tournament.teams.toLocaleString()}
+                    </p>
+                  </div>
+                  <div className="rounded border border-[#243c43] bg-[#07181d] p-3">
+                    <p className="uppercase tracking-[0.08em] text-[#789098]">
+                      Matches
+                    </p>
+                    <p className="mt-1 text-lg font-black text-white">
+                      {tournament.matches.toLocaleString()}
+                    </p>
+                  </div>
+                  <div className="rounded border border-[#243c43] bg-[#07181d] p-3">
+                    <p className="uppercase tracking-[0.08em] text-[#789098]">
+                      Details
+                    </p>
+                    <p className="mt-1 text-lg font-black text-white">
+                      {matches.length}
+                    </p>
+                  </div>
+                </div>
+              </button>
+
+              {isAdmin && (
+                <div className="flex items-center gap-2 border-t border-[#243c43] px-4 py-3">
+                  <button
+                    type="button"
+                    onClick={() => onEditTournament(tournament)}
+                    className="flex h-10 flex-1 items-center justify-center gap-2 rounded border border-[#3a4d54] text-sm font-black text-[#84d8e8] transition hover:border-[#84d8e8] hover:text-white"
+                  >
+                    <Pencil size={16} />
+                    Edit
+                  </button>
+                  <button
+                    type="button"
+                    onClick={() => onDeleteTournament(tournament)}
+                    className="flex h-10 flex-1 items-center justify-center gap-2 rounded border border-[#ff6b6b99] bg-[#35171b] text-sm font-black text-[#ff8a8a] transition hover:border-[#ff6b6b] hover:text-[#ffb0b0]"
+                  >
+                    <Trash2 size={16} />
+                    Delete
+                  </button>
+                </div>
+              )}
+
+              {isSelected && (
+                <TournamentMatchDetails
+                  tournament={tournament}
+                  matches={matches}
+                  isTodayScope={isTodayScope}
+                />
+              )}
+            </article>
+          );
+        })}
+
+        {visibleTournaments.length === 0 && (
+          <div className="px-4 py-10 text-center text-[#9fb2b8]">
+            {emptyMessage}
+          </div>
+        )}
+      </div>
+
+      <div className="hidden overflow-x-auto xl:block">
         <table className="w-full min-w-[980px] table-fixed text-left">
           <thead className="h-[65px] border-b border-[#3a4d54] bg-[#14272e] text-xs uppercase tracking-[0.08em] text-[#d5e0e3]">
             <tr>
@@ -1583,6 +1696,7 @@ function TournamentManagementTable({
                         <TournamentMatchDetails
                           tournament={tournament}
                           matches={matches}
+                          isTodayScope={isTodayScope}
                         />
                       </td>
                     </tr>
@@ -1851,14 +1965,19 @@ function LolCompetitionGroup({
 function TournamentMatchDetails({
   tournament,
   matches,
+  isTodayScope,
 }: {
   tournament: TournamentRow;
   matches: MatchRow[];
+  isTodayScope: boolean;
 }) {
   const isF1 = tournament.sportType === "F1";
+  const emptyMatchMessage = isTodayScope
+    ? `giải ${tournament.name} không có lịch thi đấu hôm nay`
+    : "No matches found for this tournament.";
 
   return (
-    <div className="px-6 py-5">
+    <div className="px-4 py-5 sm:px-6">
       <div className="mb-4 flex flex-wrap items-center justify-between gap-3">
         <div>
           <h3 className="text-sm font-black uppercase tracking-[0.08em] text-[#84d8e8]">
@@ -1876,7 +1995,75 @@ function TournamentMatchDetails({
         </span>
       </div>
 
-      <div className="overflow-x-auto rounded border border-[#243c43]">
+      <div className="space-y-3 xl:hidden">
+        {matches.map((match) => (
+          <article
+            key={match.id}
+            className="rounded border border-[#243c43] bg-[#0d252d] p-4"
+          >
+            <div className="flex flex-wrap items-start justify-between gap-3">
+              <div className="min-w-0">
+                {isF1 ? (
+                  <p className="break-words font-black text-white">
+                    {match.homeName ?? match.encounter}
+                  </p>
+                ) : (
+                  <MatchTeams match={match} />
+                )}
+                {isF1 && (
+                  <p className="mt-1 text-xs font-bold uppercase tracking-[0.08em] text-[#9fb2b8]">
+                    Circuit: {match.awayName ?? "TBD"}
+                  </p>
+                )}
+              </div>
+              <DashboardStatusBadge status={match.status} />
+            </div>
+
+            <div className="mt-4 grid gap-2 text-xs sm:grid-cols-2">
+              <div className="rounded border border-[#243c43] bg-[#07181d] p-3">
+                <p className="uppercase tracking-[0.08em] text-[#789098]">
+                  {isF1 ? "Session Time" : "Match Time"}
+                </p>
+                <p className="mt-1 font-black text-white">
+                  {formatDateTime(match.scheduledTime)}
+                </p>
+              </div>
+              <div className="rounded border border-[#243c43] bg-[#07181d] p-3">
+                <p className="uppercase tracking-[0.08em] text-[#789098]">
+                  Prediction Lock
+                </p>
+                <p className="mt-1 font-black text-white">
+                  {formatDateTime(match.deadline)}
+                </p>
+              </div>
+              <div className="rounded border border-[#243c43] bg-[#07181d] p-3">
+                <p className="uppercase tracking-[0.08em] text-[#789098]">
+                  Score
+                </p>
+                <p className="mt-1 font-black text-white">
+                  {formatScore(match)}
+                </p>
+              </div>
+              <div className="rounded border border-[#243c43] bg-[#07181d] p-3">
+                <p className="uppercase tracking-[0.08em] text-[#789098]">
+                  Source
+                </p>
+                <div className="mt-1">
+                  <DashboardSourceBadge source={match.source} />
+                </div>
+              </div>
+            </div>
+          </article>
+        ))}
+
+        {matches.length === 0 && (
+          <div className="rounded border border-[#243c43] bg-[#0d252d] px-4 py-8 text-center text-[#9fb2b8]">
+            {emptyMatchMessage}
+          </div>
+        )}
+      </div>
+
+      <div className="hidden overflow-x-auto rounded border border-[#243c43] xl:block">
         <table className="w-full min-w-[860px] table-fixed text-left">
           <thead className="h-[54px] border-b border-[#3a4d54] bg-[#14272e] text-xs uppercase tracking-[0.08em] text-[#d5e0e3]">
             <tr>
@@ -1907,7 +2094,7 @@ function TournamentMatchDetails({
                       </p>
                     </div>
                   ) : (
-                    match.encounter
+                    <MatchTeams match={match} />
                   )}
                 </td>
                 <td className="px-4 text-white">
@@ -1931,7 +2118,7 @@ function TournamentMatchDetails({
                   colSpan={6}
                   className="h-[96px] bg-[#0d252d] text-center text-[#9fb2b8]"
                 >
-                  No matches found for this tournament.
+                  {emptyMatchMessage}
                 </td>
               </tr>
             )}
@@ -2019,17 +2206,17 @@ function DashboardPanelTitle({
   right?: string;
 }) {
   return (
-    <div className="flex min-h-[65px] items-center border-b border-[#3a4d54] bg-[#14272e] px-6 py-3">
+    <div className="flex min-h-[65px] flex-col gap-3 border-b border-[#3a4d54] bg-[#14272e] px-4 py-4 sm:flex-row sm:items-center sm:px-6">
       <h2 className="min-w-0 flex-1 text-sm font-black uppercase tracking-[0.08em] text-[#d5e0e3]">
         {title}
       </h2>
       {icon && (
-        <div className="flex w-[170px] shrink-0 justify-center text-[#dce8eb]">
+        <div className="flex w-full text-[#dce8eb] sm:w-[170px] sm:shrink-0 sm:justify-center">
           {icon}
         </div>
       )}
       {right && (
-        <span className="w-[170px] shrink-0 text-right text-xs font-black uppercase text-[#84d8e8]">
+        <span className="w-full text-left text-xs font-black uppercase text-[#84d8e8] sm:w-[170px] sm:shrink-0 sm:text-right">
           {right}
         </span>
       )}
@@ -2037,6 +2224,40 @@ function DashboardPanelTitle({
   );
 }
 
+function MatchTeams({ match }: { match: MatchRow }) {
+  return (
+    <div className="flex min-w-0 flex-wrap items-center gap-2 font-black text-white">
+      <TeamLogo name={match.homeName ?? "Home team"} src={match.homeLogoUrl} />
+      <span className="min-w-0 truncate">{match.homeName ?? "TBD"}</span>
+      <span className="text-xs uppercase text-[#84d8e8]">vs</span>
+      <TeamLogo name={match.awayName ?? "Away team"} src={match.awayLogoUrl} />
+      <span className="min-w-0 truncate">{match.awayName ?? "TBD"}</span>
+    </div>
+  );
+}
+
+function TeamLogo({ name, src }: { name: string; src?: string | null }) {
+  const initial = name.trim().charAt(0).toUpperCase() || "?";
+
+  if (!src) {
+    return (
+      <span className="flex h-7 w-7 shrink-0 items-center justify-center rounded border border-[#31505a] bg-[#143943] text-[11px] text-[#84d8e8]">
+        {initial}
+      </span>
+    );
+  }
+
+  return (
+    // eslint-disable-next-line @next/next/no-img-element
+    <img
+      src={src}
+      alt={`${name} logo`}
+      loading="lazy"
+      referrerPolicy="no-referrer"
+      className="h-7 w-7 shrink-0 rounded bg-white/90 object-contain p-0.5"
+    />
+  );
+}
 function DashboardStatusBadge({ status }: { status: string }) {
   const normalized = status.toUpperCase();
   const className =

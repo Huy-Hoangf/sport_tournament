@@ -19,9 +19,7 @@ export class UsersController {
   ) {}
 
   @Get()
-  async findAll(
-    @Headers('authorization') authorization: string | undefined,
-  ) {
+  async findAll(@Headers('authorization') authorization: string | undefined) {
     await this.authService.verifyAdminToken(authorization);
     return this.usersService.findAll();
   }

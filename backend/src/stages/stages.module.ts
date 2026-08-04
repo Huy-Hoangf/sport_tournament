@@ -4,6 +4,6 @@ import { StagesService } from './stages.service';
 
 @Module({
   controllers: [StagesController],
-  providers: [StagesService]
+  providers: [StagesService],
 })
 export class StagesModule {}

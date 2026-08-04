@@ -5,13 +5,23 @@ import { logoutAll, readCurrentUser } from "../auth-sync";
 import NoticeBanner, { type Notice } from "../notice-banner";
 import DashboardView from "./dashboard-view";
 import TournamentView from "./tournament-view";
+import {
+  MenuItem,
+  Modal,
+  ModalActions,
+  PageButton,
+  StatCard,
+  StatusBadge,
+  StatusFilterSelect,
+  type PlayerStatus,
+  type StatusFilter,
+} from "./admin-player-components";
 import { useCallback, useEffect, useMemo, useState } from "react";
 import { useRouter } from "next/navigation";
 import * as XLSX from "xlsx";
 import {
   BarChart3,
   Bell,
-  ChevronDown,
   ChevronLeft,
   ChevronRight,
   Gamepad2,
@@ -51,7 +61,7 @@ type Player = {
   role: "SUPER_ADMIN" | "ADMIN" | "PLAYER";
   rank: "ELITE" | "PRO" | "ROOKIE";
   points: number;
-  status: "ACTIVE" | "INACTIVE" | "PENDING";
+  status: PlayerStatus;
   events: number;
 };
 
@@ -68,7 +78,6 @@ type ImportedPlayer = {
 };
 
 type AdminView = 'dashboard' | 'tournaments' | 'players';
-type StatusFilter = "ALL" | Player["status"];
 
 const PLAYERS_PER_PAGE = 7;
 const COMPANY_EMAIL_DOMAIN = "@tech.com";
@@ -602,8 +611,8 @@ export default function AdminPage() {
   return (
     <main className="min-h-screen overflow-x-hidden bg-[#06161b] text-[#d9e5e7]">
       <NoticeBanner notice={notice} onClose={() => setNotice(null)} />
-      <header className="sticky top-0 z-40 border-b border-[#3c5056] bg-[#07181d]/95 px-4 py-3 backdrop-blur md:hidden">
-        <div className="flex items-center justify-between gap-3">
+      <header className="sticky top-0 z-40 border-b border-[#3c5056] bg-[#07181d]/95 px-4 py-3 backdrop-blur xl:hidden">
+        <div className="grid grid-cols-[44px_minmax(0,1fr)_92px] items-center gap-3">
           <button
             type="button"
             onClick={() => setIsMobileMenuOpen(true)}
@@ -612,7 +621,7 @@ export default function AdminPage() {
           >
             <Menu size={23} />
           </button>
-          <div className="min-w-0 flex-1">
+          <div className="min-w-0 text-center">
             <h1 className="truncate text-lg font-black uppercase tracking-[0.04em] text-[#84d8e8]">
               TWENTY-TECH
             </h1>
@@ -620,22 +629,24 @@ export default function AdminPage() {
               A game for company
             </p>
           </div>
-          <button
-            type="button"
-            onClick={() => showNotice("this feature is not ready")}
-            className="flex h-11 w-11 items-center justify-center rounded border border-[#3a4d54] bg-[#0d252d] text-[#dce8eb]"
-            aria-label="Notifications"
-          >
-            <Bell size={20} />
-          </button>
-          <div className="flex h-11 w-11 shrink-0 items-center justify-center rounded border border-[#41636d] bg-[#143942] text-sm font-black uppercase text-[#84d8e8]">
-            {currentUser?.fullName?.trim().charAt(0) || "A"}
+          <div className="flex items-center justify-end gap-2">
+            <button
+              type="button"
+              onClick={() => showNotice("this feature is not ready")}
+              className="flex h-11 w-11 items-center justify-center rounded border border-[#3a4d54] bg-[#0d252d] text-[#dce8eb]"
+              aria-label="Notifications"
+            >
+              <Bell size={20} />
+            </button>
+            <div className="flex h-11 w-11 shrink-0 items-center justify-center rounded border border-[#41636d] bg-[#143942] text-sm font-black uppercase text-[#84d8e8]">
+              {currentUser?.fullName?.trim().charAt(0) || "A"}
+            </div>
           </div>
         </div>
       </header>
 
       {isMobileMenuOpen && (
-        <div className="fixed inset-0 z-50 md:hidden">
+        <div className="fixed inset-0 z-50 xl:hidden">
           <button
             type="button"
             className="absolute inset-0 bg-black/70"
@@ -712,7 +723,7 @@ export default function AdminPage() {
         </div>
       )}
 
-      <aside className="hidden border-b border-[#3c5056] bg-[#0d252d] md:fixed md:left-0 md:top-0 md:flex md:h-screen md:w-[260px] md:flex-col md:border-b-0 md:border-r">
+      <aside className="hidden border-b border-[#3c5056] bg-[#0d252d] xl:fixed xl:left-0 xl:top-0 xl:flex xl:h-screen xl:w-[260px] xl:flex-col xl:border-b-0 xl:border-r">
         <div className="px-6 pt-8">
           <h1 className="text-sm font-black uppercase leading-3 tracking-[0.08em] text-white">
             TWENTY
@@ -746,7 +757,7 @@ export default function AdminPage() {
           </div>
         </div>
 
-        <nav className="mt-6 flex overflow-x-auto text-sm font-bold md:mt-8 md:block md:space-y-2 md:overflow-visible">
+        <nav className="mt-6 flex overflow-x-auto text-sm font-bold xl:mt-8 xl:block xl:space-y-2 xl:overflow-visible">
           <MenuItem active={activeView === "dashboard"} icon={<LayoutDashboard size={21} />} label="Dashboard" onClick={() => openAdminView("dashboard")} />
           <MenuItem active={activeView === "tournaments"} icon={<Trophy size={21} />} label="Tournaments" onClick={() => openAdminView("tournaments")} />
           <MenuItem icon={<Gamepad2 size={21} />} label="Matches" onClick={() => showNotice("this feature is not ready")} />
@@ -756,7 +767,7 @@ export default function AdminPage() {
           <MenuItem icon={<BarChart3 size={21} />} label="Leaderboard" onClick={() => showNotice("this feature is not ready")} />
         </nav>
 
-        <div className="hidden md:mt-auto md:block md:border-t md:border-[#3c5056] md:p-6">
+        <div className="hidden xl:mt-auto xl:block xl:border-t xl:border-[#3c5056] xl:p-6">
           <button className="mb-8 h-[53px] w-full rounded bg-[#84d8e8] text-sm font-black text-[#06161b]">
             Export Report
           </button>
@@ -779,13 +790,13 @@ export default function AdminPage() {
         </div>
       </aside>
 
-      <section className="min-h-screen bg-[#06161b] md:ml-[260px]">
+      <section className="min-h-screen bg-[#06161b] xl:ml-[260px]">
         {activeView === "dashboard" ? (
           <DashboardView isAdmin={isAdmin} refreshKey={dashboardRefreshKey} />
         ) : activeView === "tournaments" ? (
           <TournamentView isAdmin={isAdmin} refreshKey={dashboardRefreshKey} />
         ) : (
-        <div className="px-4 py-6 sm:px-6 md:px-8 md:py-9">
+        <div className="px-4 py-6 sm:px-6 xl:px-8 xl:py-9">
           <div className="mb-8 grid gap-6 xl:grid-cols-[1fr_auto] xl:items-start">
             <div>
               <h2 className="text-[28px] font-black leading-none text-white sm:text-[34px]">
@@ -796,7 +807,7 @@ export default function AdminPage() {
               </p>
             </div>
 
-            <div className="grid gap-3 sm:grid-cols-2 lg:flex lg:flex-wrap lg:justify-end lg:gap-4">
+            <div className="grid gap-3 sm:grid-cols-2 xl:flex xl:flex-wrap xl:justify-end xl:gap-4">
               <button
                 onClick={() => {
                   setNewUserRole("PLAYER");
@@ -894,7 +905,7 @@ export default function AdminPage() {
             </div>
           )}
 
-          <div className="mb-4 space-y-3 lg:hidden">
+          <div className="mb-4 space-y-3 xl:hidden">
             {paginatedPlayers.map((player) => (
               <article
                 key={player.id}
@@ -1076,7 +1087,7 @@ export default function AdminPage() {
             )}
           </div>
 
-          <div className="hidden overflow-hidden rounded border border-[#3a4d54] bg-[#0d252d] shadow-[0_0_0_1px_rgba(255,255,255,0.02)] lg:block">
+          <div className="hidden overflow-hidden rounded border border-[#3a4d54] bg-[#0d252d] shadow-[0_0_0_1px_rgba(255,255,255,0.02)] xl:block">
             <div className="overflow-x-auto">
             <table className="w-full min-w-[940px] table-fixed">
               <thead className="h-[65px] border-b border-[#3a4d54] bg-[#14272e] text-xs uppercase tracking-[0.08em] text-[#d5e0e3]">
@@ -1825,220 +1836,3 @@ function readCell(value: unknown) {
 
   return String(value).trim();
 }
-
-function MenuItem({
-  icon,
-  label,
-  active,
-  onClick,
-}: {
-  icon: React.ReactNode;
-  label: string;
-  active?: boolean;
-  onClick?: () => void;
-}) {
-  return (
-    <button
-      type="button"
-      onClick={onClick}
-      className={`flex h-[49px] w-full items-center gap-4 px-6 text-left tracking-[0.03em] ${
-        active
-          ? "border-l-4 border-[#e9feff] bg-[#263b43] text-white"
-          : "text-[#d7e4e8]"
-      }`}
-    >
-      {icon}
-      <span>{label}</span>
-    </button>
-  );
-}
-function StatCard({
-  title,
-  value,
-  detail,
-  icon,
-  meter,
-}: {
-  title: string;
-  value: string;
-  detail?: string;
-  icon: React.ReactNode;
-  meter?: boolean;
-}) {
-  return (
-    <div className="min-h-[144px] rounded border border-[#3a4d54] bg-[#0d252d] px-6 py-6 shadow-[0_2px_0_rgba(255,255,255,0.08)]">
-      <div className="flex items-start justify-between">
-        <div>
-          <h3 className="text-sm font-black uppercase tracking-[0.1em] text-[#c8d6db]">
-            {title}
-          </h3>
-          <p className="mt-2 text-[36px] font-black leading-none text-white">
-            {value}
-          </p>
-        </div>
-        <div className="flex h-[54px] w-[49px] items-center justify-center rounded bg-[#213740] text-white">
-          {icon}
-        </div>
-      </div>
-
-      {meter ? (
-        <div className="mt-6 h-[4px] w-[118px] rounded bg-[#203940]">
-          <div className="h-full w-[62px] rounded bg-white shadow-[0_0_12px_rgba(255,255,255,0.8)]" />
-        </div>
-      ) : (
-        <p className="mt-4 text-xs font-bold text-white">{detail}</p>
-      )}
-    </div>
-  );
-}
-
-function StatusFilterSelect({
-  value,
-  onChange,
-}: {
-  value: StatusFilter;
-  onChange: (value: StatusFilter) => void;
-}) {
-  return (
-    <label className="relative flex h-[38px] w-full max-w-[244px] items-center rounded border border-[#3a4d54] bg-[#0d252d] px-4 text-sm font-black uppercase tracking-[0.08em] text-[#dce8eb]">
-      <select
-        value={value}
-        onChange={(event) => onChange(event.target.value as StatusFilter)}
-        className="h-full w-full appearance-none bg-transparent pr-8 font-black uppercase tracking-[0.08em] text-[#dce8eb] outline-none"
-      >
-        <option className="bg-[#0d252d] text-white" value="ALL">
-          Status: All
-        </option>
-        <option className="bg-[#0d252d] text-white" value="ACTIVE">
-          Status: Active
-        </option>
-        <option className="bg-[#0d252d] text-white" value="INACTIVE">
-          Status: Inactive
-        </option>
-        <option className="bg-[#0d252d] text-white" value="PENDING">
-          Status: Pending
-        </option>
-      </select>
-      <ChevronDown
-        size={16}
-        className="pointer-events-none absolute right-4 text-[#dce8eb]"
-      />
-    </label>
-  );
-}
-
-function StatusBadge({ status }: { status: Player["status"] }) {
-  const className =
-    status === "ACTIVE"
-      ? "border-l-2 border-white bg-[#162b32] text-white"
-      : status === "INACTIVE"
-        ? "border-l-2 border-[#ff6b6b] bg-[#35171b] text-[#ffb0b0]"
-        : "border-l-2 border-[#f4c95d] bg-[#302713] text-[#ffe8a3]";
-
-  return (
-    <span
-      className={`inline-flex h-[27px] items-center px-3 text-xs font-black uppercase ${className}`}
-    >
-      {status}
-    </span>
-  );
-}
-
-function PageButton({
-  children,
-  active,
-  onClick,
-  disabled,
-}: {
-  children: React.ReactNode;
-  active?: boolean;
-  onClick?: () => void;
-  disabled?: boolean;
-}) {
-  return (
-    <button
-      onClick={onClick}
-      disabled={disabled}
-      className={`flex h-[32px] min-w-[32px] items-center justify-center border border-[#3a4d54] text-xs disabled:cursor-not-allowed disabled:opacity-40 ${
-        active ? "bg-[#a2ecf5] text-[#06161b]" : "bg-[#0d252d] text-white"
-      }`}
-    >
-      {children}
-    </button>
-  );
-}
-
-function Modal({
-  title,
-  children,
-  tone = "normal",
-}: {
-  title: string;
-  children: React.ReactNode;
-  tone?: "normal" | "danger";
-}) {
-  return (
-    <div className="fixed inset-0 z-50 flex items-center justify-center overflow-y-auto bg-black/70 p-4">
-      <div
-        className={`w-full max-w-[520px] rounded-lg border bg-[#101818] p-5 sm:p-7 ${
-          tone === "danger"
-            ? "border-[#ff6b6b66] shadow-[0_0_50px_rgba(255,107,107,0.12)]"
-            : "border-[#84d8e855] shadow-[0_0_50px_rgba(132,216,232,0.18)]"
-        }`}
-      >
-        <h2
-          className={`mb-6 text-2xl font-black ${
-            tone === "danger" ? "text-[#ff6b6b]" : "text-[#84d8e8]"
-          }`}
-        >
-          {title}
-        </h2>
-        {children}
-      </div>
-    </div>
-  );
-}
-
-function ModalActions({
-  cancel,
-  confirm,
-  confirmText,
-  disabled,
-  danger = false,
-}: {
-  cancel: () => void;
-  confirm: () => void;
-  confirmText: string;
-  disabled?: boolean;
-  danger?: boolean;
-}) {
-  return (
-    <div className="flex justify-end gap-3">
-      <button
-        type="button"
-        onClick={cancel}
-        className="h-[46px] rounded border border-white/10 px-5 text-zinc-300"
-      >
-        Cancel
-      </button>
-
-      <button
-        type="button"
-        onClick={confirm}
-        disabled={disabled}
-        className={`h-[46px] rounded px-5 font-black disabled:opacity-60 ${
-          danger
-            ? "border border-[#ff8a8a] bg-[#d94747] text-white transition hover:bg-[#ef5757]"
-            : "bg-[#84d8e8] text-[#102026] transition hover:bg-[#a5e9f3]"
-        }`}
-      >
-        {confirmText}
-      </button>
-    </div>
-  );
-}
-
-
-
-
-

@@ -1,7 +1,64 @@
-﻿import { Injectable } from '@nestjs/common';
+import { Injectable } from '@nestjs/common';
 import { InjectRepository } from '@nestjs/typeorm';
 import { Repository } from 'typeorm';
 import { User } from '../users/user.entity';
+
+type DashboardScope = 'today' | 'all';
+type TournamentVisibility = 'PUBLIC' | 'PRIVATE';
+
+type DashboardSummaryRow = {
+  activeTournaments: string | number | null;
+  totalPlayers: string | number | null;
+  upcomingMatches: string | number | null;
+  inactivePlayers: string | number | null;
+  pendingPlayers: string | number | null;
+  pendingPredictions: string | number | null;
+  warningMatches: string | number | null;
+  lastApiSync: string | null;
+};
+
+type DashboardTournamentRow = {
+  id: string | number;
+  name: string;
+  sportType: string;
+  status: string;
+  visibility: TournamentVisibility | null;
+  teams: string | number | null;
+  matches: string | number | null;
+  source: string | null;
+};
+
+type DashboardMatchRow = {
+  id: string | number;
+  tournamentId?: string | number;
+  tournamentName: string;
+  homeTeam: string | null;
+  awayTeam: string | null;
+  homeLogoUrl: string | null;
+  awayLogoUrl: string | null;
+  scheduledTime: string;
+  deadline: string;
+  source: string | null;
+  status: string;
+  actualHomeScore: string | number | null;
+  actualAwayScore: string | number | null;
+};
+
+type DashboardActivityRow = {
+  id: string;
+  type: string;
+  message: string;
+  createdAt: string;
+};
+
+type DashboardInactivePlayerRow = {
+  id: string | number;
+  memberCode: string;
+  fullName: string;
+  email: string;
+  status: string;
+  updatedAt: string;
+};
 
 @Injectable()
 export class DashboardService {
@@ -17,8 +74,40 @@ export class DashboardService {
   }: {
     includeAttentionDetails?: boolean;
     includePrivateTournaments?: boolean;
-    scope?: 'today' | 'all';
+    scope?: DashboardScope;
   } = {}) {
+    await this.ensureTeamLogoColumn();
+
+    const dashboardQueries: [
+      Promise<DashboardSummaryRow[]>,
+      Promise<DashboardTournamentRow[]>,
+      Promise<DashboardMatchRow[]>,
+      Promise<DashboardMatchRow[]>,
+      Promise<DashboardActivityRow[]>,
+      Promise<DashboardInactivePlayerRow[]>,
+    ] = [
+      this.usersRepository.query<DashboardSummaryRow[]>(
+        this.summaryQuery(scope, includePrivateTournaments),
+      ),
+      this.usersRepository.query<DashboardTournamentRow[]>(
+        this.tournamentsQuery(scope, includePrivateTournaments),
+      ),
+      this.usersRepository.query<DashboardMatchRow[]>(
+        this.tournamentMatchesQuery(scope, includePrivateTournaments),
+      ),
+      this.usersRepository.query<DashboardMatchRow[]>(
+        this.upcomingScheduleQuery(scope, includePrivateTournaments),
+      ),
+      this.usersRepository.query<DashboardActivityRow[]>(
+        this.activitiesQuery(includePrivateTournaments),
+      ),
+      includeAttentionDetails
+        ? this.usersRepository.query<DashboardInactivePlayerRow[]>(
+            this.inactivePlayersQuery(),
+          )
+        : Promise.resolve<DashboardInactivePlayerRow[]>([]),
+    ];
+
     const [
       summaryRows,
       tournaments,
@@ -26,25 +115,7 @@ export class DashboardService {
       upcomingSchedule,
       activities,
       inactivePlayers,
-    ] = await Promise.all([
-      this.usersRepository.query(
-        this.summaryQuery(scope, includePrivateTournaments),
-      ),
-      this.usersRepository.query(
-        this.tournamentsQuery(scope, includePrivateTournaments),
-      ),
-      this.usersRepository.query(
-        this.tournamentMatchesQuery(scope, includePrivateTournaments),
-      ),
-      this.usersRepository.query(
-        this.upcomingScheduleQuery(scope, includePrivateTournaments),
-      ),
-      this.usersRepository.query(this.activitiesQuery(includePrivateTournaments)),
-      includeAttentionDetails
-        ? this.usersRepository.query(this.inactivePlayersQuery())
-        : Promise.resolve([]),
-    ]);
-
+    ] = await Promise.all(dashboardQueries);
     const summary = this.mapSummary(summaryRows[0]);
 
     return {
@@ -81,6 +152,8 @@ export class DashboardService {
         tournamentId: Number(row.tournamentId),
         homeName: row.homeTeam ?? 'TBD',
         awayName: row.awayTeam ?? 'TBD',
+        homeLogoUrl: row.homeLogoUrl ?? null,
+        awayLogoUrl: row.awayLogoUrl ?? null,
         encounter: `${row.homeTeam ?? 'TBD'} vs ${row.awayTeam ?? 'TBD'}`,
         tournamentName: row.tournamentName,
         scheduledTime: row.scheduledTime,
@@ -94,6 +167,8 @@ export class DashboardService {
         id: Number(row.id),
         homeName: row.homeTeam ?? 'TBD',
         awayName: row.awayTeam ?? 'TBD',
+        homeLogoUrl: row.homeLogoUrl ?? null,
+        awayLogoUrl: row.awayLogoUrl ?? null,
         encounter: `${row.homeTeam ?? 'TBD'} vs ${row.awayTeam ?? 'TBD'}`,
         tournamentName: row.tournamentName,
         scheduledTime: row.scheduledTime,
@@ -122,7 +197,16 @@ export class DashboardService {
     };
   }
 
-  private summaryQuery(scope: 'today' | 'all', includePrivateTournaments: boolean) {
+  private async ensureTeamLogoColumn() {
+    await this.usersRepository.query(`
+      ALTER TABLE teams
+      ADD COLUMN IF NOT EXISTS logo_url VARCHAR(500) NULL
+    `);
+  }
+  private summaryQuery(
+    scope: DashboardScope,
+    includePrivateTournaments: boolean,
+  ) {
     const tournamentVisibilityCondition = includePrivateTournaments
       ? ''
       : "AND t.visibility = 'PUBLIC'";
@@ -186,8 +270,14 @@ export class DashboardService {
     `;
   }
 
-  private tournamentsQuery(scope: 'today' | 'all', includePrivateTournaments: boolean) {
-    const whereClause = this.tournamentWhereClause(scope, includePrivateTournaments);
+  private tournamentsQuery(
+    scope: DashboardScope,
+    includePrivateTournaments: boolean,
+  ) {
+    const whereClause = this.tournamentWhereClause(
+      scope,
+      includePrivateTournaments,
+    );
     const matchJoinCondition =
       scope === 'today'
         ? `m.tournament_id = t.id AND ${this.todayDateCondition('m.scheduled_time')}`
@@ -242,12 +332,17 @@ export class DashboardService {
     `;
   }
 
-  private upcomingScheduleQuery(scope: 'today' | 'all', includePrivateTournaments: boolean) {
+  private upcomingScheduleQuery(
+    scope: DashboardScope,
+    includePrivateTournaments: boolean,
+  ) {
     const visibilityCondition = includePrivateTournaments
       ? ''
       : "AND t.visibility = 'PUBLIC'";
     const scopeCondition =
-      scope === 'today' ? `AND ${this.todayDateCondition('m.scheduled_time')}` : '';
+      scope === 'today'
+        ? `AND ${this.todayDateCondition('m.scheduled_time')}`
+        : '';
 
     return `
       SELECT
@@ -255,6 +350,8 @@ export class DashboardService {
         t.name AS "tournamentName",
         COALESCE(home.name, m.home_placeholder) AS "homeTeam",
         COALESCE(away.name, m.away_placeholder) AS "awayTeam",
+        home.logo_url AS "homeLogoUrl",
+        away.logo_url AS "awayLogoUrl",
         m.scheduled_time AS "scheduledTime",
         m.scheduled_time - (m.lock_minutes_before_start * INTERVAL '1 minute') AS deadline,
         COALESCE(m.external_source, 'MANUAL') AS source,
@@ -273,12 +370,17 @@ export class DashboardService {
     `;
   }
 
-  private tournamentMatchesQuery(scope: 'today' | 'all', includePrivateTournaments: boolean) {
+  private tournamentMatchesQuery(
+    scope: DashboardScope,
+    includePrivateTournaments: boolean,
+  ) {
     const visibilityCondition = includePrivateTournaments
       ? ''
       : "AND t.visibility = 'PUBLIC'";
     const scopeCondition =
-      scope === 'today' ? `AND ${this.todayDateCondition('m.scheduled_time')}` : '';
+      scope === 'today'
+        ? `AND ${this.todayDateCondition('m.scheduled_time')}`
+        : '';
 
     return `
       SELECT
@@ -287,6 +389,8 @@ export class DashboardService {
         ranked."tournamentName",
         ranked."homeTeam",
         ranked."awayTeam",
+        ranked."homeLogoUrl",
+        ranked."awayLogoUrl",
         ranked."scheduledTime",
         ranked.deadline,
         ranked.source,
@@ -300,6 +404,8 @@ export class DashboardService {
           t.name AS "tournamentName",
           COALESCE(home.name, m.home_placeholder) AS "homeTeam",
           COALESCE(away.name, m.away_placeholder) AS "awayTeam",
+          home.logo_url AS "homeLogoUrl",
+          away.logo_url AS "awayLogoUrl",
           m.scheduled_time AS "scheduledTime",
           m.scheduled_time - (m.lock_minutes_before_start * INTERVAL '1 minute') AS deadline,
           COALESCE(m.external_source, 'MANUAL') AS source,
@@ -367,7 +473,7 @@ export class DashboardService {
     `;
   }
 
-  private mapSummary(row?: Record<string, unknown>) {
+  private mapSummary(row?: DashboardSummaryRow) {
     const pendingPredictions = Number(row?.pendingPredictions ?? 0);
     const warningMatches = Number(row?.warningMatches ?? 0);
     const inactivePlayers = Number(row?.inactivePlayers ?? 0);
@@ -382,7 +488,7 @@ export class DashboardService {
       warningMatches,
       inactivePlayers,
       pendingPlayers,
-      lastApiSync: (row?.lastApiSync as string | null | undefined) ?? null,
+      lastApiSync: row?.lastApiSync ?? null,
     };
   }
 
@@ -400,7 +506,7 @@ export class DashboardService {
   }
 
   private tournamentWhereClause(
-    scope: 'today' | 'all',
+    scope: DashboardScope,
     includePrivateTournaments: boolean,
   ) {
     const conditions: string[] = [];

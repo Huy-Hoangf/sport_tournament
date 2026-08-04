@@ -15,9 +15,7 @@ import { LeaderboardModule } from './leaderboard/leaderboard.module';
 import { DashboardModule } from './dashboard/dashboard.module';
 
 function readSslConfig() {
-  return process.env.DB_SSL === 'false'
-    ? false
-    : { rejectUnauthorized: false };
+  return process.env.DB_SSL === 'false' ? false : { rejectUnauthorized: false };
 }
 
 function requireEnv(name: string) {

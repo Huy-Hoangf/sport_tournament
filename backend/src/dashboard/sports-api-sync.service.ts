@@ -3,6 +3,7 @@ import { InjectRepository } from '@nestjs/typeorm';
 import { Repository } from 'typeorm';
 import { User } from '../users/user.entity';
 
+// Cito LoL free tier is limited, so list calls are cached for a day unless an import forces fresh data.
 const LOL_CACHE_MS = 24 * 60 * 60 * 1000;
 const FOOTBALL_API_BASE_URL = 'https://v3.football.api-sports.io';
 const OPENF1_API_BASE_URL = 'https://api.openf1.org/v1';
@@ -47,12 +48,12 @@ type FootballMatch = {
       long?: string;
     };
   };
-  league?: { name: string };
-  homeTeam?: { name?: string };
-  awayTeam?: { name?: string };
+  league?: { id?: number | string; name: string; season?: number | string };
+  homeTeam?: { id?: number | string; name?: string; logo?: string };
+  awayTeam?: { id?: number | string; name?: string; logo?: string };
   teams?: {
-    home?: { name?: string };
-    away?: { name?: string };
+    home?: { id?: number | string; name?: string; logo?: string };
+    away?: { id?: number | string; name?: string; logo?: string };
   };
   goals?: {
     home?: number | null;
@@ -76,6 +77,8 @@ type EspnSoccerEvent = {
       score?: string;
       team?: {
         displayName?: string;
+        logo?: string;
+        logos?: Array<{ href?: string }>;
       };
     }>;
   }>;
@@ -152,6 +155,8 @@ type LolScheduleSnapshot = {
       __matchId: string;
       __homeName: string;
       __awayName: string;
+      __homeLogoUrl: string | null;
+      __awayLogoUrl: string | null;
       __scheduledTime: string;
       __status: 'PENDING' | 'LIVE' | 'FINISHED' | 'CANCELLED';
     }
@@ -163,6 +168,11 @@ export class SportsApiSyncService {
   private lolScheduleCache: {
     expiresAt: number;
     snapshot: LolScheduleSnapshot;
+  } | null = null;
+  // LoL team logos are cached separately so imports do not spend one Cito request per team.
+  private lolTeamLogoCache: {
+    expiresAt: number;
+    logosByName: Map<string, string>;
   } | null = null;
 
   constructor(
@@ -261,6 +271,7 @@ export class SportsApiSyncService {
     return this.syncF1(adminId);
   }
 
+  // Import options intentionally list competitions first; matches are fetched only after admin selection to protect quota.
   async listFootballCompetitions() {
     const apiKey = process.env.FOOTBALL_DATA_API_KEY?.trim();
 
@@ -419,6 +430,7 @@ export class SportsApiSyncService {
       .slice(0, 60);
   }
 
+  // OpenF1 is queried separately from API-SPORTS football so F1 imports do not consume football quota.
   async syncSelectedF1Meetings(meetingKeys: number[]) {
     await this.ensureSportTypeConstraint();
 
@@ -483,6 +495,7 @@ export class SportsApiSyncService {
   }
 
   async listLolCompetitions() {
+    await this.ensureTeamLogoColumn();
     const snapshot = await this.getLolScheduleSnapshot(false);
 
     return snapshot.competitions.slice(0, 80);
@@ -509,7 +522,9 @@ export class SportsApiSyncService {
       );
     }
 
+    await this.ensureTeamLogoColumn();
     const snapshot = await this.getLolScheduleSnapshot(false);
+    const lolLogosByName = await this.getLolTeamLogosByName(false);
     const selectedMatches = snapshot.matches.filter((match) =>
       selectedIds.has(match.__competitionId),
     );
@@ -534,10 +549,14 @@ export class SportsApiSyncService {
         const homeTeamId = await this.upsertTeam(
           tournamentId,
           match.__homeName,
+          match.__homeLogoUrl ??
+            this.getLolLogoForTeam(lolLogosByName, match.__homeName),
         );
         const awayTeamId = await this.upsertTeam(
           tournamentId,
           match.__awayName,
+          match.__awayLogoUrl ??
+            this.getLolLogoForTeam(lolLogosByName, match.__awayName),
         );
 
         await this.upsertMatch({
@@ -669,6 +688,7 @@ export class SportsApiSyncService {
     matches: Iterable<FootballMatch>,
     source: 'FOOTBALL_DATA' | 'ESPN_ASEAN' = 'FOOTBALL_DATA',
   ) {
+    await this.ensureTeamLogoColumn();
     let matchCount = 0;
 
     for (const match of matches) {
@@ -687,8 +707,24 @@ export class SportsApiSyncService {
         match.teams?.home?.name || match.homeTeam?.name || 'Home team';
       const awayName =
         match.teams?.away?.name || match.awayTeam?.name || 'Away team';
-      const homeTeamId = await this.upsertTeam(tournamentId, homeName);
-      const awayTeamId = await this.upsertTeam(tournamentId, awayName);
+      const homeLogoUrl = this.pickString(match, [
+        ['teams', 'home', 'logo'],
+        ['homeTeam', 'logo'],
+      ]);
+      const awayLogoUrl = this.pickString(match, [
+        ['teams', 'away', 'logo'],
+        ['awayTeam', 'logo'],
+      ]);
+      const homeTeamId = await this.upsertTeam(
+        tournamentId,
+        homeName,
+        homeLogoUrl,
+      );
+      const awayTeamId = await this.upsertTeam(
+        tournamentId,
+        awayName,
+        awayLogoUrl,
+      );
 
       await this.upsertMatch({
         tournamentId,
@@ -757,8 +793,14 @@ export class SportsApiSyncService {
       },
       league: { name: 'ASEAN Championship' },
       teams: {
-        home: { name: home.team.displayName },
-        away: { name: away.team.displayName },
+        home: {
+          name: home.team.displayName,
+          logo: home.team.logo || home.team.logos?.[0]?.href,
+        },
+        away: {
+          name: away.team.displayName,
+          logo: away.team.logo || away.team.logos?.[0]?.href,
+        },
       },
       goals: {
         home: this.parseOptionalScore(home.score),
@@ -801,7 +843,11 @@ export class SportsApiSyncService {
       );
 
       for (const match of response.response ?? []) {
-        if (match.fixture?.id && this.isFootballFixtureCurrentOrFuture(match)) {
+        if (
+          match.fixture?.id &&
+          this.isFootballFixtureFromLeagueSeason(match, leagueId, season) &&
+          this.isFootballFixtureCurrentOrFuture(match)
+        ) {
           fixturesById.set(String(match.fixture.id), match);
         }
       }
@@ -814,6 +860,16 @@ export class SportsApiSyncService {
     return Array.from(fixturesById.values());
   }
 
+  private isFootballFixtureFromLeagueSeason(
+    match: FootballMatch,
+    leagueId: number,
+    season: number,
+  ) {
+    const fixtureLeagueId = Number(match.league?.id);
+    const fixtureSeason = Number(match.league?.season);
+
+    return fixtureLeagueId === leagueId && fixtureSeason === season;
+  }
   private isFootballFixtureCurrentOrFuture(match: FootballMatch) {
     const mappedStatus = this.mapMatchStatus(match.fixture.status?.short ?? '');
 
@@ -999,10 +1055,14 @@ export class SportsApiSyncService {
     return Number(created.id);
   }
 
-  private async upsertTeam(tournamentId: number, name: string) {
+  private async upsertTeam(
+    tournamentId: number,
+    name: string,
+    logoUrl: string | null = null,
+  ) {
     const [existing] = await this.usersRepository.query(
       `
-        SELECT id
+        SELECT id, logo_url AS "logoUrl"
         FROM teams
         WHERE tournament_id = $1
           AND LOWER(name) = LOWER($2)
@@ -1012,21 +1072,31 @@ export class SportsApiSyncService {
     );
 
     if (existing) {
+      if (logoUrl && existing.logoUrl !== logoUrl) {
+        await this.usersRepository.query(
+          `
+            UPDATE teams
+            SET logo_url = $1
+            WHERE id = $2
+          `,
+          [logoUrl, Number(existing.id)],
+        );
+      }
+
       return Number(existing.id);
     }
 
     const [created] = await this.usersRepository.query(
       `
-        INSERT INTO teams (tournament_id, name)
-        VALUES ($1, $2)
+        INSERT INTO teams (tournament_id, name, logo_url)
+        VALUES ($1, $2, $3)
         RETURNING id
       `,
-      [tournamentId, name],
+      [tournamentId, name, logoUrl],
     );
 
     return Number(created.id);
   }
-
   private async upsertMatch(data: {
     tournamentId: number;
     stageId: number;
@@ -1279,10 +1349,42 @@ export class SportsApiSyncService {
           ['team1', 'name'],
           ['blueTeam', 'name'],
           ['opponents', 0, 'name'],
+          ['opponents', 0, 'opponent', 'name'],
+          ['opponents', 0, 'opponent', 'acronym'],
           ['teams', 0, 'name'],
+          ['teams', 0, 'team', 'name'],
           ['match', 'teams', 0, 'name'],
           ['participants', 0, 'name'],
         ]) || 'Team 1';
+      const homeLogoUrl = this.pickString(rawMatch, [
+        ['homeTeam', 'logo'],
+        ['homeTeam', 'logoUrl'],
+        ['homeTeam', 'image'],
+        ['homeTeam', 'image_url'],
+        ['home_team', 'logo'],
+        ['home_team', 'image_url'],
+        ['team1', 'logo'],
+        ['team1', 'image_url'],
+        ['blueTeam', 'logo'],
+        ['blueTeam', 'image_url'],
+        ['opponents', 0, 'logo'],
+        ['opponents', 0, 'image_url'],
+        ['opponents', 0, 'opponent', 'logo'],
+        ['opponents', 0, 'opponent', 'logoUrl'],
+        ['opponents', 0, 'opponent', 'image'],
+        ['opponents', 0, 'opponent', 'image_url'],
+        ['teams', 0, 'logo'],
+        ['teams', 0, 'logoUrl'],
+        ['teams', 0, 'image'],
+        ['teams', 0, 'image_url'],
+        ['teams', 0, 'team', 'logo'],
+        ['teams', 0, 'team', 'logoUrl'],
+        ['teams', 0, 'team', 'image'],
+        ['teams', 0, 'team', 'image_url'],
+        ['participants', 0, 'logo'],
+        ['participants', 0, 'image_url'],
+      ]);
+
       const awayName =
         this.pickString(rawMatch, [
           ['awayTeam', 'name'],
@@ -1290,10 +1392,55 @@ export class SportsApiSyncService {
           ['team2', 'name'],
           ['redTeam', 'name'],
           ['opponents', 1, 'name'],
+          ['opponents', 1, 'opponent', 'name'],
+          ['opponents', 1, 'opponent', 'acronym'],
           ['teams', 1, 'name'],
+          ['teams', 1, 'team', 'name'],
           ['match', 'teams', 1, 'name'],
           ['participants', 1, 'name'],
         ]) || 'Team 2';
+      const awayLogoUrl = this.pickString(rawMatch, [
+        ['awayTeam', 'logo'],
+        ['awayTeam', 'image'],
+        ['awayTeam', 'image_url'],
+        ['awayTeam', 'logoUrl'],
+        ['away_team', 'image'],
+        ['away_team', 'logoUrl'],
+        ['team2', 'image'],
+        ['team2', 'logoUrl'],
+        ['redTeam', 'image'],
+        ['redTeam', 'logoUrl'],
+        ['opponents', 1, 'image'],
+        ['opponents', 1, 'logoUrl'],
+        ['opponents', 1, 'opponent', 'image'],
+        ['opponents', 1, 'opponent', 'logoUrl'],
+        ['teams', 1, 'image'],
+        ['teams', 1, 'logoUrl'],
+        ['teams', 1, 'team', 'logo'],
+        ['teams', 1, 'team', 'image'],
+        ['teams', 1, 'team', 'image_url'],
+        ['teams', 1, 'team', 'logoUrl'],
+        ['match', 'teams', 1, 'logo'],
+        ['match', 'teams', 1, 'image'],
+        ['match', 'teams', 1, 'image_url'],
+        ['match', 'teams', 1, 'logoUrl'],
+        ['participants', 1, 'image'],
+        ['participants', 1, 'logoUrl'],
+        ['away_team', 'logo'],
+        ['away_team', 'image_url'],
+        ['team2', 'logo'],
+        ['team2', 'image_url'],
+        ['redTeam', 'logo'],
+        ['redTeam', 'image_url'],
+        ['opponents', 1, 'logo'],
+        ['opponents', 1, 'image_url'],
+        ['opponents', 1, 'opponent', 'logo'],
+        ['opponents', 1, 'opponent', 'image_url'],
+        ['teams', 1, 'logo'],
+        ['teams', 1, 'image_url'],
+        ['participants', 1, 'logo'],
+        ['participants', 1, 'image_url'],
+      ]);
       const resolvedCompetition = this.resolveLolCompetitionIdentity(
         rawMatch,
         String(competitionId),
@@ -1329,6 +1476,8 @@ export class SportsApiSyncService {
         __matchId: String(matchId),
         __homeName: homeName,
         __awayName: awayName,
+        __homeLogoUrl: homeLogoUrl,
+        __awayLogoUrl: awayLogoUrl,
         __scheduledTime: scheduledTime,
         __status: status,
       });
@@ -1446,6 +1595,141 @@ export class SportsApiSyncService {
 
     visit(payload, 0);
     return matches;
+  }
+
+  private extractRecordArray(payload: unknown): CitoLolMatch[] {
+    const records: CitoLolMatch[] = [];
+    const visited = new Set<unknown>();
+    const envelopeKeys = [
+      'data',
+      'response',
+      'teams',
+      'items',
+      'results',
+      'nodes',
+    ];
+
+    const visit = (value: unknown, depth: number) => {
+      if (depth > 5 || value === null || visited.has(value)) {
+        return;
+      }
+
+      if (typeof value === 'object') {
+        visited.add(value);
+      }
+
+      if (Array.isArray(value)) {
+        for (const item of value) {
+          if (this.isRecord(item)) {
+            records.push(item);
+          } else {
+            visit(item, depth + 1);
+          }
+        }
+        return;
+      }
+
+      if (!this.isRecord(value)) {
+        return;
+      }
+
+      for (const key of envelopeKeys) {
+        if (key in value) {
+          visit(value[key], depth + 1);
+        }
+      }
+    };
+
+    visit(payload, 0);
+    return records;
+  }
+
+  private async getLolTeamLogosByName(force: boolean) {
+    if (
+      !force &&
+      this.lolTeamLogoCache &&
+      this.lolTeamLogoCache.expiresAt > Date.now()
+    ) {
+      return this.lolTeamLogoCache.logosByName;
+    }
+
+    const apiKey = process.env.CITO_API_KEY?.trim();
+
+    if (!apiKey) {
+      return new Map<string, string>();
+    }
+
+    const payload = await this.fetchOptionalJson<unknown>(
+      `${CITO_API_BASE_URL}/lol/teams`,
+      { 'x-api-key': apiKey },
+    );
+    const logosByName = new Map<string, string>();
+
+    for (const team of this.extractRecordArray(payload)) {
+      const logoUrl = this.pickString(team, [
+        ['logo'],
+        ['logoUrl'],
+        ['logo_url'],
+        ['image'],
+        ['imageUrl'],
+        ['image_url'],
+        ['avatar'],
+        ['picture'],
+        ['team', 'logo'],
+        ['team', 'logoUrl'],
+        ['team', 'logo_url'],
+        ['team', 'image'],
+        ['team', 'imageUrl'],
+        ['team', 'image_url'],
+      ]);
+
+      if (!logoUrl) {
+        continue;
+      }
+
+      const identifiers = [
+        this.pickString(team, [['name'], ['teamName'], ['displayName']]),
+        this.pickString(team, [['acronym'], ['code'], ['shortName']]),
+        this.pickString(team, [['slug'], ['id'], ['team', 'slug']]),
+        this.pickString(team, [
+          ['team', 'name'],
+          ['team', 'displayName'],
+        ]),
+        this.pickString(team, [
+          ['team', 'acronym'],
+          ['team', 'code'],
+        ]),
+      ];
+
+      for (const identifier of identifiers) {
+        if (identifier) {
+          logosByName.set(this.normalizeTeamLookupKey(identifier), logoUrl);
+        }
+      }
+    }
+
+    this.lolTeamLogoCache = {
+      expiresAt: Date.now() + LOL_CACHE_MS,
+      logosByName,
+    };
+
+    return logosByName;
+  }
+
+  private getLolLogoForTeam(
+    logosByName: Map<string, string>,
+    teamName: string,
+  ) {
+    return logosByName.get(this.normalizeTeamLookupKey(teamName)) ?? null;
+  }
+
+  private normalizeTeamLookupKey(value: string) {
+    return value
+      .toLowerCase()
+      .replace(/&/g, 'and')
+      .replace(/\b(esports|e-sports|gaming|team)\b/g, '')
+      .replace(/[^a-z0-9]+/g, ' ')
+      .trim();
   }
 
   private isLolMatchCandidate(value: CitoLolMatch) {
@@ -1823,6 +2107,12 @@ export class SportsApiSyncService {
     return new Date(startValue) <= now && new Date(endValue) >= now;
   }
 
+  private async ensureTeamLogoColumn() {
+    await this.usersRepository.query(`
+      ALTER TABLE teams
+      ADD COLUMN IF NOT EXISTS logo_url VARCHAR(500) NULL
+    `);
+  }
   private async ensureSportTypeConstraint() {
     await this.usersRepository.query(`
       ALTER TABLE tournaments
