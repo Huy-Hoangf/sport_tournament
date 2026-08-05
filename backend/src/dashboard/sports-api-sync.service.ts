@@ -6,8 +6,10 @@ import { User } from '../users/user.entity';
 // Cito LoL free tier is limited, so list calls are cached for a day unless an import forces fresh data.
 const LOL_CACHE_MS = 24 * 60 * 60 * 1000;
 const FOOTBALL_API_BASE_URL = 'https://v3.football.api-sports.io';
+const FOOTBALL_DATA_ORG_API_BASE_URL = 'https://api.football-data.org/v4';
 const OPENF1_API_BASE_URL = 'https://api.openf1.org/v1';
 const CITO_API_BASE_URL = 'https://api.citoapi.com/api/v1';
+const THESPORTSDB_API_BASE_URL = 'https://www.thesportsdb.com/api/v1/json';
 const ESPN_SOCCER_API_BASE_URL =
   'https://site.api.espn.com/apis/site/v2/sports/soccer';
 const FEATURED_FOOTBALL_COMPETITIONS: Array<{
@@ -34,6 +36,15 @@ const FEATURED_FOOTBALL_COMPETITIONS: Array<{
   { rank: 63, tokens: ['k league'] },
   { rank: 62, tokens: ['v-league'] },
 ];
+const FOOTBALL_DATA_ORG_COMPETITION_CODES = new Map<number, string>([
+  [39, 'PL'],
+  [2, 'CL'],
+  [140, 'PD'],
+  [135, 'SA'],
+  [78, 'BL1'],
+  [61, 'FL1'],
+  [3, 'EL'],
+]);
 
 type FootballCompetition = {
   league: {
@@ -82,6 +93,42 @@ type FootballMatch = {
   goals?: {
     home?: number | null;
     away?: number | null;
+  };
+};
+
+type FootballDataOrgMatch = {
+  id: number;
+  utcDate: string;
+  status: string;
+  competition?: {
+    id?: number;
+    name?: string;
+    code?: string;
+  };
+  season?: {
+    startDate?: string;
+    endDate?: string;
+    currentMatchday?: number;
+  };
+  homeTeam?: {
+    id?: number;
+    name?: string;
+    shortName?: string;
+    tla?: string;
+    crest?: string;
+  };
+  awayTeam?: {
+    id?: number;
+    name?: string;
+    shortName?: string;
+    tla?: string;
+    crest?: string;
+  };
+  score?: {
+    fullTime?: {
+      home?: number | null;
+      away?: number | null;
+    };
   };
 };
 
@@ -198,6 +245,7 @@ export class SportsApiSyncService {
     expiresAt: number;
     logosByName: Map<string, string>;
   } | null = null;
+  private sportsDbLogoCache = new Map<string, string | null>();
 
   constructor(
     @InjectRepository(User)
@@ -772,14 +820,16 @@ export class SportsApiSyncService {
         match.teams?.home?.name || match.homeTeam?.name || 'Home team';
       const awayName =
         match.teams?.away?.name || match.awayTeam?.name || 'Away team';
-      const homeLogoUrl = this.pickString(match, [
-        ['teams', 'home', 'logo'],
-        ['homeTeam', 'logo'],
-      ]);
-      const awayLogoUrl = this.pickString(match, [
-        ['teams', 'away', 'logo'],
-        ['awayTeam', 'logo'],
-      ]);
+      const homeLogoUrl =
+        this.pickString(match, [
+          ['teams', 'home', 'logo'],
+          ['homeTeam', 'logo'],
+        ]) ?? (await this.fetchSportsDbTeamLogo(homeName));
+      const awayLogoUrl =
+        this.pickString(match, [
+          ['teams', 'away', 'logo'],
+          ['awayTeam', 'logo'],
+        ]) ?? (await this.fetchSportsDbTeamLogo(awayName));
       const homeTeamId = await this.upsertTeam(
         tournamentId,
         homeName,
@@ -930,6 +980,13 @@ export class SportsApiSyncService {
     selectedSeason: number,
     headers: Record<string, string>,
   ) {
+    const footballDataOrgFixtures =
+      await this.fetchFootballDataOrgFixturesForLeague(leagueId);
+
+    if (footballDataOrgFixtures.length > 0) {
+      return footballDataOrgFixtures;
+    }
+
     const seasons = await this.getFootballFixtureCandidateSeasons(
       leagueId,
       selectedSeason,
@@ -949,6 +1006,104 @@ export class SportsApiSyncService {
     }
 
     return [];
+  }
+
+  private async fetchFootballDataOrgFixturesForLeague(leagueId: number) {
+    const apiKey = process.env.FOOTBALL_DATA_ORG_API_KEY?.trim();
+    const competitionCode = FOOTBALL_DATA_ORG_COMPETITION_CODES.get(leagueId);
+
+    if (!apiKey || !competitionCode) {
+      return [];
+    }
+
+    const response = await this.fetchOptionalJson<{
+      matches?: FootballDataOrgMatch[];
+    }>(
+      `${FOOTBALL_DATA_ORG_API_BASE_URL}/competitions/${competitionCode}/matches`,
+      { 'X-Auth-Token': apiKey },
+    );
+
+    return (response?.matches ?? [])
+      .map((match) => this.toFootballDataOrgMatch(match, leagueId))
+      .filter(
+        (match): match is FootballMatch =>
+          match !== null && this.isFootballFixtureCurrentOrFuture(match),
+      )
+      .slice(0, 50);
+  }
+
+  private toFootballDataOrgMatch(
+    match: FootballDataOrgMatch,
+    leagueId: number,
+  ): FootballMatch | null {
+    if (!match.id || !match.utcDate || !match.competition?.name) {
+      return null;
+    }
+
+    const seasonYear = match.season?.startDate
+      ? new Date(match.season.startDate).getUTCFullYear()
+      : undefined;
+
+    return {
+      fixture: {
+        id: `fdorg-${match.id}`,
+        date: match.utcDate,
+        status: { short: this.mapFootballDataOrgStatus(match.status) },
+      },
+      league: {
+        id: leagueId,
+        name: match.competition.name,
+        season: seasonYear,
+      },
+      teams: {
+        home: {
+          id: match.homeTeam?.id,
+          name:
+            match.homeTeam?.name ||
+            match.homeTeam?.shortName ||
+            match.homeTeam?.tla,
+          logo: match.homeTeam?.crest,
+        },
+        away: {
+          id: match.awayTeam?.id,
+          name:
+            match.awayTeam?.name ||
+            match.awayTeam?.shortName ||
+            match.awayTeam?.tla,
+          logo: match.awayTeam?.crest,
+        },
+      },
+      goals: {
+        home: match.score?.fullTime?.home ?? null,
+        away: match.score?.fullTime?.away ?? null,
+      },
+    };
+  }
+
+  private async fetchSportsDbTeamLogo(teamName: string) {
+    const cacheKey = this.normalizeTeamLookupKey(teamName);
+
+    if (this.sportsDbLogoCache.has(cacheKey)) {
+      return this.sportsDbLogoCache.get(cacheKey) ?? null;
+    }
+
+    const apiKey = process.env.THESPORTSDB_API_KEY?.trim() || '123';
+    const response = await this.fetchOptionalJson<{
+      teams?: Array<{ strBadge?: string; strLogo?: string }>;
+    }>(
+      `${THESPORTSDB_API_BASE_URL}/${apiKey}/searchteams.php?t=${encodeURIComponent(
+        teamName,
+      )}`,
+    );
+    const logoUrl =
+      response?.teams?.find((team) => team.strBadge || team.strLogo)
+        ?.strBadge ??
+      response?.teams?.find((team) => team.strLogo)?.strLogo ??
+      null;
+
+    this.sportsDbLogoCache.set(cacheKey, logoUrl);
+
+    return logoUrl;
   }
 
   private async getFootballFixtureCandidateSeasons(
@@ -2315,6 +2470,26 @@ export class SportsApiSyncService {
     }
 
     return 'PENDING' as const;
+  }
+
+  private mapFootballDataOrgStatus(status: string) {
+    const normalized = status.toUpperCase();
+
+    if (['IN_PLAY', 'PAUSED'].includes(normalized)) {
+      return 'LIVE';
+    }
+
+    if (normalized === 'FINISHED') {
+      return 'FT';
+    }
+
+    if (
+      ['CANCELLED', 'POSTPONED', 'SUSPENDED', 'AWARDED'].includes(normalized)
+    ) {
+      return 'CANC';
+    }
+
+    return 'NS';
   }
 
   private mapTournamentStatus(status: string) {
