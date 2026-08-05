@@ -75,7 +75,16 @@ export class DashboardController {
   async syncFootballCompetitions(
     @Headers('authorization') authorization: string | undefined,
     @Body()
-    body: { leagues?: Array<{ id: number; season: number; name?: string }> },
+    body: {
+      leagues?: Array<{
+        id: number;
+        season: number;
+        name?: string;
+        start?: string | null;
+        end?: string | null;
+        current?: boolean;
+      }>;
+    },
   ) {
     await this.authService.verifyAdminToken(authorization);
     return this.sportsApiSyncService.syncSelectedFootballLeagues(

@@ -487,6 +487,7 @@ export default function AdminDashboardContent({
         name: competition.name,
         start: competition.start,
         end: competition.end,
+        current: competition.current,
       }));
 
     if (selectedLeagues.length === 0) {
