@@ -134,6 +134,13 @@ type FootballDataOrgMatch = {
 
 type TournamentStatus = 'UPCOMING' | 'ACTIVE' | 'COMPLETED' | 'CANCELLED';
 
+class ApiRateLimitError extends Error {
+  constructor(message: string) {
+    super(message);
+    this.name = 'ApiRateLimitError';
+  }
+}
+
 type EspnSoccerEvent = {
   id?: string;
   date?: string;
@@ -430,7 +437,13 @@ export class SportsApiSyncService {
   }
 
   async syncSelectedFootballLeagues(
-    leagues: Array<{ id: number; season: number; name?: string }>,
+    leagues: Array<{
+      id: number;
+      season: number;
+      name?: string;
+      start?: string | null;
+      end?: string | null;
+    }>,
   ) {
     await this.ensureSportTypeConstraint();
 
@@ -451,6 +464,8 @@ export class SportsApiSyncService {
         id: Number(league.id),
         season: Number(league.season),
         name: typeof league.name === 'string' ? league.name.trim() : '',
+        start: typeof league.start === 'string' ? league.start : null,
+        end: typeof league.end === 'string' ? league.end : null,
       }))
       .filter(
         (league) =>
@@ -464,66 +479,85 @@ export class SportsApiSyncService {
     const headers = { 'x-apisports-key': apiKey };
     let competitionCount = 0;
     let matchCount = 0;
+    const importNotes = new Set<string>();
 
     for (const league of selectedLeagues) {
-      const isAseanChampionship =
-        league.name.trim().toLowerCase() === 'asean championship';
-      const tournamentStatus = isAseanChampionship
-        ? this.getAseanTournamentStatus(league.season)
-        : await this.getFootballTournamentStatusForLeague(
-            league.id,
-            league.season,
-            headers,
-          );
-      const includeFinishedFixtures = tournamentStatus === 'COMPLETED';
-      const fixtures = isAseanChampionship
-        ? await this.fetchAseanChampionshipFixtures(
-            league.season,
-            includeFinishedFixtures,
-          )
-        : await this.fetchFootballFixturesForLeagueWithFallback(
-            league.id,
-            league.season,
-            headers,
-            includeFinishedFixtures,
-          );
-      const competitionName = fixtures[0]?.league?.name || league.name;
+      try {
+        const isAseanChampionship =
+          league.name.trim().toLowerCase() === 'asean championship';
+        const tournamentStatus = isAseanChampionship
+          ? this.getAseanTournamentStatus(league.season)
+          : league.start || league.end
+            ? this.mapTournamentStatusFromDates(league.start, league.end)
+            : await this.getFootballTournamentStatusForLeague(
+                league.id,
+                league.season,
+                headers,
+              );
+        const includeFinishedFixtures = tournamentStatus === 'COMPLETED';
+        const fixtures = isAseanChampionship
+          ? await this.fetchAseanChampionshipFixtures(
+              league.season,
+              includeFinishedFixtures,
+            )
+          : await this.fetchFootballFixturesForLeagueWithFallback(
+              league.id,
+              league.season,
+              headers,
+              includeFinishedFixtures,
+            );
+        const competitionName = fixtures[0]?.league?.name || league.name;
 
-      if (!competitionName) {
-        continue;
-      }
+        if (!competitionName) {
+          continue;
+        }
 
-      if (fixtures.length === 0) {
-        await this.upsertEmptyFootballTournament(
+        if (fixtures.length === 0) {
+          await this.upsertEmptyFootballTournament(
+            adminId,
+            competitionName,
+            tournamentStatus,
+          );
+          competitionCount += 1;
+          continue;
+        }
+
+        const importedMatches = await this.syncFootballMatches(
           adminId,
-          competitionName,
-          tournamentStatus,
+          fixtures,
+          isAseanChampionship ? 'ESPN_ASEAN' : 'FOOTBALL_DATA',
         );
-        competitionCount += 1;
-        continue;
+
+        if (importedMatches > 0) {
+          competitionCount += 1;
+          matchCount += importedMatches;
+        }
+      } catch (error) {
+        if (error instanceof ApiRateLimitError) {
+          importNotes.add(error.message);
+          break;
+        }
+
+        throw error;
       }
+    }
 
-      const importedMatches = await this.syncFootballMatches(
-        adminId,
-        fixtures,
-        isAseanChampionship ? 'ESPN_ASEAN' : 'FOOTBALL_DATA',
-      );
-
-      if (importedMatches > 0) {
-        competitionCount += 1;
-        matchCount += importedMatches;
+    if (importNotes.size === 0) {
+      if (matchCount === 0 && competitionCount > 0) {
+        importNotes.add(
+          'Selected competitions were imported, but no fixtures were returned for them.',
+        );
+      } else if (matchCount === 0) {
+        importNotes.add(
+          'No fixtures were returned for the selected competitions.',
+        );
       }
     }
 
     return {
       competitions: competitionCount,
       matches: matchCount,
-      error:
-        matchCount === 0 && competitionCount > 0
-          ? 'Selected competitions were imported, but API-SPORTS returned no fixtures for them.'
-          : matchCount === 0
-            ? 'No fixtures were returned by API-SPORTS for the selected competitions.'
-            : null,
+      error: importNotes.size > 0 ? Array.from(importNotes).join(' ') : null,
     };
   }
 
@@ -2390,6 +2424,12 @@ export class SportsApiSyncService {
 
     if (!response.ok) {
       const text = await response.text();
+      if (response.status === 429) {
+        throw new ApiRateLimitError(
+          'API-Football is rate-limited per minute. Please wait a few seconds, then import fewer competitions at once.',
+        );
+      }
+
       throw new Error(`API request failed ${response.status}: ${text}`);
     }
 
