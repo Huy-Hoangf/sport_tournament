@@ -2225,13 +2225,33 @@ function DashboardPanelTitle({
 }
 
 function MatchTeams({ match }: { match: MatchRow }) {
+  const score = formatScore(match);
+
   return (
-    <div className="flex min-w-0 flex-wrap items-center gap-2 font-black text-white">
-      <TeamLogo name={match.homeName ?? "Home team"} src={match.homeLogoUrl} />
-      <span className="min-w-0 truncate">{match.homeName ?? "TBD"}</span>
-      <span className="text-xs uppercase text-[#84d8e8]">vs</span>
-      <TeamLogo name={match.awayName ?? "Away team"} src={match.awayLogoUrl} />
-      <span className="min-w-0 truncate">{match.awayName ?? "TBD"}</span>
+    <div className="grid min-w-0 grid-cols-[minmax(0,1fr)_auto_minmax(0,1fr)] items-center gap-3 font-black text-white">
+      <div className="flex min-w-0 items-center gap-2">
+        <TeamLogo
+          name={match.homeName ?? "Home team"}
+          src={match.homeLogoUrl}
+        />
+        <span className="min-w-0 truncate">{match.homeName ?? "TBD"}</span>
+      </div>
+      <span
+        className={`shrink-0 rounded-sm px-2 py-1 text-xs uppercase ${
+          score === "-"
+            ? "text-[#84d8e8]"
+            : "bg-[#183229] text-[#a7e8c0]"
+        }`}
+      >
+        {score === "-" ? "vs" : score}
+      </span>
+      <div className="flex min-w-0 items-center justify-end gap-2 text-right">
+        <span className="min-w-0 truncate">{match.awayName ?? "TBD"}</span>
+        <TeamLogo
+          name={match.awayName ?? "Away team"}
+          src={match.awayLogoUrl}
+        />
+      </div>
     </div>
   );
 }
