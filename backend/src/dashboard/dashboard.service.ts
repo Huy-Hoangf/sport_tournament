@@ -351,6 +351,9 @@ export class DashboardService {
         ? `AND ${this.todayDateCondition('m.scheduled_time')}`
         : '';
 
+    const scheduleTimeCondition =
+      scope === 'today' ? '' : 'AND m.scheduled_time >= NOW()';
+
     return `
       SELECT
         m.id,
@@ -369,10 +372,14 @@ export class DashboardService {
       JOIN tournaments t ON t.id = m.tournament_id
       LEFT JOIN teams home ON home.id = m.home_team_id
       LEFT JOIN teams away ON away.id = m.away_team_id
-      WHERE m.scheduled_time >= NOW()
+      WHERE 1 = 1
+        ${scheduleTimeCondition}
         ${visibilityCondition}
         ${scopeCondition}
-      ORDER BY m.scheduled_time ASC
+      ORDER BY
+        CASE WHEN m.scheduled_time >= NOW() THEN 0 ELSE 1 END,
+        CASE WHEN m.scheduled_time >= NOW() THEN m.scheduled_time END ASC,
+        CASE WHEN m.scheduled_time < NOW() THEN m.scheduled_time END DESC
       LIMIT 8
     `;
   }
