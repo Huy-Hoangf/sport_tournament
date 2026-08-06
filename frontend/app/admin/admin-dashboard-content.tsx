@@ -1,4 +1,4 @@
-"use client";
+﻿"use client";
 
 import { apiRequest } from "../api";
 import NoticeBanner, { type Notice } from "../notice-banner";
@@ -866,19 +866,16 @@ export default function AdminDashboardContent({
             <DashboardStatCard
               title="Active Tournaments"
               value={dashboard.stats.activeTournaments}
-              note="Today in database"
               icon={<Trophy size={22} />}
             />
             <DashboardStatCard
               title="Total Players"
               value={dashboard.stats.totalPlayers}
-              note="Registered players"
               icon={<Users size={22} />}
             />
             <DashboardStatCard
               title="Today Matches"
               value={dashboard.stats.upcomingMatches}
-              note="Scheduled today"
               icon={<CalendarDays size={22} />}
             />
             {isAdmin && (
