@@ -239,6 +239,8 @@ type LolScheduleSnapshot = {
       __awayLogoUrl: string | null;
       __scheduledTime: string;
       __status: 'PENDING' | 'LIVE' | 'FINISHED' | 'CANCELLED';
+      __actualHomeScore: number | null;
+      __actualAwayScore: number | null;
     }
   >;
 };
@@ -734,8 +736,8 @@ export class SportsApiSyncService {
           status: match.__status,
           source: 'CITO_LOL',
           externalMatchId: match.__matchId,
-          actualHomeScore: null,
-          actualAwayScore: null,
+          actualHomeScore: match.__actualHomeScore,
+          actualAwayScore: match.__actualAwayScore,
         });
         matchCount += 1;
       }
@@ -1694,8 +1696,12 @@ export class SportsApiSyncService {
     const [
       todayResponse,
       upcomingResponse,
+      recentResponse,
+      resultsResponse,
       lckResponse,
+      lckResultsResponse,
       lckChallengersResponse,
+      lckChallengersResultsResponse,
     ] = await Promise.all([
       this.fetchJson<unknown>(
         `${CITO_API_BASE_URL}/lol/schedule/today`,
@@ -1706,24 +1712,52 @@ export class SportsApiSyncService {
         headers,
       ),
       this.fetchOptionalJson<unknown>(
+        `${CITO_API_BASE_URL}/lol/schedule/recent`,
+        headers,
+      ),
+      this.fetchOptionalJson<unknown>(
+        `${CITO_API_BASE_URL}/lol/schedule/results`,
+        headers,
+      ),
+      this.fetchOptionalJson<unknown>(
         `${CITO_API_BASE_URL}/lol/leagues/lck/schedule`,
+        headers,
+      ),
+      this.fetchOptionalJson<unknown>(
+        `${CITO_API_BASE_URL}/lol/leagues/lck/results`,
         headers,
       ),
       this.fetchOptionalJson<unknown>(
         `${CITO_API_BASE_URL}/lol/leagues/lck_challengers/schedule`,
         headers,
       ),
+      this.fetchOptionalJson<unknown>(
+        `${CITO_API_BASE_URL}/lol/leagues/lck_challengers/results`,
+        headers,
+      ),
     ]);
     const rawMatches = [
       ...this.extractResponseArray(todayResponse),
       ...this.extractResponseArray(upcomingResponse),
+      ...this.extractResponseArray(recentResponse),
+      ...this.extractResponseArray(resultsResponse),
       ...this.withLolLeagueIdentity(
         this.extractResponseArray(lckResponse),
         'lck',
         'LCK',
       ),
       ...this.withLolLeagueIdentity(
+        this.extractResponseArray(lckResultsResponse),
+        'lck',
+        'LCK',
+      ),
+      ...this.withLolLeagueIdentity(
         this.extractResponseArray(lckChallengersResponse),
+        'lck_challengers',
+        'LCK Challengers',
+      ),
+      ...this.withLolLeagueIdentity(
+        this.extractResponseArray(lckChallengersResultsResponse),
         'lck_challengers',
         'LCK Challengers',
       ),
@@ -1775,8 +1809,19 @@ export class SportsApiSyncService {
       }
 
       const scheduledDate = new Date(scheduledTime);
+      const recentResultsStart = new Date(
+        now.getTime() - 45 * 24 * 60 * 60 * 1000,
+      );
 
-      if (status !== 'LIVE' && scheduledDate < now) {
+      if (
+        status !== 'FINISHED' &&
+        status !== 'LIVE' &&
+        scheduledDate < now
+      ) {
+        continue;
+      }
+
+      if (status === 'FINISHED' && scheduledDate < recentResultsStart) {
         continue;
       }
 
@@ -1920,6 +1965,50 @@ export class SportsApiSyncService {
         ['participants', 1, 'logo'],
         ['participants', 1, 'image_url'],
       ]);
+      const actualHomeScore = this.pickLolScore(rawMatch, [
+        ['homeScore'],
+        ['home_score'],
+        ['team1Score'],
+        ['team1_score'],
+        ['blueScore'],
+        ['blue_score'],
+        ['score', 'home'],
+        ['scores', 'home'],
+        ['result', 'home'],
+        ['results', 'home'],
+        ['home', 'score'],
+        ['homeTeam', 'score'],
+        ['home_team', 'score'],
+        ['team1', 'score'],
+        ['blueTeam', 'score'],
+        ['opponents', 0, 'score'],
+        ['opponents', 0, 'opponent', 'score'],
+        ['teams', 0, 'score'],
+        ['teams', 0, 'team', 'score'],
+        ['participants', 0, 'score'],
+      ]);
+      const actualAwayScore = this.pickLolScore(rawMatch, [
+        ['awayScore'],
+        ['away_score'],
+        ['team2Score'],
+        ['team2_score'],
+        ['redScore'],
+        ['red_score'],
+        ['score', 'away'],
+        ['scores', 'away'],
+        ['result', 'away'],
+        ['results', 'away'],
+        ['away', 'score'],
+        ['awayTeam', 'score'],
+        ['away_team', 'score'],
+        ['team2', 'score'],
+        ['redTeam', 'score'],
+        ['opponents', 1, 'score'],
+        ['opponents', 1, 'opponent', 'score'],
+        ['teams', 1, 'score'],
+        ['teams', 1, 'team', 'score'],
+        ['participants', 1, 'score'],
+      ]);
       const resolvedCompetition = this.resolveLolCompetitionIdentity(
         rawMatch,
         String(competitionId),
@@ -1959,6 +2048,8 @@ export class SportsApiSyncService {
         __awayLogoUrl: awayLogoUrl,
         __scheduledTime: scheduledTime,
         __status: status,
+        __actualHomeScore: actualHomeScore,
+        __actualAwayScore: actualAwayScore,
       });
     }
 
@@ -2351,6 +2442,36 @@ export class SportsApiSyncService {
 
       if (typeof value === 'number' && Number.isFinite(value)) {
         return String(value);
+      }
+    }
+
+    return null;
+  }
+
+  private pickLolScore(
+    source: unknown,
+    paths: Array<Array<string | number>>,
+  ): number | null {
+    for (const path of paths) {
+      let value = source;
+
+      for (const segment of path) {
+        if (typeof segment === 'number') {
+          value = Array.isArray(value) ? value[segment] : undefined;
+        } else {
+          value = this.isRecord(value) ? value[segment] : undefined;
+        }
+      }
+
+      if (typeof value === 'number' && Number.isFinite(value)) {
+        return value;
+      }
+
+      if (typeof value === 'string' && value.trim() !== '') {
+        const parsed = Number(value);
+        if (Number.isFinite(parsed)) {
+          return parsed;
+        }
       }
     }
 

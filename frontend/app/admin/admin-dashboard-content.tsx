@@ -819,6 +819,9 @@ export default function AdminDashboardContent({
           matches={selectedTournamentMatches}
           isTodayScope={!isTournamentView}
           onBack={() => setSelectedTournamentId(null)}
+          onUnavailableFeature={() =>
+            showNotice("this feature not available", "info")
+          }
         />
       ) : (
         <>
@@ -1962,11 +1965,13 @@ function TournamentDetailView({
   matches,
   isTodayScope,
   onBack,
+  onUnavailableFeature,
 }: {
   tournament: TournamentRow;
   matches: MatchRow[];
   isTodayScope: boolean;
   onBack: () => void;
+  onUnavailableFeature: () => void;
 }) {
   const sortedMatches = [...matches].sort(
     (first, second) =>
@@ -1999,6 +2004,10 @@ function TournamentDetailView({
           Back to tournaments
         </button>
 
+        <p className="mb-4 text-sm font-black uppercase tracking-[0.08em] text-[#84d8e8]">
+          Tournaments Detail
+        </p>
+
         <div className="grid gap-5 xl:grid-cols-[minmax(0,1fr)_220px] xl:items-start">
           <div className="min-w-0">
             <div className="flex flex-wrap items-center gap-3">
@@ -2020,9 +2029,14 @@ function TournamentDetailView({
             </div>
           </div>
 
-          <div className="rounded border border-[#3a4d54] bg-[#10242b] px-5 py-4 text-center text-xs font-black uppercase tracking-[0.08em] text-[#84d8e8]">
-            Tournament Detail
-          </div>
+          <button
+            type="button"
+            onClick={onUnavailableFeature}
+            className="inline-flex min-h-[54px] items-center justify-center gap-3 rounded border border-[#3a4d54] bg-[#10242b] px-5 py-4 text-center text-xs font-black uppercase tracking-[0.08em] text-[#84d8e8] transition hover:border-[#84d8e8]"
+          >
+            <FileDown size={18} />
+            Import Match
+          </button>
         </div>
 
         <div className="mt-6 flex flex-wrap gap-4 border-b border-[#3a4d54]">
@@ -2031,10 +2045,11 @@ function TournamentDetailView({
               <button
                 key={tab}
                 type="button"
+                onClick={index === 0 ? undefined : onUnavailableFeature}
                 className={`pb-3 text-xs font-black uppercase tracking-[0.08em] ${
                   index === 0
                     ? "border-b-2 border-[#84d8e8] text-[#84d8e8]"
-                    : "text-[#9fb2b8]"
+                    : "text-[#9fb2b8] transition hover:text-[#84d8e8]"
                 }`}
               >
                 {tab}
