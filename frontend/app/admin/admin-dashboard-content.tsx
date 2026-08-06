@@ -672,6 +672,15 @@ export default function AdminDashboardContent({
     );
   });
   const tournamentGroups = getTournamentGroups(searchedTournaments);
+  const selectedTournament =
+    dashboard.tournaments.find(
+      (tournament) => tournament.id === selectedTournamentId,
+    ) ?? null;
+  const selectedTournamentMatches = selectedTournament
+    ? dashboard.tournamentMatches.filter(
+        (match) => match.tournamentId === selectedTournament.id,
+      )
+    : [];
   const pageTitle = isTournamentView ? "Tournament Management" : "Dashboard";
   const pageDescription = isTournamentView
     ? "Oversee competition life cycles, participant metrics, and scheduling parameters."
@@ -804,6 +813,15 @@ export default function AdminDashboardContent({
         </section>
       )}
 
+      {selectedTournament ? (
+        <TournamentDetailView
+          tournament={selectedTournament}
+          matches={selectedTournamentMatches}
+          isTodayScope={!isTournamentView}
+          onBack={() => setSelectedTournamentId(null)}
+        />
+      ) : (
+        <>
       {!isTournamentView && (
         <>
           <section className="mb-5 rounded border border-[#3a4d54] bg-[#0d252d] p-4">
@@ -920,6 +938,8 @@ export default function AdminDashboardContent({
           </div>
         </aside>
       </div>
+        </>
+      )}
 
       {isAdmin && openAttentionDetails && (
         <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/70 px-4">
@@ -1505,7 +1525,6 @@ function TournamentManagementTable({
       />
       <div className="divide-y divide-[#243c43] xl:hidden">
         {visibleTournaments.map((tournament) => {
-          const isSelected = selectedTournamentId === tournament.id;
           const matches = tournamentMatches.filter(
             (match) => match.tournamentId === tournament.id,
           );
@@ -1514,13 +1533,11 @@ function TournamentManagementTable({
             <article key={tournament.id} className="bg-[#0d252d]">
               <button
                 type="button"
-                onClick={() =>
-                  onSelectTournament((currentId) =>
-                    currentId === tournament.id ? null : tournament.id,
-                  )
-                }
+                onClick={() => onSelectTournament(tournament.id)}
                 className={`w-full px-4 py-4 text-left transition ${
-                  isSelected ? "bg-[#12333c]" : "hover:bg-[#102d35]"
+                  selectedTournamentId === tournament.id
+                    ? "bg-[#12333c]"
+                    : "hover:bg-[#102d35]"
                 }`}
               >
                 <div className="flex items-start gap-3">
@@ -1590,13 +1607,6 @@ function TournamentManagementTable({
                 </div>
               )}
 
-              {isSelected && (
-                <TournamentMatchDetails
-                  tournament={tournament}
-                  matches={matches}
-                  isTodayScope={isTodayScope}
-                />
-              )}
             </article>
           );
         })}
@@ -1624,18 +1634,11 @@ function TournamentManagementTable({
           <tbody>
             {visibleTournaments.map((tournament) => {
               const isSelected = selectedTournamentId === tournament.id;
-              const matches = tournamentMatches.filter(
-                (match) => match.tournamentId === tournament.id,
-              );
 
               return (
                 <Fragment key={tournament.id}>
                   <tr
-                    onClick={() =>
-                      onSelectTournament((currentId) =>
-                        currentId === tournament.id ? null : tournament.id,
-                      )
-                    }
+                    onClick={() => onSelectTournament(tournament.id)}
                     className={`h-[73px] cursor-pointer border-b border-[#243c43] text-sm transition hover:bg-[#102d35] ${
                       isSelected ? "bg-[#12333c]" : ""
                     }`}
@@ -1693,17 +1696,6 @@ function TournamentManagementTable({
                       )}
                     </td>
                   </tr>
-                  {isSelected && (
-                    <tr className="border-b border-[#243c43] bg-[#092127]">
-                      <td colSpan={7} className="p-0">
-                        <TournamentMatchDetails
-                          tournament={tournament}
-                          matches={matches}
-                          isTodayScope={isTodayScope}
-                        />
-                      </td>
-                    </tr>
-                  )}
                 </Fragment>
               );
             })}
@@ -1965,6 +1957,234 @@ function LolCompetitionGroup({
   );
 }
 
+function TournamentDetailView({
+  tournament,
+  matches,
+  isTodayScope,
+  onBack,
+}: {
+  tournament: TournamentRow;
+  matches: MatchRow[];
+  isTodayScope: boolean;
+  onBack: () => void;
+}) {
+  const sortedMatches = [...matches].sort(
+    (first, second) =>
+      new Date(first.scheduledTime).getTime() -
+      new Date(second.scheduledTime).getTime(),
+  );
+  const finishedMatches = sortedMatches
+    .filter((match) => isFinishedStatus(match.status))
+    .slice()
+    .reverse();
+  const upcomingMatches = sortedMatches.filter(
+    (match) => !isFinishedStatus(match.status),
+  );
+  const completedCount = finishedMatches.length;
+  const progress = matches.length
+    ? Math.round((completedCount / matches.length) * 100)
+    : 0;
+  const dateRange = getTournamentDateRange(sortedMatches);
+  const firstUpcoming = upcomingMatches[0];
+
+  return (
+    <section className="min-w-0 rounded border border-[#3a4d54] bg-[#07181d]">
+      <div className="border-b border-[#243c43] bg-[radial-gradient(circle_at_20%_20%,rgba(132,216,232,0.09),transparent_30%),#081b21] p-5 sm:p-7">
+        <button
+          type="button"
+          onClick={onBack}
+          className="mb-5 inline-flex items-center gap-2 rounded border border-[#3a4d54] px-4 py-2 text-xs font-black uppercase tracking-[0.08em] text-[#dce8eb] transition hover:border-[#84d8e8] hover:text-[#84d8e8]"
+        >
+          <ChevronLeft size={16} />
+          Back to tournaments
+        </button>
+
+        <div className="grid gap-5 xl:grid-cols-[minmax(0,1fr)_220px] xl:items-start">
+          <div className="min-w-0">
+            <div className="flex flex-wrap items-center gap-3">
+              <DashboardStatusBadge status={tournament.status} />
+              <h3 className="min-w-0 break-words text-2xl font-black text-white">
+                {tournament.name}
+              </h3>
+            </div>
+            <div className="mt-4 flex flex-wrap gap-x-6 gap-y-2 text-sm font-bold text-[#dce8eb]">
+              <span>{tournament.teams.toLocaleString()} Teams</span>
+              <span>{matches.length.toLocaleString()} Matches</span>
+              <span>
+                {Math.max(matches.length * 3, 0).toLocaleString()} Predictions
+              </span>
+              <span>{dateRange}</span>
+            </div>
+            <div className="mt-4">
+              <DashboardSourceBadge source={tournament.source} />
+            </div>
+          </div>
+
+          <div className="rounded border border-[#3a4d54] bg-[#10242b] px-5 py-4 text-center text-xs font-black uppercase tracking-[0.08em] text-[#84d8e8]">
+            Tournament Detail
+          </div>
+        </div>
+
+        <div className="mt-6 flex flex-wrap gap-4 border-b border-[#3a4d54]">
+          {["Overview", "Predictions", "Stages", "Scoring Rules"].map(
+            (tab, index) => (
+              <button
+                key={tab}
+                type="button"
+                className={`pb-3 text-xs font-black uppercase tracking-[0.08em] ${
+                  index === 0
+                    ? "border-b-2 border-[#84d8e8] text-[#84d8e8]"
+                    : "text-[#9fb2b8]"
+                }`}
+              >
+                {tab}
+              </button>
+            ),
+          )}
+        </div>
+      </div>
+
+      <div className="grid gap-5 p-5 sm:p-7 xl:grid-cols-[360px_minmax(0,1fr)]">
+        <section className="rounded border border-[#3a4d54] bg-[#0d252d] p-6 text-center">
+          <div
+            className="mx-auto grid h-44 w-44 place-items-center rounded-full"
+            style={{
+              background: `conic-gradient(#84d8e8 ${progress * 3.6}deg, #203841 0deg)`,
+            }}
+          >
+            <div className="grid h-32 w-32 place-items-center rounded-full bg-[#0d252d]">
+              <div>
+                <p className="text-3xl font-black text-white">{progress}%</p>
+                <p className="text-xs font-bold uppercase text-[#9fb2b8]">
+                  Progress
+                </p>
+              </div>
+            </div>
+          </div>
+          <p className="mt-6 text-xl font-black text-white">
+            {completedCount} of {matches.length} Matches Completed
+          </p>
+          <p className="mt-3 text-[#9fb2b8]">
+            {firstUpcoming
+              ? `Next match starts ${formatDateTime(firstUpcoming.scheduledTime)}.`
+              : matches.length > 0
+                ? "All imported matches are completed."
+                : isTodayScope
+                  ? `Giải ${tournament.name} không có lịch thi đấu hôm nay.`
+                  : "No schedule has been imported for this tournament."}
+          </p>
+        </section>
+
+        <section className="overflow-hidden rounded border border-[#3a4d54] bg-[#0d252d]">
+          <DashboardPanelTitle
+            title="Upcoming Matches"
+            right={`${upcomingMatches.length} total`}
+          />
+          <div className="divide-y divide-[#243c43]">
+            {upcomingMatches.slice(0, 4).map((match) => (
+              <CompactMatchRow key={match.id} match={match} />
+            ))}
+            {upcomingMatches.length === 0 && (
+              <p className="px-6 py-10 text-center text-[#9fb2b8]">
+                {isTodayScope
+                  ? `Giải ${tournament.name} không có lịch thi đấu hôm nay.`
+                  : "No upcoming matches found for this tournament."}
+              </p>
+            )}
+          </div>
+        </section>
+
+        <section className="overflow-hidden rounded border border-[#3a4d54] bg-[#0d252d] xl:col-span-1">
+          <DashboardPanelTitle
+            title="Recent Results"
+            right={`${finishedMatches.length} finished`}
+          />
+          <div className="space-y-3 p-5">
+            {finishedMatches.slice(0, 3).map((match) => (
+              <ResultMatchRow key={match.id} match={match} />
+            ))}
+            {finishedMatches.length === 0 && (
+              <p className="py-10 text-center text-[#9fb2b8]">
+                No completed results found.
+              </p>
+            )}
+          </div>
+        </section>
+
+        <section className="overflow-hidden rounded border border-[#3a4d54] bg-[#0d252d]">
+          <DashboardPanelTitle title="Leaderboard Top 3" right="View Full" />
+          <div className="space-y-3 p-5">
+            {["Rank 01", "Rank 02", "Rank 03"].map((rank) => (
+              <div
+                key={rank}
+                className="flex items-center justify-between rounded border border-[#243c43] bg-[#10242b] p-4"
+              >
+                <div>
+                  <p className="text-xs font-black uppercase text-[#9fb2b8]">
+                    {rank}
+                  </p>
+                  <p className="mt-1 font-black text-white">No player data</p>
+                </div>
+                <span className="text-lg font-black text-[#dce8eb]">0</span>
+              </div>
+            ))}
+          </div>
+        </section>
+
+        <section className="overflow-hidden rounded border border-[#3a4d54] bg-[#0d252d] xl:col-span-2">
+          <DashboardPanelTitle
+            title="Match Schedule"
+            right={`${matches.length} matches`}
+          />
+          <TournamentMatchDetails
+            tournament={tournament}
+            matches={sortedMatches}
+            isTodayScope={isTodayScope}
+          />
+        </section>
+      </div>
+    </section>
+  );
+}
+
+function CompactMatchRow({ match }: { match: MatchRow }) {
+  return (
+    <article className="grid gap-4 px-5 py-5 sm:grid-cols-[120px_minmax(0,1fr)_120px] sm:items-center">
+      <div>
+        <p className="text-xs font-black uppercase text-[#789098]">
+          {formatDateOnly(match.scheduledTime)}
+        </p>
+        <p className="mt-1 text-lg font-black text-white">
+          {formatShortTime(match.scheduledTime)}
+        </p>
+      </div>
+      <div className="min-w-0">
+        <MatchTeams match={match} />
+      </div>
+      <div className="sm:text-right">
+        <DashboardSourceBadge source={match.source} />
+      </div>
+    </article>
+  );
+}
+
+function ResultMatchRow({ match }: { match: MatchRow }) {
+  return (
+    <article className="grid gap-3 rounded border border-[#243c43] bg-[#10242b] p-4 text-center sm:grid-cols-[minmax(0,1fr)_120px_minmax(0,1fr)] sm:items-center">
+      <div className="font-black text-white">{match.homeName ?? "TBD"}</div>
+      <div>
+        <p className="text-xl font-black text-[#84d8e8]">
+          {formatScore(match)}
+        </p>
+        <p className="mt-1 text-xs font-black uppercase text-[#9fb2b8]">
+          Final
+        </p>
+      </div>
+      <div className="font-black text-white">{match.awayName ?? "TBD"}</div>
+    </article>
+  );
+}
+
 function TournamentMatchDetails({
   tournament,
   matches,
@@ -1976,7 +2196,7 @@ function TournamentMatchDetails({
 }) {
   const isF1 = tournament.sportType === "F1";
   const emptyMatchMessage = isTodayScope
-    ? `giải ${tournament.name} không có lịch thi đấu hôm nay`
+    ? `Giải ${tournament.name} không có lịch thi đấu hôm nay.`
     : "No matches found for this tournament.";
 
   return (
@@ -2465,6 +2685,47 @@ function formatDateOnly(value: string | null) {
   }).format(date);
 }
 
+function formatShortTime(value: string | null) {
+  if (!value) {
+    return "-";
+  }
+
+  const date = new Date(value);
+
+  if (Number.isNaN(date.getTime())) {
+    return "-";
+  }
+
+  return new Intl.DateTimeFormat("en", {
+    hour: "2-digit",
+    minute: "2-digit",
+  }).format(date);
+}
+
+function getTournamentDateRange(matches: MatchRow[]) {
+  const timestamps = matches
+    .map((match) => new Date(match.scheduledTime).getTime())
+    .filter((timestamp) => !Number.isNaN(timestamp))
+    .sort((first, second) => first - second);
+
+  if (timestamps.length === 0) {
+    return "Schedule TBD";
+  }
+
+  return `${formatDateOnly(new Date(timestamps[0]).toISOString())} - ${formatDateOnly(
+    new Date(timestamps[timestamps.length - 1]).toISOString(),
+  )}`;
+}
+
+function isFinishedStatus(status: string) {
+  const normalizedStatus = status.toUpperCase();
+
+  return (
+    normalizedStatus === "FINISHED" ||
+    normalizedStatus === "COMPLETED" ||
+    normalizedStatus === "FT"
+  );
+}
 
 function formatDateTime(value: string | null) {
   if (!value) {
