@@ -1,4 +1,4 @@
-"use client";
+﻿"use client";
 
 import { apiRequest, type CurrentUser } from "../api";
 import { logoutAll, readCurrentUser } from "../auth-sync";
@@ -698,9 +698,6 @@ export default function AdminPage() {
             </nav>
 
             <div className="mt-auto border-t border-[#3c5056] p-5">
-              <button className="mb-5 h-[50px] w-full rounded bg-[#84d8e8] text-sm font-black text-[#06161b]">
-                Export Report
-              </button>
               <button
                 onClick={() => {
                   setOpenModal("changePassword");
