@@ -1698,6 +1698,7 @@ export class SportsApiSyncService {
       upcomingResponse,
       recentResponse,
       resultsResponse,
+      pastResponse,
       lckResponse,
       lckResultsResponse,
       lckChallengersResponse,
@@ -1717,6 +1718,10 @@ export class SportsApiSyncService {
       ),
       this.fetchOptionalJson<unknown>(
         `${CITO_API_BASE_URL}/lol/schedule/results`,
+        headers,
+      ),
+      this.fetchOptionalJson<unknown>(
+        `${CITO_API_BASE_URL}/lol/schedule/past`,
         headers,
       ),
       this.fetchOptionalJson<unknown>(
@@ -1741,6 +1746,7 @@ export class SportsApiSyncService {
       ...this.extractResponseArray(upcomingResponse),
       ...this.extractResponseArray(recentResponse),
       ...this.extractResponseArray(resultsResponse),
+      ...this.extractResponseArray(pastResponse),
       ...this.withLolLeagueIdentity(
         this.extractResponseArray(lckResponse),
         'lck',
@@ -1813,11 +1819,7 @@ export class SportsApiSyncService {
         now.getTime() - 45 * 24 * 60 * 60 * 1000,
       );
 
-      if (
-        status !== 'FINISHED' &&
-        status !== 'LIVE' &&
-        scheduledDate < now
-      ) {
+      if (status !== 'FINISHED' && status !== 'LIVE' && scheduledDate < now) {
         continue;
       }
 
