@@ -1988,6 +1988,15 @@ function TournamentDetailView({
     : 0;
   const dateRange = getTournamentDateRange(sortedMatches);
   const firstUpcoming = upcomingMatches[0];
+  const schedulePageSize = 8;
+  const [schedulePage, setSchedulePage] = useState(1);
+  const scheduleTotalPages = Math.max(1, Math.ceil(sortedMatches.length / schedulePageSize));
+  const activeSchedulePage = Math.min(schedulePage, scheduleTotalPages);
+  const scheduleStart = (activeSchedulePage - 1) * schedulePageSize;
+  const visibleScheduleMatches = sortedMatches.slice(
+    scheduleStart,
+    scheduleStart + schedulePageSize,
+  );
   const emptyScheduleMessage = isTodayScope
     ? `Giải ${tournament.name} không có lịch thi đấu hôm nay.`
     : 'No schedule has been imported for this tournament.';
@@ -2156,6 +2165,64 @@ function TournamentDetailView({
           </div>
         </section>
       </div>
+
+      <section className="border-t border-[#314850] p-4 sm:p-7 lg:p-8">
+        <DashboardPanelTitle
+          title="Full Match Schedule"
+          right={
+            sortedMatches.length > 0
+              ? `Showing ${scheduleStart + 1}-${Math.min(
+                  scheduleStart + schedulePageSize,
+                  sortedMatches.length,
+                )} of ${sortedMatches.length}`
+              : undefined
+          }
+        />
+        <div className="overflow-hidden border-x border-b border-[#3a4d54] bg-[#0d252d]">
+          <div className="hidden grid-cols-[minmax(220px,1.4fr)_180px_180px_120px_120px] border-b border-[#3a4d54] bg-[#14272e] px-5 py-4 text-xs font-black uppercase tracking-[0.08em] text-[#dce8eb] lg:grid">
+            <span>Teams</span>
+            <span>Match Time</span>
+            <span>Prediction Lock</span>
+            <span>Score</span>
+            <span>Status</span>
+          </div>
+          <div className="divide-y divide-[#243c43]">
+            {visibleScheduleMatches.map((match) => (
+              <ScheduleMatchRow key={match.id} match={match} />
+            ))}
+            {visibleScheduleMatches.length === 0 && (
+              <p className="px-6 py-14 text-center text-[#9fb2b8]">
+                {emptyScheduleMessage}
+              </p>
+            )}
+          </div>
+          {sortedMatches.length > schedulePageSize && (
+            <div className="flex flex-wrap items-center justify-between gap-3 border-t border-[#243c43] px-4 py-4">
+              <p className="text-xs font-black uppercase text-[#9fb2b8]">
+                Page {activeSchedulePage} of {scheduleTotalPages}
+              </p>
+              <div className="flex flex-wrap gap-2">
+                {Array.from({ length: scheduleTotalPages }, (_, index) => index + 1).map(
+                  (page) => (
+                    <button
+                      key={page}
+                      type="button"
+                      onClick={() => setSchedulePage(page)}
+                      className={`h-9 min-w-9 border px-3 text-xs font-black transition ${
+                        page === activeSchedulePage
+                          ? "border-[#84d8e8] bg-[#84d8e8] text-[#06161b]"
+                          : "border-[#3a4d54] text-white hover:border-[#84d8e8] hover:text-[#84d8e8]"
+                      }`}
+                    >
+                      {page}
+                    </button>
+                  ),
+                )}
+              </div>
+            </div>
+          )}
+        </div>
+      </section>
     </section>
   );
 }
@@ -2176,6 +2243,35 @@ function CompactMatchRow({ match }: { match: MatchRow }) {
       <div className="sm:text-right">
         <DashboardSourceBadge source={match.source} />
       </div>
+    </article>
+  );
+}
+
+function ScheduleMatchRow({ match }: { match: MatchRow }) {
+  return (
+    <article className="grid gap-4 px-5 py-5 text-sm lg:grid-cols-[minmax(220px,1.4fr)_180px_180px_120px_120px] lg:items-center">
+      <div className="min-w-0">
+        <MatchTeams match={match} />
+      </div>
+      <div>
+        <p className="text-[11px] font-black uppercase tracking-[0.08em] text-[#789098] lg:hidden">
+          Match Time
+        </p>
+        <p className="font-bold text-white">{formatDateTime(match.scheduledTime)}</p>
+      </div>
+      <div>
+        <p className="text-[11px] font-black uppercase tracking-[0.08em] text-[#789098] lg:hidden">
+          Prediction Lock
+        </p>
+        <p className="font-bold text-[#dce8eb]">{formatDateTime(match.deadline)}</p>
+      </div>
+      <div>
+        <p className="text-[11px] font-black uppercase tracking-[0.08em] text-[#789098] lg:hidden">
+          Score
+        </p>
+        <p className="font-black text-white">{formatScore(match)}</p>
+      </div>
+      <DashboardStatusBadge status={match.status} />
     </article>
   );
 }
