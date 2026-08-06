@@ -765,10 +765,6 @@ export default function AdminPage() {
         </nav>
 
         <div className="hidden xl:mt-auto xl:block xl:border-t xl:border-[#3c5056] xl:p-6">
-          <button className="mb-8 h-[53px] w-full rounded bg-[#84d8e8] text-sm font-black text-[#06161b]">
-            Export Report
-          </button>
-
           <button
             onClick={() => setOpenModal("changePassword")}
             className="mb-7 flex items-center gap-4 text-xl text-[#e2edf0]"
