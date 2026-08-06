@@ -876,6 +876,7 @@ export default function AdminDashboardContent({
             <DashboardStatCard
               title="Today Matches"
               value={dashboard.stats.upcomingMatches}
+              
               icon={<CalendarDays size={22} />}
             />
             {isAdmin && (
@@ -883,7 +884,6 @@ export default function AdminDashboardContent({
                 tone="warning"
                 title="Attention Needed"
                 value={dashboard.stats.attentionNeeded}
-                note={`${dashboard.stats.inactivePlayers} inactive, ${dashboard.stats.pendingPlayers} pending`}
                 icon={<AlertTriangle size={24} />}
                 onClick={() => setOpenAttentionDetails(true)}
               />
@@ -2293,14 +2293,12 @@ function ResultMatchRow({ match }: { match: MatchRow }) {
 function DashboardStatCard({
   title,
   value,
-  note,
   icon,
   tone = "normal",
   onClick,
 }: {
   title: string;
   value: number;
-  note: string;
   icon: React.ReactNode;
   tone?: "normal" | "warning";
   onClick?: () => void;
@@ -2323,7 +2321,6 @@ function DashboardStatCard({
           >
             {value.toLocaleString()}
           </p>
-          <p className="mt-4 text-xs font-bold text-white">{note}</p>
         </div>
         <div
           className={`flex h-[54px] w-[49px] items-center justify-center rounded ${
