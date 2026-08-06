@@ -1126,7 +1126,7 @@ export default function AdminDashboardContent({
                 className="text-2xl leading-none text-[#9fb2b8] transition hover:text-white"
                 title="Close import modal"
               >
-                Ă—
+                —
               </button>
             </div>
 
