@@ -908,8 +908,7 @@ export default function AdminDashboardContent({
               selectedTournamentId={selectedTournamentId}
               onSelectTournament={setSelectedTournamentId}
               isAdmin={isAdmin}
-              isTodayScope={!isTournamentView}
-              onEditTournament={openEditTournament}
+                  onEditTournament={openEditTournament}
               onDeleteTournament={setTournamentToDelete}
             />
           ))}
@@ -986,7 +985,7 @@ export default function AdminDashboardContent({
                         {player.email}
                       </p>
                       <p className="mt-2 text-xs uppercase text-[#789098]">
-                        {player.memberCode || "No member ID"} · Updated{" "}
+                        {player.memberCode || "No member ID"} Â· Updated{" "}
                         {formatRelative(player.updatedAt)}
                       </p>
                     </div>
@@ -1124,7 +1123,7 @@ export default function AdminDashboardContent({
                 className="text-2xl leading-none text-[#9fb2b8] transition hover:text-white"
                 title="Close import modal"
               >
-                ×
+                Ă—
               </button>
             </div>
 
@@ -1426,7 +1425,6 @@ function TournamentManagementTable({
   selectedTournamentId,
   onSelectTournament,
   isAdmin,
-  isTodayScope,
   onEditTournament,
   onDeleteTournament,
 }: {
@@ -1438,7 +1436,6 @@ function TournamentManagementTable({
   selectedTournamentId: number | null;
   onSelectTournament: React.Dispatch<React.SetStateAction<number | null>>;
   isAdmin: boolean;
-  isTodayScope: boolean;
   onEditTournament: (tournament: TournamentRow) => void;
   onDeleteTournament: (tournament: TournamentRow) => void;
 }) {
@@ -1991,65 +1988,75 @@ function TournamentDetailView({
     : 0;
   const dateRange = getTournamentDateRange(sortedMatches);
   const firstUpcoming = upcomingMatches[0];
+  const emptyScheduleMessage = isTodayScope
+    ? `Giải ${tournament.name} không có lịch thi đấu hôm nay.`
+    : 'No schedule has been imported for this tournament.';
 
   return (
-    <section className="min-w-0 rounded border border-[#3a4d54] bg-[#07181d]">
-      <div className="border-b border-[#243c43] bg-[radial-gradient(circle_at_20%_20%,rgba(132,216,232,0.09),transparent_30%),#081b21] p-5 sm:p-7">
-        <button
-          type="button"
-          onClick={onBack}
-          className="mb-5 inline-flex items-center gap-2 rounded border border-[#3a4d54] px-4 py-2 text-xs font-black uppercase tracking-[0.08em] text-[#dce8eb] transition hover:border-[#84d8e8] hover:text-[#84d8e8]"
-        >
-          <ChevronLeft size={16} />
-          Back to tournaments
-        </button>
+    <section className="min-w-0 overflow-hidden rounded border border-[#3a4d54] bg-[#07181d] bg-[radial-gradient(circle_at_1px_1px,rgba(132,216,232,0.08)_1px,transparent_0)] [background-size:24px_24px]">
+      <div className="border-b border-[#314850] px-4 py-5 sm:px-7 lg:px-8">
+        <div className="mb-7 flex flex-wrap items-center justify-between gap-4">
+          <button
+            type="button"
+            onClick={onBack}
+            className="inline-flex items-center gap-2 border border-[#3a4d54] bg-[#0d252d] px-4 py-2 text-xs font-black uppercase tracking-[0.08em] text-[#dce8eb] transition hover:border-[#84d8e8] hover:text-[#84d8e8]"
+          >
+            <ChevronLeft size={16} />
+            Back
+          </button>
+          <p className="text-base font-black uppercase tracking-[0.06em] text-[#b7d2d8]">
+            Tournaments Detail
+          </p>
+        </div>
 
-        <p className="mb-4 text-sm font-black uppercase tracking-[0.08em] text-[#84d8e8]">
-          Tournaments Detail
-        </p>
-
-        <div className="grid gap-5 xl:grid-cols-[minmax(0,1fr)_220px] xl:items-start">
+        <div className="grid gap-5 lg:grid-cols-[minmax(0,1fr)_200px] lg:items-start">
           <div className="min-w-0">
             <div className="flex flex-wrap items-center gap-3">
-              <DashboardStatusBadge status={tournament.status} />
+              <span className="inline-flex items-center gap-2 border-l-4 border-[#84d8e8] bg-[#14272e] px-4 py-2 text-xs font-black uppercase tracking-[0.08em] text-[#dce8eb] shadow-[0_0_24px_rgba(132,216,232,0.12)]">
+                <span className="h-2 w-2 rounded-full bg-[#84d8e8]" />
+                {tournament.status}
+              </span>
               <h3 className="min-w-0 break-words text-2xl font-black text-white">
                 {tournament.name}
               </h3>
             </div>
-            <div className="mt-4 flex flex-wrap gap-x-6 gap-y-2 text-sm font-bold text-[#dce8eb]">
-              <span>{tournament.teams.toLocaleString()} Teams</span>
-              <span>{matches.length.toLocaleString()} Matches</span>
-              <span>
-                {Math.max(matches.length * 3, 0).toLocaleString()} Predictions
+            <div className="mt-4 flex flex-wrap gap-x-6 gap-y-2 text-sm font-black text-[#dce8eb]">
+              <span className="inline-flex items-center gap-2">
+                <Users size={15} /> {tournament.teams.toLocaleString()} Teams
               </span>
-              <span>{dateRange}</span>
-            </div>
-            <div className="mt-4">
-              <DashboardSourceBadge source={tournament.source} />
+              <span className="inline-flex items-center gap-2">
+                <Trophy size={15} /> {matches.length.toLocaleString()} Matches
+              </span>
+              <span className="inline-flex items-center gap-2">
+                <Zap size={15} /> {Math.max(matches.length * 3, 0).toLocaleString()} Predictions
+              </span>
+              <span className="inline-flex items-center gap-2">
+                <CalendarDays size={15} /> {dateRange}
+              </span>
             </div>
           </div>
 
           <button
             type="button"
             onClick={onUnavailableFeature}
-            className="inline-flex min-h-[54px] items-center justify-center gap-3 rounded border border-[#3a4d54] bg-[#10242b] px-5 py-4 text-center text-xs font-black uppercase tracking-[0.08em] text-[#84d8e8] transition hover:border-[#84d8e8]"
+            className="inline-flex min-h-[54px] items-center justify-center gap-4 border border-[#3a4d54] bg-[#162b32] px-5 py-3 text-center text-xs font-black uppercase tracking-[0.08em] text-[#84d8e8] transition hover:border-[#84d8e8] hover:bg-[#1b343d]"
           >
-            <FileDown size={18} />
+            <FileDown size={20} />
             Import Match
           </button>
         </div>
 
-        <div className="mt-6 flex flex-wrap gap-4 border-b border-[#3a4d54]">
-          {["Overview", "Predictions", "Stages", "Scoring Rules"].map(
+        <div className="mt-7 flex flex-wrap gap-5 border-b border-[#3a4d54]">
+          {['Overview', 'Predictions', 'Stages', 'Scoring Rules'].map(
             (tab, index) => (
               <button
                 key={tab}
                 type="button"
                 onClick={index === 0 ? undefined : onUnavailableFeature}
-                className={`pb-3 text-xs font-black uppercase tracking-[0.08em] ${
+                className={`pb-4 text-xs font-black uppercase tracking-[0.08em] ${
                   index === 0
-                    ? "border-b-2 border-[#84d8e8] text-[#84d8e8]"
-                    : "text-[#9fb2b8] transition hover:text-[#84d8e8]"
+                    ? 'border-b-2 border-[#84d8e8] text-[#84d8e8]'
+                    : 'text-[#9fb2b8] transition hover:text-[#84d8e8]'
                 }`}
               >
                 {tab}
@@ -2059,18 +2066,23 @@ function TournamentDetailView({
         </div>
       </div>
 
-      <div className="grid gap-5 p-5 sm:p-7 xl:grid-cols-[360px_minmax(0,1fr)]">
-        <section className="rounded border border-[#3a4d54] bg-[#0d252d] p-6 text-center">
+      <div className="grid gap-5 p-4 sm:p-7 lg:grid-cols-[360px_minmax(0,1fr)] lg:p-8">
+        <section className="relative overflow-hidden border border-[#3a4d54] bg-[#0d252d] p-6 text-center">
+          <Trophy
+            aria-hidden="true"
+            className="absolute right-5 top-5 text-[#27414a]"
+            size={64}
+          />
           <div
-            className="mx-auto grid h-44 w-44 place-items-center rounded-full"
+            className="mx-auto grid h-48 w-48 place-items-center rounded-full"
             style={{
               background: `conic-gradient(#84d8e8 ${progress * 3.6}deg, #203841 0deg)`,
             }}
           >
-            <div className="grid h-32 w-32 place-items-center rounded-full bg-[#0d252d]">
+            <div className="grid h-36 w-36 place-items-center rounded-full bg-[#0d252d]">
               <div>
                 <p className="text-3xl font-black text-white">{progress}%</p>
-                <p className="text-xs font-bold uppercase text-[#9fb2b8]">
+                <p className="text-xs font-bold uppercase text-[#dce8eb]">
                   Progress
                 </p>
               </div>
@@ -2079,63 +2091,61 @@ function TournamentDetailView({
           <p className="mt-6 text-xl font-black text-white">
             {completedCount} of {matches.length} Matches Completed
           </p>
-          <p className="mt-3 text-[#9fb2b8]">
+          <p className="mt-3 text-lg leading-relaxed text-[#c8d6db]">
             {firstUpcoming
               ? `Next match starts ${formatDateTime(firstUpcoming.scheduledTime)}.`
               : matches.length > 0
-                ? "All imported matches are completed."
-                : isTodayScope
-                  ? `Giải ${tournament.name} không có lịch thi đấu hôm nay.`
-                  : "No schedule has been imported for this tournament."}
+                ? 'All imported matches are completed.'
+                : emptyScheduleMessage}
           </p>
         </section>
 
-        <section className="overflow-hidden rounded border border-[#3a4d54] bg-[#0d252d]">
+        <section className="overflow-hidden border border-[#3a4d54] bg-[#0d252d]">
           <DashboardPanelTitle
             title="Upcoming Matches"
             right={`${upcomingMatches.length} total`}
           />
           <div className="divide-y divide-[#243c43]">
-            {upcomingMatches.slice(0, 4).map((match) => (
+            {upcomingMatches.slice(0, 3).map((match) => (
               <CompactMatchRow key={match.id} match={match} />
             ))}
             {upcomingMatches.length === 0 && (
-              <p className="px-6 py-10 text-center text-[#9fb2b8]">
-                {isTodayScope
-                  ? `Giải ${tournament.name} không có lịch thi đấu hôm nay.`
-                  : "No upcoming matches found for this tournament."}
+              <p className="px-6 py-16 text-center text-[#9fb2b8]">
+                {emptyScheduleMessage}
               </p>
             )}
           </div>
         </section>
 
-        <section className="overflow-hidden rounded border border-[#3a4d54] bg-[#0d252d] xl:col-span-1">
+        <section className="overflow-hidden border border-[#3a4d54] bg-[#0d252d]">
           <DashboardPanelTitle
             title="Recent Results"
-            right={`${finishedMatches.length} finished`}
+            right={finishedMatches.length ? 'Auto-synced' : undefined}
           />
-          <div className="space-y-3 p-5">
+          <div className="space-y-4 p-5">
             {finishedMatches.slice(0, 3).map((match) => (
               <ResultMatchRow key={match.id} match={match} />
             ))}
             {finishedMatches.length === 0 && (
-              <p className="py-10 text-center text-[#9fb2b8]">
+              <p className="py-12 text-center text-[#9fb2b8]">
                 No completed results found.
               </p>
             )}
           </div>
         </section>
 
-        <section className="overflow-hidden rounded border border-[#3a4d54] bg-[#0d252d]">
+        <section className="overflow-hidden border border-[#3a4d54] bg-[#0d252d]">
           <DashboardPanelTitle title="Leaderboard Top 3" right="View Full" />
-          <div className="space-y-3 p-5">
-            {["Rank 01", "Rank 02", "Rank 03"].map((rank) => (
+          <div className="space-y-4 p-5">
+            {['Rank 01', 'Rank 02', 'Rank 03'].map((rank, index) => (
               <div
                 key={rank}
-                className="flex items-center justify-between rounded border border-[#243c43] bg-[#10242b] p-4"
+                className={`flex items-center justify-between border border-[#243c43] bg-[#10242b] p-4 ${
+                  index === 0 ? 'border-l-4 border-l-[#84d8e8]' : ''
+                }`}
               >
                 <div>
-                  <p className="text-xs font-black uppercase text-[#9fb2b8]">
+                  <p className="text-xs font-black uppercase text-[#84d8e8]">
                     {rank}
                   </p>
                   <p className="mt-1 font-black text-white">No player data</p>
@@ -2145,23 +2155,10 @@ function TournamentDetailView({
             ))}
           </div>
         </section>
-
-        <section className="overflow-hidden rounded border border-[#3a4d54] bg-[#0d252d] xl:col-span-2">
-          <DashboardPanelTitle
-            title="Match Schedule"
-            right={`${matches.length} matches`}
-          />
-          <TournamentMatchDetails
-            tournament={tournament}
-            matches={sortedMatches}
-            isTodayScope={isTodayScope}
-          />
-        </section>
       </div>
     </section>
   );
 }
-
 function CompactMatchRow({ match }: { match: MatchRow }) {
   return (
     <article className="grid gap-4 px-5 py-5 sm:grid-cols-[120px_minmax(0,1fr)_120px] sm:items-center">
@@ -2197,173 +2194,6 @@ function ResultMatchRow({ match }: { match: MatchRow }) {
       </div>
       <div className="font-black text-white">{match.awayName ?? "TBD"}</div>
     </article>
-  );
-}
-
-function TournamentMatchDetails({
-  tournament,
-  matches,
-  isTodayScope,
-}: {
-  tournament: TournamentRow;
-  matches: MatchRow[];
-  isTodayScope: boolean;
-}) {
-  const isF1 = tournament.sportType === "F1";
-  const emptyMatchMessage = isTodayScope
-    ? `Giải ${tournament.name} không có lịch thi đấu hôm nay.`
-    : "No matches found for this tournament.";
-
-  return (
-    <div className="px-4 py-5 sm:px-6">
-      <div className="mb-4 flex flex-wrap items-center justify-between gap-3">
-        <div>
-          <h3 className="text-sm font-black uppercase tracking-[0.08em] text-[#84d8e8]">
-            {tournament.name} Details
-          </h3>
-          <p className="mt-2 text-sm text-[#9fb2b8]">
-            <span className="font-black uppercase text-white">
-              {tournament.sportType ?? "FOOTBALL"}
-            </span>{" "}
-            / {tournament.status} / Source: {tournament.source || "MANUAL"}
-          </p>
-        </div>
-        <span className="text-xs font-black uppercase text-[#84d8e8]">
-          {matches.length} {matches.length === 1 ? "match" : "matches"}
-        </span>
-      </div>
-
-      <div className="space-y-3 xl:hidden">
-        {matches.map((match) => (
-          <article
-            key={match.id}
-            className="rounded border border-[#243c43] bg-[#0d252d] p-4"
-          >
-            <div className="flex flex-wrap items-start justify-between gap-3">
-              <div className="min-w-0">
-                {isF1 ? (
-                  <p className="break-words font-black text-white">
-                    {match.homeName ?? match.encounter}
-                  </p>
-                ) : (
-                  <MatchTeams match={match} />
-                )}
-                {isF1 && (
-                  <p className="mt-1 text-xs font-bold uppercase tracking-[0.08em] text-[#9fb2b8]">
-                    Circuit: {match.awayName ?? "TBD"}
-                  </p>
-                )}
-              </div>
-              <DashboardStatusBadge status={match.status} />
-            </div>
-
-            <div className="mt-4 grid gap-2 text-xs sm:grid-cols-2">
-              <div className="rounded border border-[#243c43] bg-[#07181d] p-3">
-                <p className="uppercase tracking-[0.08em] text-[#789098]">
-                  {isF1 ? "Session Time" : "Match Time"}
-                </p>
-                <p className="mt-1 font-black text-white">
-                  {formatDateTime(match.scheduledTime)}
-                </p>
-              </div>
-              <div className="rounded border border-[#243c43] bg-[#07181d] p-3">
-                <p className="uppercase tracking-[0.08em] text-[#789098]">
-                  Prediction Lock
-                </p>
-                <p className="mt-1 font-black text-white">
-                  {formatDateTime(match.deadline)}
-                </p>
-              </div>
-              <div className="rounded border border-[#243c43] bg-[#07181d] p-3">
-                <p className="uppercase tracking-[0.08em] text-[#789098]">
-                  Score
-                </p>
-                <p className="mt-1 font-black text-white">
-                  {formatScore(match)}
-                </p>
-              </div>
-              <div className="rounded border border-[#243c43] bg-[#07181d] p-3">
-                <p className="uppercase tracking-[0.08em] text-[#789098]">
-                  Source
-                </p>
-                <div className="mt-1">
-                  <DashboardSourceBadge source={match.source} />
-                </div>
-              </div>
-            </div>
-          </article>
-        ))}
-
-        {matches.length === 0 && (
-          <div className="rounded border border-[#243c43] bg-[#0d252d] px-4 py-8 text-center text-[#9fb2b8]">
-            {emptyMatchMessage}
-          </div>
-        )}
-      </div>
-
-      <div className="hidden overflow-x-auto rounded border border-[#243c43] xl:block">
-        <table className="w-full min-w-[860px] table-fixed text-left">
-          <thead className="h-[54px] border-b border-[#3a4d54] bg-[#14272e] text-xs uppercase tracking-[0.08em] text-[#d5e0e3]">
-            <tr>
-              <th className="px-5 py-3">
-                {isF1 ? "Session / Circuit" : "Teams"}
-              </th>
-              <th className="w-48 px-4 py-3">
-                {isF1 ? "Session Time" : "Match Time"}
-              </th>
-              <th className="w-48 px-4 py-3">Prediction Lock</th>
-              <th className="w-28 px-4 py-3">Score</th>
-              <th className="w-40 px-4 py-3">Source</th>
-              <th className="w-32 px-4 py-3">Status</th>
-            </tr>
-          </thead>
-          <tbody>
-            {matches.map((match) => (
-              <tr
-                key={match.id}
-                className="h-[64px] border-b border-[#243c43] bg-[#0d252d] text-sm last:border-b-0"
-              >
-                <td className="px-5 font-black text-white">
-                  {isF1 ? (
-                    <div>
-                      <p>{match.homeName ?? match.encounter}</p>
-                      <p className="mt-1 text-xs font-bold uppercase tracking-[0.08em] text-[#9fb2b8]">
-                        Circuit: {match.awayName ?? "TBD"}
-                      </p>
-                    </div>
-                  ) : (
-                    <MatchTeams match={match} />
-                  )}
-                </td>
-                <td className="px-4 text-white">
-                  {formatDateTime(match.scheduledTime)}
-                </td>
-                <td className="px-4 text-white">
-                  {formatDateTime(match.deadline)}
-                </td>
-                <td className="px-4 text-white">{formatScore(match)}</td>
-                <td className="px-4">
-                  <DashboardSourceBadge source={match.source} />
-                </td>
-                <td className="px-4">
-                  <DashboardStatusBadge status={match.status} />
-                </td>
-              </tr>
-            ))}
-            {matches.length === 0 && (
-              <tr>
-                <td
-                  colSpan={6}
-                  className="h-[96px] bg-[#0d252d] text-center text-[#9fb2b8]"
-                >
-                  {emptyMatchMessage}
-                </td>
-              </tr>
-            )}
-          </tbody>
-        </table>
-      </div>
-    </div>
   );
 }
 
@@ -2796,3 +2626,6 @@ function formatRelative(value: string | null) {
 
   return `${Math.round(hours / 24)} days ago`;
 }
+
+
+
