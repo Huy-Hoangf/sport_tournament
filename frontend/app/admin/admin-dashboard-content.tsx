@@ -681,7 +681,11 @@ export default function AdminDashboardContent({
         (match) => match.tournamentId === selectedTournament.id,
       )
     : [];
-  const pageTitle = isTournamentView ? "Tournament Management" : "Dashboard";
+  const pageTitle = selectedTournament
+    ? "Tournament Details"
+    : isTournamentView
+      ? "Tournament Management"
+      : "Dashboard";
   const pageDescription = isTournamentView
     ? "Oversee competition life cycles, participant metrics, and scheduling parameters."
     : "Showing tournaments and matches scheduled for today.";
@@ -766,7 +770,7 @@ export default function AdminDashboardContent({
         </div>
 
         <div className="grid gap-3 sm:grid-cols-2 xl:flex xl:flex-wrap xl:justify-end xl:gap-4">
-          {isAdmin && isTournamentView ? (
+          {isAdmin && isTournamentView && !selectedTournament ? (
             <>
               <DashboardActionButton
                 icon={<RefreshCw size={18} />}
@@ -794,7 +798,7 @@ export default function AdminDashboardContent({
         </div>
       </div>
 
-      {isTournamentView && (
+      {isTournamentView && !selectedTournament && (
         <section className="mb-5 rounded border border-[#3a4d54] bg-[#0d252d] p-5">
           <div className="grid gap-4 xl:grid-cols-[minmax(280px,1fr)_220px]">
             <label className="flex h-12 items-center gap-3 border border-[#3a4d54] bg-[#06161b] px-4 text-[#9fb2b8] focus-within:border-[#84d8e8]">
