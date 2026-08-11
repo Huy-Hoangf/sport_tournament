@@ -3,8 +3,8 @@
 import { apiRequest, type CurrentUser } from "../api";
 import { logoutAll, readCurrentUser } from "../auth-sync";
 import NoticeBanner, { type Notice } from "../notice-banner";
-import DashboardView from "./dashboard-view";
-import TournamentView from "./tournament-view";
+import DashboardView from "./dashboard/dashboard-view";
+import TournamentView from "./tournament/tournament-view";
 import {
   MenuItem,
   Modal,
