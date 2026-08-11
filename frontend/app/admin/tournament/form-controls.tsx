@@ -1,4 +1,6 @@
-﻿export function TournamentInput({
+﻿import { AdminSelect } from "../shared/admin-select";
+
+export function TournamentInput({
   label,
   value,
   onChange,
@@ -37,20 +39,17 @@ export function TournamentSelect({
       <span className="mb-2 block text-xs font-black uppercase tracking-[0.12em] text-[#9fb2b8]">
         {label}
       </span>
-      <select
+      <AdminSelect
         value={value}
-        onChange={(event) => onChange(event.target.value)}
-        className="h-12 w-full rounded border border-white/10 bg-[#070d0d] px-4 font-bold text-white outline-none focus:border-[#84d8e8]"
-      >
-        {options.map((option) => (
-          <option key={option} value={option}>
-            {option}
-          </option>
-        ))}
-      </select>
+        options={options.map((option) => ({ value: option, label: option }))}
+        onChange={onChange}
+        ariaLabel={label}
+        className="w-full"
+      />
     </label>
   );
 }
+
 
 
 

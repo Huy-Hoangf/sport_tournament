@@ -3,6 +3,7 @@
 import { apiRequest } from "../api";
 import NoticeBanner, { type Notice } from "../notice-banner";
 import { useCallback, useEffect, useState } from "react";
+import { AdminSelect } from "./shared/admin-select";
 import {
   DashboardActionButton,
   DashboardActivityIcon,
@@ -1049,24 +1050,26 @@ export default function AdminDashboardContent({
               <span className="mb-2 block text-xs font-black uppercase tracking-[0.12em] text-[#9fb2b8]">
                 Sport
               </span>
-              <select
+              <AdminSelect
                 value={importSport ?? ""}
-                onChange={(event) => {
-                  if (!event.target.value) {
+                options={[
+                  { value: "", label: "Choose sport" },
+                  { value: "FOOTBALL", label: "Football" },
+                  { value: "F1", label: "F1" },
+                  { value: "LOL", label: "League of Legends" },
+                ]}
+                onChange={(nextValue) => {
+                  if (!nextValue) {
                     setImportSport(null);
                     return;
                   }
-                  const nextSport = event.target.value as ImportSport;
+                  const nextSport = nextValue as ImportSport;
                   setImportSport(nextSport);
                   void loadImportOptions(nextSport);
                 }}
-                className="h-12 w-full rounded border border-[#3a4d54] bg-[#070d0d] px-4 font-black uppercase tracking-[0.08em] text-white outline-none focus:border-[#84d8e8]"
-              >
-                <option value="">Choose sport</option>
-                <option value="FOOTBALL">Football</option>
-                <option value="F1">F1</option>
-                <option value="LOL">League of Legends</option>
-              </select>
+                ariaLabel="Choose sport to import"
+                className="w-full"
+              />
             </label>
 
             <div className="mb-4 flex flex-wrap items-center justify-between gap-3">
