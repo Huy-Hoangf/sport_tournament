@@ -1,5 +1,6 @@
 ﻿import { Fragment, useState } from "react";
 import { ChevronLeft, ChevronRight, Filter, Pencil, ShieldCheck, Trash2 } from "lucide-react";
+import { AdminSelect } from "../shared/admin-select";
 import {
   DashboardPanelTitle,
   DashboardSourceBadge,
@@ -82,25 +83,22 @@ export function TournamentManagementTable({
       <DashboardPanelTitle
         title={title}
         icon={
-          <label className="relative block w-full min-w-[150px] sm:w-[150px]">
-            <Filter
-              size={16}
-              className="pointer-events-none absolute left-3 top-1/2 -translate-y-1/2 text-[#84d8e8]"
-            />
-            <select
-              value={statusFilter}
-              onChange={(event) =>
-                changeStatusFilter(event.target.value as TournamentStatusFilter)
-              }
-              aria-label={`Filter ${title} by status`}
-              className="h-9 w-full appearance-none border border-[#3a4d54] bg-[#0d252d] pl-9 pr-3 text-xs font-black uppercase text-[#dce8eb] outline-none transition focus:border-[#84d8e8]"
-            >
-              <option value="ALL">All statuses</option>
-              <option value="ACTIVE">Ongoing</option>
-              <option value="UPCOMING">Upcoming</option>
-              <option value="COMPLETED">Completed</option>
-            </select>
-          </label>
+          <AdminSelect
+            value={statusFilter}
+            options={[
+              { value: "ALL", label: "All statuses" },
+              { value: "ACTIVE", label: "Ongoing" },
+              { value: "UPCOMING", label: "Upcoming" },
+              { value: "COMPLETED", label: "Completed" },
+            ]}
+            onChange={(nextValue) =>
+              changeStatusFilter(nextValue as TournamentStatusFilter)
+            }
+            ariaLabel={`Filter ${title} by status`}
+            className="w-full min-w-[150px] sm:w-[150px]"
+            icon={<Filter size={16} />}
+            size="compact"
+          />
         }
         right={
           filteredTotal > 0

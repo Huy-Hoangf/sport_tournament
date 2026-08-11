@@ -1,8 +1,7 @@
 "use client";
 
 import type React from "react";
-import { ChevronDown } from "lucide-react";
-import { useEffect, useRef, useState } from "react";
+import { AdminSelect } from "./shared/admin-select";
 
 export type PlayerStatus = "ACTIVE" | "INACTIVE" | "PENDING";
 export type StatusFilter = "ALL" | PlayerStatus;
@@ -82,81 +81,22 @@ export function StatusFilterSelect({
   value: StatusFilter;
   onChange: (value: StatusFilter) => void;
 }) {
-  const [isOpen, setIsOpen] = useState(false);
-  const dropdownRef = useRef<HTMLDivElement>(null);
-  const options: { value: StatusFilter; label: string }[] = [
+  const options = [
     { value: "ALL", label: "Status: All" },
     { value: "ACTIVE", label: "Status: Active" },
     { value: "INACTIVE", label: "Status: Inactive" },
     { value: "PENDING", label: "Status: Pending" },
   ];
-  const selectedLabel =
-    options.find((option) => option.value === value)?.label ?? "Status: All";
-
-  useEffect(() => {
-    function closeDropdown(event: MouseEvent) {
-      if (
-        dropdownRef.current &&
-        !dropdownRef.current.contains(event.target as Node)
-      ) {
-        setIsOpen(false);
-      }
-    }
-
-    document.addEventListener("mousedown", closeDropdown);
-
-    return () => {
-      document.removeEventListener("mousedown", closeDropdown);
-    };
-  }, []);
 
   return (
-    <div ref={dropdownRef} className="relative w-full max-w-[244px]">
-      <button
-        type="button"
-        onClick={() => setIsOpen((open) => !open)}
-        className={`flex h-[38px] w-full items-center justify-between rounded-sm border bg-[#0d252d] px-4 text-left text-sm font-black uppercase tracking-[0.08em] text-[#dce8eb] transition ${
-          isOpen
-            ? "border-[#84d8e8] shadow-[0_0_0_1px_#84d8e8]"
-            : "border-[#3a4d54] hover:border-[#84d8e8]"
-        }`}
-        aria-haspopup="listbox"
-        aria-expanded={isOpen}
-      >
-        <span>{selectedLabel}</span>
-        <ChevronDown
-          size={16}
-          className={`text-[#dce8eb] transition ${isOpen ? "rotate-180" : ""}`}
-        />
-      </button>
-
-      {isOpen && (
-        <div
-          role="listbox"
-          className="absolute left-0 top-[42px] z-30 w-full overflow-hidden rounded-sm border border-[#84d8e8] bg-[#0d252d] shadow-[0_12px_28px_rgba(0,0,0,0.35)]"
-        >
-          {options.map((option) => (
-            <button
-              key={option.value}
-              type="button"
-              role="option"
-              aria-selected={option.value === value}
-              onClick={() => {
-                onChange(option.value);
-                setIsOpen(false);
-              }}
-              className={`flex h-10 w-full items-center px-4 text-left text-sm font-black uppercase tracking-[0.08em] transition ${
-                option.value === value
-                  ? "bg-[#1b343d] text-[#84d8e8]"
-                  : "text-white hover:bg-[#14272e] hover:text-[#84d8e8]"
-              }`}
-            >
-              {option.label}
-            </button>
-          ))}
-        </div>
-      )}
-    </div>
+    <AdminSelect
+      value={value}
+      options={options}
+      onChange={(nextValue) => onChange(nextValue as StatusFilter)}
+      ariaLabel="Filter players by status"
+      className="w-full max-w-[244px]"
+      size="compact"
+    />
   );
 }
 

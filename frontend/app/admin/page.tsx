@@ -4,6 +4,7 @@ import { apiRequest, type CurrentUser } from "../api";
 import { logoutAll, readCurrentUser } from "../auth-sync";
 import NoticeBanner, { type Notice } from "../notice-banner";
 import DashboardView from "./dashboard/dashboard-view";
+import { AdminSelect } from "./shared/admin-select";
 import TournamentView from "./tournament/tournament-view";
 import {
   MenuItem,
@@ -1415,16 +1416,18 @@ export default function AdminPage() {
               <span className="mb-2 block text-xs font-black uppercase tracking-[0.12em] text-[#8ed8ec]">
                 Account role
               </span>
-              <select
+              <AdminSelect
                 value={renameRole}
-                onChange={(event) =>
-                  setRenameRole(event.target.value as "ADMIN" | "PLAYER")
+                options={[
+                  { value: "PLAYER", label: "Player" },
+                  { value: "ADMIN", label: "Administrator" },
+                ]}
+                onChange={(nextValue) =>
+                  setRenameRole(nextValue as "ADMIN" | "PLAYER")
                 }
-                className="h-[54px] w-full rounded border border-white/10 bg-[#070d0d] px-4 font-black uppercase text-zinc-100 outline-none focus:border-[#8ed8ec]"
-              >
-                <option value="PLAYER">Player</option>
-                <option value="ADMIN">Administrator</option>
-              </select>
+                ariaLabel="Account role"
+                className="w-full"
+              />
             </label>
           )}
 
