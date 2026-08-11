@@ -5,7 +5,10 @@ import { logoutAll, readCurrentUser } from "../auth-sync";
 import NoticeBanner, { type Notice } from "../notice-banner";
 import DashboardView from "./dashboard/dashboard-view";
 import { AdminSelect } from "./shared/admin-select";
+import { DashboardActivityIcon } from "./shared/dashboard-ui";
 import TournamentView from "./tournament/tournament-view";
+import type { ActivityRow } from "./tournament/types";
+import { formatRelative } from "./tournament/utils";
 import {
   MenuItem,
   Modal,
@@ -78,6 +81,10 @@ type ImportedPlayer = {
   email: string;
 };
 
+type RecentActivityResponse = {
+  recentActivity?: ActivityRow[];
+};
+
 type AdminView = 'dashboard' | 'tournaments' | 'players';
 
 const PLAYERS_PER_PAGE = 7;
@@ -121,6 +128,10 @@ export default function AdminPage() {
   const [newPassword, setNewPassword] = useState("");
   const [confirmPassword, setConfirmPassword] = useState("");
   const [notice, setNotice] = useState<Notice | null>(null);
+  const [openRecentActivity, setOpenRecentActivity] = useState(false);
+  const [recentActivity, setRecentActivity] = useState<ActivityRow[]>([]);
+  const [isLoadingRecentActivity, setIsLoadingRecentActivity] =
+    useState(false);
   const isAdmin =
     currentUser?.role === "SUPER_ADMIN" || currentUser?.role === "ADMIN";
   const isSuperAdmin = currentUser?.role === "SUPER_ADMIN";
@@ -609,6 +620,26 @@ export default function AdminPage() {
     setOpenPlayerActionId(null);
   }
 
+  async function openRecentActivityPanel() {
+    setOpenRecentActivity(true);
+    setIsLoadingRecentActivity(true);
+
+    try {
+      const data = await apiRequest<RecentActivityResponse>(
+        "/dashboard?scope=today",
+      );
+      setRecentActivity(data.recentActivity ?? []);
+    } catch (error) {
+      showNotice(
+        error instanceof Error
+          ? error.message
+          : "Cannot load recent activity.",
+      );
+    } finally {
+      setIsLoadingRecentActivity(false);
+    }
+  }
+
   return (
     <main className="min-h-screen overflow-x-hidden bg-[#06161b] text-[#d9e5e7]">
       <NoticeBanner notice={notice} onClose={() => setNotice(null)} />
@@ -633,7 +664,7 @@ export default function AdminPage() {
           <div className="flex items-center justify-end gap-2">
             <button
               type="button"
-              onClick={() => showNotice("this feature is not ready")}
+              onClick={() => void openRecentActivityPanel()}
               className="flex h-11 w-11 items-center justify-center rounded border border-[#3a4d54] bg-[#0d252d] text-[#dce8eb]"
               aria-label="Notifications"
             >
@@ -746,7 +777,7 @@ export default function AdminPage() {
             </div>
             <button
               type="button"
-              onClick={() => showNotice("this feature is not ready")}
+              onClick={() => void openRecentActivityPanel()}
               title="Notifications"
               className="flex h-9 w-9 items-center justify-center text-[#d9e5e7] transition hover:text-[#84d8e8]"
             >
@@ -1269,6 +1300,65 @@ export default function AdminPage() {
         </div>
         )}
       </section>
+
+      {openRecentActivity && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/70 px-4 py-6">
+          <section className="w-full max-w-[560px] overflow-hidden rounded border border-[#3a4d54] bg-[#0d252d] shadow-2xl">
+            <header className="flex items-center justify-between gap-4 border-b border-[#3a4d54] bg-[#14272e] px-5 py-4">
+              <div>
+                <h2 className="text-lg font-black uppercase tracking-[0.08em] text-white">
+                  Recent Activity
+                </h2>
+                <p className="mt-1 text-xs font-bold uppercase tracking-[0.08em] text-[#84d8e8]">
+                  Latest system updates
+                </p>
+              </div>
+              <button
+                type="button"
+                onClick={() => setOpenRecentActivity(false)}
+                className="flex h-10 w-10 shrink-0 items-center justify-center rounded border border-[#3a4d54] text-[#dce8eb] transition hover:border-[#84d8e8] hover:text-[#84d8e8]"
+                aria-label="Close recent activity"
+                title="Close"
+              >
+                <X size={20} />
+              </button>
+            </header>
+
+            <div className="max-h-[520px] overflow-y-auto p-5">
+              {isLoadingRecentActivity ? (
+                <p className="py-12 text-center text-sm font-bold text-[#9fb2b8]">
+                  Loading recent activity...
+                </p>
+              ) : recentActivity.length > 0 ? (
+                <div className="space-y-4">
+                  {recentActivity.map((activity) => (
+                    <article
+                      key={activity.id}
+                      className="flex gap-4 rounded border border-[#243c43] bg-[#07181d] px-4 py-4"
+                    >
+                      <span className="flex h-8 w-8 shrink-0 items-center justify-center rounded bg-[#143942] text-[#84d8e8]">
+                        <DashboardActivityIcon type={activity.type} />
+                      </span>
+                      <div className="min-w-0">
+                        <p className="text-sm font-bold leading-6 text-[#dce8eb]">
+                          {activity.message}
+                        </p>
+                        <p className="mt-2 text-xs font-black uppercase tracking-[0.08em] text-[#789098]">
+                          {formatRelative(activity.createdAt)}
+                        </p>
+                      </div>
+                    </article>
+                  ))}
+                </div>
+              ) : (
+                <p className="py-12 text-center text-sm font-bold text-[#9fb2b8]">
+                  No recent activity in database.
+                </p>
+              )}
+            </div>
+          </section>
+        </div>
+      )}
 
       {openModal === "createUser" && (
         <Modal title={newUserRole === "ADMIN" ? "New Admin" : "New Player"}>
