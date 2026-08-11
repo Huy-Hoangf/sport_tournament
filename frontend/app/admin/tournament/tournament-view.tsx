@@ -1,8 +1,8 @@
 "use client";
 
-import AdminDashboardContent from "./admin-dashboard-content";
+import AdminDashboardContent from "../admin-dashboard-content";
 
-export default function DashboardView({
+export default function TournamentView({
   isAdmin,
   refreshKey,
 }: {
@@ -13,7 +13,8 @@ export default function DashboardView({
     <AdminDashboardContent
       isAdmin={isAdmin}
       refreshKey={refreshKey}
-      view="dashboard"
+      view="tournaments"
     />
   );
 }
+
