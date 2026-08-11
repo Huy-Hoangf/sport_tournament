@@ -1,0 +1,198 @@
+"use client";
+
+import { ChangeEvent, useMemo, useRef, useState } from "react";
+import {
+  Check,
+  FileJson,
+  Filter,
+  History,
+  Plus,
+  Search,
+  Trash2,
+  Upload,
+  X,
+} from "lucide-react";
+import type { TournamentRow } from "./types";
+import { AdminSelect } from "../shared/admin-select";
+
+type ScoringRule = {
+  id: string;
+  category: string;
+  name: string;
+  description: string;
+  points: number;
+};
+
+const defaultRules: ScoringRule[] = [
+  {
+    id: "correct-match-winner",
+    category: "PREDICTION",
+    name: "Correct Match Winner",
+    description: "User correctly predicts which team wins the match.",
+    points: 3,
+  },
+  {
+    id: "exact-scoreline",
+    category: "PREDICTION",
+    name: "Exact Scoreline",
+    description: "User predicts the exact final match or round score.",
+    points: 5,
+  },
+  {
+    id: "first-blood",
+    category: "IN-GAME EVENT",
+    name: "First Blood Prediction",
+    description: "User predicts which player secures the first elimination.",
+    points: 2,
+  },
+];
+
+export function ScoringRulesView({ tournament }: { tournament: TournamentRow }) {
+  const [rules, setRules] = useState(defaultRules);
+  const [query, setQuery] = useState("");
+  const [category, setCategory] = useState("ALL");
+  const [saved, setSaved] = useState(false);
+  const [importMessage, setImportMessage] = useState("");
+  const fileInputRef = useRef<HTMLInputElement>(null);
+
+  const categories = useMemo(
+    () => ["ALL", ...Array.from(new Set(rules.map((rule) => rule.category)))],
+    [rules],
+  );
+  const visibleRules = rules.filter((rule) => {
+    const matchesQuery = `${rule.name} ${rule.description} ${rule.category}`
+      .toLowerCase()
+      .includes(query.toLowerCase());
+    return matchesQuery && (category === "ALL" || rule.category === category);
+  });
+
+  function updatePoints(id: string, value: string) {
+    const points = Math.max(0, Number.parseInt(value || "0", 10));
+    setRules((current) =>
+      current.map((rule) => (rule.id === id ? { ...rule, points } : rule)),
+    );
+    setSaved(false);
+  }
+
+  function addRule() {
+    const id = `custom-${Date.now()}`;
+    setRules((current) => [
+      ...current,
+      {
+        id,
+        category: "CUSTOM",
+        name: "New Scoring Rule",
+        description: "Describe when users receive these points.",
+        points: 1,
+      },
+    ]);
+    setSaved(false);
+  }
+
+  function removeRule(id: string) {
+    setRules((current) => current.filter((rule) => rule.id !== id));
+    setSaved(false);
+  }
+
+  function importRules(event: ChangeEvent<HTMLInputElement>) {
+    const file = event.target.files?.[0];
+    if (!file) return;
+
+    const reader = new FileReader();
+    reader.onload = () => {
+      try {
+        const parsed = JSON.parse(String(reader.result));
+        const imported = Array.isArray(parsed) ? parsed : parsed.rules;
+        if (!Array.isArray(imported)) throw new Error("Invalid rules format");
+        const normalized = imported.map((rule, index) => ({
+          id: String(rule.id ?? `imported-${index}`),
+          category: String(rule.category ?? "CUSTOM").toUpperCase(),
+          name: String(rule.name ?? "Unnamed Rule"),
+          description: String(rule.description ?? ""),
+          points: Math.max(0, Number(rule.points ?? 0)),
+        }));
+        setRules(normalized);
+        setImportMessage(`${normalized.length} rules imported from ${file.name}`);
+        setSaved(false);
+      } catch {
+        setImportMessage("Unable to import. Use a JSON array or { rules: [] }.");
+      }
+    };
+    reader.readAsText(file);
+    event.target.value = "";
+  }
+
+  return (
+    <section className="border-t border-[#314850] bg-[#07181d] p-4 sm:p-7 lg:p-8">
+      <div className="mb-7 flex flex-wrap items-end justify-between gap-4">
+        <div>
+          <p className="text-[11px] font-black uppercase tracking-[0.12em] text-[#84d8e8]">
+            Tournaments <span className="px-2 text-[#607b83]">›</span> {tournament.name} <span className="px-2 text-[#607b83]">›</span> Scoring Rules
+          </p>
+          <h4 className="mt-3 text-3xl font-black text-white">Scoring Configuration</h4>
+          <p className="mt-2 text-sm text-[#9fb2b8]">Manage points distribution and prediction rules for this tournament.</p>
+        </div>
+        <div className="flex flex-wrap gap-3">
+          <button type="button" onClick={() => setImportMessage("Version history will be connected to the API next.")} className="inline-flex items-center gap-2 border border-[#3a4d54] bg-[#0d252d] px-4 py-3 text-[11px] font-black uppercase tracking-[0.1em] text-[#dce8eb] hover:border-[#84d8e8]">
+            <History size={15} /> Version History
+          </button>
+          <button type="button" onClick={() => { setSaved(true); setImportMessage("Scoring rules saved for this session."); }} className="inline-flex items-center gap-2 border border-[#84d8e8] bg-[#84d8e8] px-4 py-3 text-[11px] font-black uppercase tracking-[0.1em] text-[#06161b] hover:bg-[#a5e5f0]">
+            {saved ? <Check size={15} /> : <Check size={15} />} Save Changes
+          </button>
+        </div>
+      </div>
+
+      <div className="grid gap-5 lg:grid-cols-[270px_minmax(0,1fr)]">
+        <section className="border border-[#3a4d54] bg-[#0d252d] p-4">
+          <p className="flex items-center gap-2 text-[11px] font-black uppercase tracking-[0.12em] text-[#dce8eb]"><Upload size={15} /> Import Rules</p>
+          <button type="button" onClick={() => fileInputRef.current?.click()} className="mt-4 flex min-h-44 w-full flex-col items-center justify-center border border-dashed border-[#3a4d54] bg-[#07181d] px-4 text-center hover:border-[#84d8e8]">
+            <span className="mb-3 grid h-11 w-11 place-items-center rounded-lg bg-[#203841] text-[#84d8e8]"><FileJson size={21} /></span>
+            <span className="text-sm font-black text-[#dce8eb]">Drag &amp; Drop Config File</span>
+            <span className="mt-2 text-xs text-[#789098]">Supports .json for easy rule mapping</span>
+            <span className="mt-4 border border-[#3a4d54] px-3 py-2 text-[10px] font-black uppercase tracking-[0.1em] text-[#84d8e8]">Browse Files</span>
+          </button>
+          <input ref={fileInputRef} onChange={importRules} type="file" accept=".json,application/json" className="hidden" />
+          <div className="mt-4 border border-[#243c43] bg-[#10242b] px-3 py-3 text-xs text-[#9fb2b8]">
+            <span className="font-black text-[#dce8eb]">Last imported:</span> {importMessage || "No file imported yet"}
+          </div>
+        </section>
+
+        <section className="border border-[#3a4d54] bg-[#0d252d] p-4 sm:p-5">
+          <div className="flex flex-wrap items-center justify-between gap-3 border-b border-[#3a4d54] pb-4">
+            <p className="text-[11px] font-black uppercase tracking-[0.12em] text-[#dce8eb]">☷ Active Ruleset</p>
+            <div className="flex flex-wrap gap-2">
+              <label className="relative">
+                <Search size={14} className="absolute left-3 top-3 text-[#84d8e8]" />
+                <input value={query} onChange={(event) => setQuery(event.target.value)} placeholder="Filter rules..." className="h-9 w-48 border border-[#3a4d54] bg-[#07181d] pl-9 pr-3 text-xs font-bold text-white outline-none placeholder:text-[#789098] focus:border-[#84d8e8]" />
+              </label>
+              <AdminSelect
+                value={category}
+                onChange={setCategory}
+                options={categories.map((item) => ({ label: item, value: item }))}
+                ariaLabel="Filter rule category"
+                className="h-9 min-w-[118px]"
+              />
+              <button type="button" onClick={addRule} aria-label="Add scoring rule" className="grid h-9 w-9 place-items-center border border-[#3a4d54] text-[#84d8e8] hover:border-[#84d8e8]"><Plus size={16} /></button>
+            </div>
+          </div>
+          <div className="mt-4 space-y-3">
+            {visibleRules.map((rule) => (
+              <article key={rule.id} className="grid gap-4 border border-[#243c43] bg-[#07181d] p-4 sm:grid-cols-[42px_minmax(0,1fr)_100px_32px] sm:items-center">
+                <div className="grid h-10 w-10 place-items-center rounded bg-[#203841] text-[#84d8e8]"><Filter size={17} /></div>
+                <div className="min-w-0">
+                  <span className="border border-[#3a4d54] px-2 py-1 text-[9px] font-black uppercase tracking-[0.08em] text-[#84d8e8]">{rule.category}</span>
+                  <h5 className="mt-2 text-sm font-black text-white">{rule.name}</h5>
+                  <p className="mt-1 text-xs text-[#9fb2b8]">{rule.description}</p>
+                </div>
+                <label className="text-right"><span className="block text-[9px] font-black uppercase text-[#789098]">Base Pts</span><input type="number" min="0" value={rule.points} onChange={(event) => updatePoints(rule.id, event.target.value)} className="mt-1 w-full border-0 border-b border-[#3a4d54] bg-transparent text-right text-2xl font-black text-white outline-none focus:border-[#84d8e8]" /></label>
+                <button type="button" onClick={() => removeRule(rule.id)} aria-label={`Remove ${rule.name}`} className="grid h-8 w-8 place-items-center text-[#789098] hover:text-[#ff8f8f]"><Trash2 size={15} /></button>
+              </article>
+            ))}
+            {visibleRules.length === 0 && <p className="border border-dashed border-[#3a4d54] px-6 py-14 text-center text-sm text-[#9fb2b8]">No scoring rules match your filter.</p>}
+          </div>
+          {importMessage && <p className="mt-4 text-xs font-bold text-[#84d8e8]">{importMessage} <button type="button" onClick={() => setImportMessage("")} aria-label="Dismiss message"><X size={13} className="inline" /></button></p>}
+        </section>
+      </div>
+    </section>
+  );
+}

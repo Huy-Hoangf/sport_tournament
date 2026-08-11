@@ -1,5 +1,6 @@
 ﻿import { useState } from "react";
 import { CalendarDays, ChevronLeft, FileDown, Trophy, Users, Zap } from "lucide-react";
+import { ScoringRulesView } from "./scoring-rules-view";
 import {
   DashboardPanelTitle,
   DashboardSourceBadge,
@@ -48,6 +49,7 @@ export function TournamentDetailView({
   const firstUpcoming = upcomingMatches[0];
   const schedulePageSize = 8;
   const [schedulePage, setSchedulePage] = useState(1);
+  const [activeTab, setActiveTab] = useState("Overview");
   const scheduleTotalPages = Math.max(1, Math.ceil(sortedMatches.length / schedulePageSize));
   const activeSchedulePage = Math.min(schedulePage, scheduleTotalPages);
   const scheduleStart = (activeSchedulePage - 1) * schedulePageSize;
@@ -115,13 +117,21 @@ export function TournamentDetailView({
 
         <div className="mt-7 flex flex-wrap gap-5 border-b border-[#3a4d54]">
           {['Overview', 'Predictions', 'Stages', 'Scoring Rules'].map(
-            (tab, index) => (
+            (tab) => (
               <button
                 key={tab}
                 type="button"
-                onClick={index === 0 ? undefined : onUnavailableFeature}
+                onClick={() => {
+                  if (tab === "Overview") {
+                    setActiveTab(tab);
+                  } else if (tab === "Scoring Rules") {
+                    setActiveTab(tab);
+                  } else {
+                    onUnavailableFeature();
+                  }
+                }}
                 className={`pb-4 text-xs font-black uppercase tracking-[0.08em] ${
-                  index === 0
+                  activeTab === tab
                     ? 'border-b-2 border-[#84d8e8] text-[#84d8e8]'
                     : 'text-[#9fb2b8] transition hover:text-[#84d8e8]'
                 }`}
@@ -133,6 +143,10 @@ export function TournamentDetailView({
         </div>
       </div>
 
+      {activeTab === "Scoring Rules" ? (
+        <ScoringRulesView tournament={tournament} />
+      ) : (
+      <>
       <div className="grid gap-5 p-4 sm:p-7 lg:grid-cols-[360px_minmax(0,1fr)] lg:p-8">
         <section className="relative overflow-hidden border border-[#3a4d54] bg-[#0d252d] p-6 text-center">
           <Trophy
@@ -281,6 +295,8 @@ export function TournamentDetailView({
           )}
         </div>
       </section>
+      </>
+      )}
     </section>
   );
 }
