@@ -17,6 +17,8 @@ export function AdminSelect({
   icon,
   size = "default",
   className = "",
+  menuClassName = "",
+  optionClassName = "",
   disabled = false,
 }: {
   value: string;
@@ -26,6 +28,8 @@ export function AdminSelect({
   icon?: React.ReactNode;
   size?: "default" | "compact";
   className?: string;
+  menuClassName?: string;
+  optionClassName?: string;
   disabled?: boolean;
 }) {
   const [isOpen, setIsOpen] = useState(false);
@@ -88,7 +92,7 @@ export function AdminSelect({
       {isDropdownOpen && (
         <div
           role="listbox"
-          className={`absolute left-0 ${menuTop} z-40 w-full rounded-sm border border-[#84d8e8] bg-[#0d252d] p-1 shadow-[0_12px_28px_rgba(0,0,0,0.35)]`}
+          className={`absolute left-0 ${menuTop} z-40 w-full rounded-sm border border-[#84d8e8] bg-[#0d252d] p-1 shadow-[0_12px_28px_rgba(0,0,0,0.35)] ${menuClassName}`}
         >
           {options.map((option) => (
             <button
@@ -100,11 +104,11 @@ export function AdminSelect({
                 onChange(option.value);
                 setIsOpen(false);
               }}
-              className={`flex h-9 w-full items-center rounded-sm px-3 text-left ${textSize} font-black uppercase tracking-[0.08em] transition ${
+              className={`flex min-h-9 w-full items-center rounded-sm px-3 py-2 text-left ${textSize} font-black uppercase tracking-[0.08em] transition ${
                 option.value === value
                   ? "bg-[#6f7778] text-white"
                   : "text-white hover:bg-[#14272e] hover:text-[#84d8e8]"
-              }`}
+              } ${optionClassName}`}
             >
               {option.label}
             </button>

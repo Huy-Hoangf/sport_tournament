@@ -418,6 +418,8 @@ function PredictionAnalyticsView({
               ariaLabel="Filter prediction match"
               size="compact"
               className="h-10"
+              menuClassName="right-0 left-auto max-h-72 min-w-[320px] overflow-y-auto"
+              optionClassName="whitespace-normal break-words leading-4"
             />
           </div>
         </div>
