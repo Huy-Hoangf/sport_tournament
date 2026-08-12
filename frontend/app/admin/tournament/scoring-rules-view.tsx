@@ -24,7 +24,9 @@ type ScoringRule = {
   points: number;
 };
 
-type RuleDraft = Pick<ScoringRule, "category" | "name" | "description">;
+type RuleDraft = Pick<ScoringRule, "category" | "name" | "description"> & {
+  points: string;
+};
 
 const defaultRules: ScoringRule[] = [
   {
@@ -61,6 +63,7 @@ export function ScoringRulesView({ tournament }: { tournament: TournamentRow }) 
     category: "",
     name: "",
     description: "",
+    points: "0",
   });
   const fileInputRef = useRef<HTMLInputElement>(null);
 
@@ -74,14 +77,6 @@ export function ScoringRulesView({ tournament }: { tournament: TournamentRow }) 
       .includes(query.toLowerCase());
     return matchesQuery && (category === "ALL" || rule.category === category);
   });
-
-  function updatePoints(id: string, value: string) {
-    const points = Math.max(0, Number.parseInt(value || "0", 10));
-    setRules((current) =>
-      current.map((rule) => (rule.id === id ? { ...rule, points } : rule)),
-    );
-    setSaved(false);
-  }
 
   function addRule() {
     const id = `custom-${Date.now()}`;
@@ -101,6 +96,7 @@ export function ScoringRulesView({ tournament }: { tournament: TournamentRow }) 
       category: newRule.category,
       name: newRule.name,
       description: newRule.description,
+      points: String(newRule.points),
     });
     setSaved(false);
   }
@@ -116,8 +112,18 @@ export function ScoringRulesView({ tournament }: { tournament: TournamentRow }) 
   function updateRuleDraft(field: keyof RuleDraft, value: string) {
     setRuleDraft((current) => ({
       ...current,
-      [field]: field === "category" ? value.toUpperCase() : value,
+      [field]:
+        field === "category"
+          ? value.toUpperCase()
+          : field === "points"
+            ? normalizePointInput(value)
+            : value,
     }));
+  }
+
+  function normalizePointInput(value: string) {
+    const digits = value.replace(/\D/g, "");
+    return digits.replace(/^0+(?=\d)/, "") || "0";
   }
 
   function startEditing(rule: ScoringRule) {
@@ -126,6 +132,7 @@ export function ScoringRulesView({ tournament }: { tournament: TournamentRow }) 
       category: rule.category,
       name: rule.name,
       description: rule.description,
+      points: String(rule.points),
     });
   }
 
@@ -135,6 +142,7 @@ export function ScoringRulesView({ tournament }: { tournament: TournamentRow }) 
       category: "",
       name: "",
       description: "",
+      points: "0",
     });
   }
 
@@ -149,6 +157,7 @@ export function ScoringRulesView({ tournament }: { tournament: TournamentRow }) 
               description:
                 ruleDraft.description.trim() ||
                 "Describe when users receive these points.",
+              points: Math.max(0, Number.parseInt(ruleDraft.points || "0", 10)),
             }
           : rule,
       ),
@@ -309,14 +318,16 @@ export function ScoringRulesView({ tournament }: { tournament: TournamentRow }) 
 
                     <label className="grid content-start gap-2 rounded border border-[#243c43] bg-[#06161b] p-3">
                       <span className="text-[9px] font-black uppercase tracking-[0.12em] text-[#789098]">
-                        Base Pts
+                        Point
                       </span>
                       <input
-                        type="number"
-                        min="0"
-                        value={rule.points}
-                        onChange={(event) => updatePoints(rule.id, event.target.value)}
-                        className="points-input h-12 w-full border border-[#31545e] bg-[#0d252d] text-center text-3xl font-black text-white outline-none focus:border-[#84d8e8]"
+                        type="text"
+                        inputMode="numeric"
+                        pattern="[0-9]*"
+                        readOnly={!isEditing}
+                        value={isEditing ? ruleDraft.points : String(rule.points)}
+                        onChange={(event) => updateRuleDraft("points", event.target.value)}
+                        className="points-input h-12 w-full border border-[#31545e] bg-[#0d252d] text-center text-3xl font-black text-white outline-none focus:border-[#84d8e8] read-only:cursor-default read-only:border-[#243c43]"
                       />
                     </label>
                   </div>
