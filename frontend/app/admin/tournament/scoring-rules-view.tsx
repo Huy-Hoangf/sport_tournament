@@ -6,6 +6,7 @@ import {
   FileJson,
   Filter,
   History,
+  Pencil,
   Plus,
   Search,
   Trash2,
@@ -22,6 +23,8 @@ type ScoringRule = {
   description: string;
   points: number;
 };
+
+type RuleDraft = Pick<ScoringRule, "category" | "name" | "description">;
 
 const defaultRules: ScoringRule[] = [
   {
@@ -53,6 +56,12 @@ export function ScoringRulesView({ tournament }: { tournament: TournamentRow }) 
   const [category, setCategory] = useState("ALL");
   const [saved, setSaved] = useState(false);
   const [importMessage, setImportMessage] = useState("");
+  const [editingId, setEditingId] = useState<string | null>(null);
+  const [ruleDraft, setRuleDraft] = useState<RuleDraft>({
+    category: "",
+    name: "",
+    description: "",
+  });
   const fileInputRef = useRef<HTMLInputElement>(null);
 
   const categories = useMemo(
@@ -76,21 +85,75 @@ export function ScoringRulesView({ tournament }: { tournament: TournamentRow }) 
 
   function addRule() {
     const id = `custom-${Date.now()}`;
+    const newRule = {
+      id,
+      category: "CUSTOM",
+      name: "New Scoring Rule",
+      description: "Describe when users receive these points.",
+      points: 1,
+    };
     setRules((current) => [
       ...current,
-      {
-        id,
-        category: "CUSTOM",
-        name: "New Scoring Rule",
-        description: "Describe when users receive these points.",
-        points: 1,
-      },
+      newRule,
     ]);
+    setEditingId(id);
+    setRuleDraft({
+      category: newRule.category,
+      name: newRule.name,
+      description: newRule.description,
+    });
     setSaved(false);
   }
 
   function removeRule(id: string) {
     setRules((current) => current.filter((rule) => rule.id !== id));
+    if (editingId === id) {
+      setEditingId(null);
+    }
+    setSaved(false);
+  }
+
+  function updateRuleDraft(field: keyof RuleDraft, value: string) {
+    setRuleDraft((current) => ({
+      ...current,
+      [field]: field === "category" ? value.toUpperCase() : value,
+    }));
+  }
+
+  function startEditing(rule: ScoringRule) {
+    setEditingId(rule.id);
+    setRuleDraft({
+      category: rule.category,
+      name: rule.name,
+      description: rule.description,
+    });
+  }
+
+  function cancelEditing() {
+    setEditingId(null);
+    setRuleDraft({
+      category: "",
+      name: "",
+      description: "",
+    });
+  }
+
+  function saveRuleDetails(id: string) {
+    setRules((current) =>
+      current.map((rule) =>
+        rule.id === id
+          ? {
+              ...rule,
+              category: ruleDraft.category.trim() || "CUSTOM",
+              name: ruleDraft.name.trim() || "Untitled Rule",
+              description:
+                ruleDraft.description.trim() ||
+                "Describe when users receive these points.",
+            }
+          : rule,
+      ),
+    );
+    cancelEditing();
     setSaved(false);
   }
 
@@ -127,7 +190,7 @@ export function ScoringRulesView({ tournament }: { tournament: TournamentRow }) 
       <div className="mb-7 flex flex-wrap items-end justify-between gap-4">
         <div>
           <p className="text-[11px] font-black uppercase tracking-[0.12em] text-[#84d8e8]">
-            Tournaments <span className="px-2 text-[#607b83]">›</span> {tournament.name} <span className="px-2 text-[#607b83]">›</span> Scoring Rules
+            Tournaments <span className="px-2 text-[#607b83]">&gt;</span> {tournament.name} <span className="px-2 text-[#607b83]">&gt;</span> Scoring Rules
           </p>
           <h4 className="mt-3 text-3xl font-black text-white">Scoring Configuration</h4>
           <p className="mt-2 text-sm text-[#9fb2b8]">Manage points distribution and prediction rules for this tournament.</p>
@@ -159,11 +222,11 @@ export function ScoringRulesView({ tournament }: { tournament: TournamentRow }) 
 
         <section className="border border-[#3a4d54] bg-[#0d252d] p-4 sm:p-5">
           <div className="flex flex-wrap items-center justify-between gap-3 border-b border-[#3a4d54] pb-4">
-            <p className="text-[11px] font-black uppercase tracking-[0.12em] text-[#dce8eb]">☷ Active Ruleset</p>
-            <div className="flex flex-wrap gap-2">
+            <p className="text-[11px] font-black uppercase tracking-[0.12em] text-[#dce8eb]">Active Ruleset</p>
+            <div className="grid w-full grid-cols-[minmax(0,1fr)_auto_auto] gap-2 sm:flex sm:w-auto">
               <label className="relative">
                 <Search size={14} className="absolute left-3 top-3 text-[#84d8e8]" />
-                <input value={query} onChange={(event) => setQuery(event.target.value)} placeholder="Filter rules..." className="h-9 w-48 border border-[#3a4d54] bg-[#07181d] pl-9 pr-3 text-xs font-bold text-white outline-none placeholder:text-[#789098] focus:border-[#84d8e8]" />
+                <input value={query} onChange={(event) => setQuery(event.target.value)} placeholder="Filter rules..." className="h-9 w-full border border-[#3a4d54] bg-[#07181d] pl-9 pr-3 text-xs font-bold text-white outline-none placeholder:text-[#789098] focus:border-[#84d8e8] sm:w-48" />
               </label>
               <AdminSelect
                 value={category}
@@ -172,22 +235,138 @@ export function ScoringRulesView({ tournament }: { tournament: TournamentRow }) 
                 ariaLabel="Filter rule category"
                 className="h-9 min-w-[118px]"
               />
-              <button type="button" onClick={addRule} aria-label="Add scoring rule" className="grid h-9 w-9 place-items-center border border-[#3a4d54] text-[#84d8e8] hover:border-[#84d8e8]"><Plus size={16} /></button>
+              <button type="button" onClick={addRule} aria-label="Add scoring rule" title="Add scoring rule" className="grid h-9 w-9 place-items-center border border-[#3a4d54] text-[#84d8e8] hover:border-[#84d8e8]"><Plus size={16} /></button>
             </div>
           </div>
           <div className="mt-4 space-y-3">
-            {visibleRules.map((rule) => (
-              <article key={rule.id} className="grid gap-4 border border-[#243c43] bg-[#07181d] p-4 sm:grid-cols-[42px_minmax(0,1fr)_100px_32px] sm:items-center">
-                <div className="grid h-10 w-10 place-items-center rounded bg-[#203841] text-[#84d8e8]"><Filter size={17} /></div>
-                <div className="min-w-0">
-                  <span className="border border-[#3a4d54] px-2 py-1 text-[9px] font-black uppercase tracking-[0.08em] text-[#84d8e8]">{rule.category}</span>
-                  <h5 className="mt-2 text-sm font-black text-white">{rule.name}</h5>
-                  <p className="mt-1 text-xs text-[#9fb2b8]">{rule.description}</p>
-                </div>
-                <label className="text-right"><span className="block text-[9px] font-black uppercase text-[#789098]">Base Pts</span><input type="number" min="0" value={rule.points} onChange={(event) => updatePoints(rule.id, event.target.value)} className="mt-1 w-full border-0 border-b border-[#3a4d54] bg-transparent text-right text-2xl font-black text-white outline-none focus:border-[#84d8e8]" /></label>
-                <button type="button" onClick={() => removeRule(rule.id)} aria-label={`Remove ${rule.name}`} className="grid h-8 w-8 place-items-center text-[#789098] hover:text-[#ff8f8f]"><Trash2 size={15} /></button>
-              </article>
-            ))}
+            {visibleRules.map((rule) => {
+              const isEditing = editingId === rule.id;
+
+              return (
+                <article
+                  key={rule.id}
+                  className="border border-[#243c43] bg-[#07181d] transition hover:border-[#4e6972] hover:bg-[#0a1f25]"
+                >
+                  <div className="grid gap-4 p-4 sm:grid-cols-[minmax(0,1fr)_112px] sm:p-5">
+                    <div className="min-w-0">
+                      <div className="flex flex-wrap items-center gap-2">
+                        <span className="inline-flex h-7 items-center rounded border border-[#31545e] bg-[#102b33] px-2 text-[9px] font-black uppercase tracking-[0.1em] text-[#84d8e8]">
+                          {rule.category}
+                        </span>
+                        <span className="inline-flex items-center gap-1 text-[10px] font-black uppercase tracking-[0.12em] text-[#607b83]">
+                          <Filter size={12} /> Rule
+                        </span>
+                      </div>
+
+                      {isEditing ? (
+                        <div className="mt-4 grid gap-3">
+                          <label className="grid gap-1">
+                            <span className="text-[10px] font-black uppercase tracking-[0.1em] text-[#84d8e8]">
+                              Category
+                            </span>
+                            <input
+                              value={ruleDraft.category}
+                              onChange={(event) => updateRuleDraft("category", event.target.value)}
+                              aria-label="Rule category"
+                              className="h-10 w-full border border-[#3a4d54] bg-[#0d252d] px-3 text-xs font-black uppercase text-[#84d8e8] outline-none focus:border-[#84d8e8]"
+                            />
+                          </label>
+                          <label className="grid gap-1">
+                            <span className="text-[10px] font-black uppercase tracking-[0.1em] text-[#84d8e8]">
+                              Title
+                            </span>
+                            <input
+                              value={ruleDraft.name}
+                              onChange={(event) => updateRuleDraft("name", event.target.value)}
+                              aria-label="Rule title"
+                              className="h-11 w-full border border-[#3a4d54] bg-[#0d252d] px-3 text-sm font-black text-white outline-none focus:border-[#84d8e8]"
+                            />
+                          </label>
+                          <label className="grid gap-1">
+                            <span className="text-[10px] font-black uppercase tracking-[0.1em] text-[#84d8e8]">
+                              Content
+                            </span>
+                            <textarea
+                              value={ruleDraft.description}
+                              onChange={(event) => updateRuleDraft("description", event.target.value)}
+                              aria-label="Rule content"
+                              rows={3}
+                              className="w-full resize-none border border-[#3a4d54] bg-[#0d252d] px-3 py-3 text-sm leading-5 text-[#dce8eb] outline-none focus:border-[#84d8e8]"
+                            />
+                          </label>
+                        </div>
+                      ) : (
+                        <>
+                          <h5 className="mt-3 text-lg font-black leading-6 text-white">
+                            {rule.name}
+                          </h5>
+                          <p className="mt-2 max-w-3xl text-sm leading-5 text-[#9fb2b8]">
+                            {rule.description}
+                          </p>
+                        </>
+                      )}
+                    </div>
+
+                    <label className="grid content-start gap-2 rounded border border-[#243c43] bg-[#06161b] p-3">
+                      <span className="text-[9px] font-black uppercase tracking-[0.12em] text-[#789098]">
+                        Base Pts
+                      </span>
+                      <input
+                        type="number"
+                        min="0"
+                        value={rule.points}
+                        onChange={(event) => updatePoints(rule.id, event.target.value)}
+                        className="points-input h-12 w-full border border-[#31545e] bg-[#0d252d] text-center text-3xl font-black text-white outline-none focus:border-[#84d8e8]"
+                      />
+                    </label>
+                  </div>
+
+                  <div className="flex flex-wrap items-center justify-between gap-2 border-t border-[#243c43] px-4 py-3 sm:px-5">
+                    <p className="text-[11px] font-bold text-[#789098]">
+                      {isEditing ? "Editing title and content" : "Ready to edit"}
+                    </p>
+                    <div className="flex items-center gap-2">
+                      {isEditing ? (
+                        <>
+                          <button
+                            type="button"
+                            onClick={() => saveRuleDetails(rule.id)}
+                            className="inline-flex h-9 items-center gap-2 border border-[#84d8e8] bg-[#84d8e8] px-3 text-[11px] font-black uppercase tracking-[0.08em] text-[#06161b] hover:bg-[#a5e5f0]"
+                          >
+                            <Check size={14} /> Save
+                          </button>
+                          <button
+                            type="button"
+                            onClick={cancelEditing}
+                            className="inline-flex h-9 items-center gap-2 border border-[#3a4d54] px-3 text-[11px] font-black uppercase tracking-[0.08em] text-[#dce8eb] hover:border-[#84d8e8] hover:text-[#84d8e8]"
+                          >
+                            <X size={14} /> Cancel
+                          </button>
+                        </>
+                      ) : (
+                        <button
+                          type="button"
+                          onClick={() => startEditing(rule)}
+                          aria-label={`Edit ${rule.name}`}
+                          className="inline-flex h-9 items-center gap-2 border border-[#3a4d54] px-3 text-[11px] font-black uppercase tracking-[0.08em] text-[#84d8e8] hover:border-[#84d8e8] hover:bg-[#102b33]"
+                        >
+                          <Pencil size={14} /> Edit
+                        </button>
+                      )}
+                      <button
+                        type="button"
+                        onClick={() => removeRule(rule.id)}
+                        aria-label={`Remove ${rule.name}`}
+                        title="Delete rule"
+                        className="grid h-9 w-9 place-items-center border border-[#3a4d54] text-[#789098] hover:border-[#ff8f8f] hover:bg-[#302327] hover:text-[#ff8f8f]"
+                      >
+                        <Trash2 size={15} />
+                      </button>
+                    </div>
+                  </div>
+                </article>
+              );
+            })}
             {visibleRules.length === 0 && <p className="border border-dashed border-[#3a4d54] px-6 py-14 text-center text-sm text-[#9fb2b8]">No scoring rules match your filter.</p>}
           </div>
           {importMessage && <p className="mt-4 text-xs font-bold text-[#84d8e8]">{importMessage} <button type="button" onClick={() => setImportMessage("")} aria-label="Dismiss message"><X size={13} className="inline" /></button></p>}
