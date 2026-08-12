@@ -4,10 +4,12 @@ export function TournamentInput({
   label,
   value,
   onChange,
+  disabled = false,
 }: {
   label: string;
   value: string;
   onChange: (value: string) => void;
+  disabled?: boolean;
 }) {
   return (
     <label className="mb-4 block">
@@ -17,7 +19,8 @@ export function TournamentInput({
       <input
         value={value}
         onChange={(event) => onChange(event.target.value)}
-        className="h-12 w-full rounded border border-white/10 bg-[#070d0d] px-4 font-bold text-white outline-none focus:border-[#84d8e8]"
+        disabled={disabled}
+        className="h-12 w-full rounded border border-white/10 bg-[#070d0d] px-4 font-bold text-white outline-none focus:border-[#84d8e8] disabled:cursor-not-allowed disabled:opacity-60"
       />
     </label>
   );
@@ -28,11 +31,13 @@ export function TournamentSelect({
   value,
   options,
   onChange,
+  disabled = false,
 }: {
   label: string;
   value: string;
   options: string[];
   onChange: (value: string) => void;
+  disabled?: boolean;
 }) {
   return (
     <label className="mb-4 block">
@@ -45,6 +50,7 @@ export function TournamentSelect({
         onChange={onChange}
         ariaLabel={label}
         className="w-full"
+        disabled={disabled}
       />
     </label>
   );
