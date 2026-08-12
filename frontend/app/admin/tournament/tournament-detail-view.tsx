@@ -324,19 +324,16 @@ function PredictionAnalyticsView({
   matches: MatchRow[];
 }) {
   const [playerSearch, setPlayerSearch] = useState("");
-  const [matchFilter, setMatchFilter] = useState("ALL");
+  const [statusFilter, setStatusFilter] = useState("ALL");
   const predictionRows = buildPredictionRows(matches);
-  const matchOptions = [
-    "ALL",
-    ...Array.from(new Set(predictionRows.map((row) => row.match))),
-  ];
+  const statusOptions = ["ALL", "CORRECT", "INCORRECT", "PENDING"];
   const visibleRows = predictionRows.filter((row) => {
     const matchesPlayer = row.player
       .toLowerCase()
       .includes(playerSearch.trim().toLowerCase());
-    const matchesMatch = matchFilter === "ALL" || row.match === matchFilter;
+    const matchesStatus = statusFilter === "ALL" || row.status === statusFilter;
 
-    return matchesPlayer && matchesMatch;
+    return matchesPlayer && matchesStatus;
   });
   const totalPredictions = Math.max(predictionRows.length, matches.length * 9);
   const mostPredictedTeam =
@@ -409,24 +406,23 @@ function PredictionAnalyticsView({
               />
             </label>
             <AdminSelect
-              value={matchFilter}
-              onChange={setMatchFilter}
-              options={matchOptions.map((match) => ({
-                value: match,
-                label: match === "ALL" ? "All Matches" : match,
+              value={statusFilter}
+              onChange={setStatusFilter}
+              options={statusOptions.map((status) => ({
+                value: status,
+                label: status === "ALL" ? "All Status" : status,
               }))}
-              ariaLabel="Filter prediction match"
+              ariaLabel="Filter prediction status"
               size="compact"
               className="h-10"
-              menuClassName="right-0 left-auto max-h-72 min-w-[320px] overflow-y-auto"
-              optionClassName="whitespace-normal break-words leading-4"
+              menuClassName="right-0 left-auto min-w-[170px]"
             />
           </div>
         </div>
 
         <div className="overflow-x-auto">
-          <div className="min-w-[760px]">
-            <div className="grid grid-cols-[140px_minmax(190px,1fr)_160px_90px_110px] border-b border-[#243c43] bg-[#10242b] px-4 py-3 text-[10px] font-black uppercase tracking-[0.08em] text-[#789098]">
+          <div className="min-w-[900px]">
+            <div className="grid grid-cols-[190px_minmax(260px,1fr)_160px_90px_110px] gap-x-6 border-b border-[#243c43] bg-[#10242b] px-4 py-3 text-[10px] font-black uppercase tracking-[0.08em] text-[#789098]">
               <span>Player</span>
               <span>Match</span>
               <span>Prediction</span>
@@ -437,20 +433,22 @@ function PredictionAnalyticsView({
               {visibleRows.slice(0, 8).map((row, index) => (
                 <div
                   key={row.id}
-                  className={`grid grid-cols-[140px_minmax(190px,1fr)_160px_90px_110px] items-center px-4 py-4 text-sm ${
+                  className={`grid grid-cols-[190px_minmax(260px,1fr)_160px_90px_110px] items-center gap-x-6 px-4 py-4 text-sm ${
                     index % 2 === 0 ? "bg-[#0d252d]" : "bg-[#14272e]"
                   }`}
                 >
-                  <div className="flex items-center gap-2">
+                  <div className="flex min-w-0 items-center gap-2">
                     <span className="grid h-7 w-7 place-items-center rounded-sm bg-[#163943] text-[10px] font-black text-[#84d8e8]">
                       {row.playerCode}
                     </span>
-                    <span className="font-black text-[#dce8eb]">
+                    <span className="min-w-0 truncate font-black text-[#dce8eb]">
                       {row.player}
                     </span>
                   </div>
-                  <span className="font-bold text-[#9fb2b8]">{row.match}</span>
-                  <span className="font-black lowercase text-[#dce8eb]">
+                  <span className="min-w-0 truncate font-bold text-[#9fb2b8]">
+                    {row.match}
+                  </span>
+                  <span className="min-w-0 truncate font-black lowercase text-[#dce8eb]">
                     {row.prediction}
                   </span>
                   <span
