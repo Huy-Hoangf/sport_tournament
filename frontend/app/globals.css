@@ -32,6 +32,17 @@ select:focus-visible {
   outline-offset: 2px;
 }
 
+.points-input::-webkit-inner-spin-button,
+.points-input::-webkit-outer-spin-button {
+  -webkit-appearance: none;
+  margin: 0;
+}
+
+.points-input {
+  -moz-appearance: textfield;
+  appearance: textfield;
+}
+
 input:-webkit-autofill,
 input:-webkit-autofill:hover,
 input:-webkit-autofill:focus,
