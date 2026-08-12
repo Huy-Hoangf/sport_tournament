@@ -328,12 +328,13 @@ function PredictionAnalyticsView({
   const predictionRows = buildPredictionRows(matches);
   const statusOptions = ["ALL", "CORRECT", "INCORRECT", "PENDING"];
   const visibleRows = predictionRows.filter((row) => {
-    const matchesPlayer = row.player
+    const searchValue = playerSearch.trim().toLowerCase();
+    const matchesSearch = `${row.player} ${row.match}`
       .toLowerCase()
-      .includes(playerSearch.trim().toLowerCase());
+      .includes(searchValue);
     const matchesStatus = statusFilter === "ALL" || row.status === statusFilter;
 
-    return matchesPlayer && matchesStatus;
+    return matchesSearch && matchesStatus;
   });
   const totalPredictions = Math.max(predictionRows.length, matches.length * 9);
   const mostPredictedTeam =
@@ -401,7 +402,7 @@ function PredictionAnalyticsView({
               <input
                 value={playerSearch}
                 onChange={(event) => setPlayerSearch(event.target.value)}
-                placeholder="Search Player..."
+                placeholder="Search player or match..."
                 className="h-10 w-full border border-[#243c43] bg-[#07181d] pl-9 pr-3 text-xs font-bold text-white outline-none placeholder:text-[#789098] focus:border-[#84d8e8]"
               />
             </label>
