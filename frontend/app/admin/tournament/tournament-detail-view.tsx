@@ -1,5 +1,5 @@
 ﻿import { useState } from "react";
-import { CalendarDays, ChevronLeft, FileDown, Trophy, Users, Zap } from "lucide-react";
+import { CalendarDays, ChevronLeft, FileDown, Search, Trophy, Users, Zap } from "lucide-react";
 import { ScoringRulesView } from "./scoring-rules-view";
 import {
   DashboardPanelTitle,
@@ -7,6 +7,7 @@ import {
   DashboardStatusBadge,
   MatchTeams,
 } from "../shared/dashboard-ui";
+import { AdminSelect } from "../shared/admin-select";
 import type { MatchRow, TournamentRow } from "./types";
 import {
   formatDateOnly,
@@ -124,6 +125,8 @@ export function TournamentDetailView({
                 onClick={() => {
                   if (tab === "Overview") {
                     setActiveTab(tab);
+                  } else if (tab === "Predictions") {
+                    setActiveTab(tab);
                   } else if (tab === "Scoring Rules") {
                     setActiveTab(tab);
                   } else {
@@ -145,6 +148,8 @@ export function TournamentDetailView({
 
       {activeTab === "Scoring Rules" ? (
         <ScoringRulesView tournament={tournament} />
+      ) : activeTab === "Predictions" ? (
+        <PredictionAnalyticsView tournament={tournament} matches={matches} />
       ) : (
       <>
       <div className="grid gap-5 p-4 sm:p-7 lg:grid-cols-[360px_minmax(0,1fr)] lg:p-8">
@@ -300,6 +305,309 @@ export function TournamentDetailView({
     </section>
   );
 }
+
+type PredictionRow = {
+  id: string;
+  playerCode: string;
+  player: string;
+  match: string;
+  prediction: string;
+  points: number | null;
+  status: "CORRECT" | "INCORRECT" | "PENDING";
+};
+
+function PredictionAnalyticsView({
+  tournament,
+  matches,
+}: {
+  tournament: TournamentRow;
+  matches: MatchRow[];
+}) {
+  const [playerSearch, setPlayerSearch] = useState("");
+  const [matchFilter, setMatchFilter] = useState("ALL");
+  const predictionRows = buildPredictionRows(matches);
+  const matchOptions = [
+    "ALL",
+    ...Array.from(new Set(predictionRows.map((row) => row.match))),
+  ];
+  const visibleRows = predictionRows.filter((row) => {
+    const matchesPlayer = row.player
+      .toLowerCase()
+      .includes(playerSearch.trim().toLowerCase());
+    const matchesMatch = matchFilter === "ALL" || row.match === matchFilter;
+
+    return matchesPlayer && matchesMatch;
+  });
+  const totalPredictions = Math.max(predictionRows.length, matches.length * 9);
+  const mostPredictedTeam =
+    getMostPredictedTeam(predictionRows) ??
+    matches.find((match) => match.homeName)?.homeName ??
+    "No team data";
+  const resultMatch = matches.find((match) => isFinishedStatus(match.status));
+  const resultText = resultMatch
+    ? getWinnerText(resultMatch)
+    : "Awaiting Result";
+  const resultMeta = resultMatch
+    ? `${formatScore(resultMatch)} final`
+    : "No completed matches yet";
+
+  return (
+    <section className="border-t border-[#314850] bg-[#06161b] p-4 sm:p-7 lg:p-8">
+      <div className="mb-6 flex flex-wrap items-start justify-between gap-4">
+        <div>
+          <p className="text-lg font-black text-[#84d8e8]">Predictions</p>
+          <h4 className="mt-4 text-2xl font-black text-white">
+            {tournament.name}
+          </h4>
+          <p className="mt-1 text-sm font-bold text-[#789098]">
+            Prediction Data & Analytics
+          </p>
+        </div>
+        <button
+          type="button"
+          className="inline-flex h-10 items-center gap-2 border border-[#243c43] bg-[#07181d] px-4 text-[10px] font-black uppercase tracking-[0.08em] text-[#dce8eb] transition hover:border-[#84d8e8] hover:text-[#84d8e8]"
+        >
+          <FileDown size={14} /> Export Data
+        </button>
+      </div>
+
+      <div className="grid gap-4 md:grid-cols-3">
+        <PredictionMetricCard
+          title="Total Predictions"
+          value={totalPredictions.toLocaleString()}
+          meta="+15% vs last round"
+          icon={<Zap size={18} />}
+        />
+        <PredictionMetricCard
+          title="Most Predicted Team"
+          value={mostPredictedTeam}
+          meta="62% of users picked to win"
+          icon={<Users size={18} />}
+        />
+        <PredictionMetricCard
+          title="Result"
+          value={resultText}
+          meta={resultMeta}
+          icon={<Trophy size={18} />}
+        />
+      </div>
+
+      <section className="mt-6 overflow-hidden border border-[#243c43] bg-[#0d252d]">
+        <div className="flex flex-wrap items-center justify-between gap-3 border-b border-[#243c43] px-4 py-4 sm:px-5">
+          <h5 className="text-lg font-black text-white">Prediction Log</h5>
+          <div className="grid w-full gap-2 sm:w-auto sm:grid-cols-[220px_170px]">
+            <label className="relative">
+              <Search
+                size={14}
+                className="absolute left-3 top-1/2 -translate-y-1/2 text-[#84d8e8]"
+              />
+              <input
+                value={playerSearch}
+                onChange={(event) => setPlayerSearch(event.target.value)}
+                placeholder="Search Player..."
+                className="h-10 w-full border border-[#243c43] bg-[#07181d] pl-9 pr-3 text-xs font-bold text-white outline-none placeholder:text-[#789098] focus:border-[#84d8e8]"
+              />
+            </label>
+            <AdminSelect
+              value={matchFilter}
+              onChange={setMatchFilter}
+              options={matchOptions.map((match) => ({
+                value: match,
+                label: match === "ALL" ? "All Matches" : match,
+              }))}
+              ariaLabel="Filter prediction match"
+              size="compact"
+              className="h-10"
+            />
+          </div>
+        </div>
+
+        <div className="overflow-x-auto">
+          <div className="min-w-[760px]">
+            <div className="grid grid-cols-[140px_minmax(190px,1fr)_160px_90px_110px] border-b border-[#243c43] bg-[#10242b] px-4 py-3 text-[10px] font-black uppercase tracking-[0.08em] text-[#789098]">
+              <span>Player</span>
+              <span>Match</span>
+              <span>Prediction</span>
+              <span>Points</span>
+              <span>Status</span>
+            </div>
+            <div className="divide-y divide-[#243c43]">
+              {visibleRows.slice(0, 8).map((row, index) => (
+                <div
+                  key={row.id}
+                  className={`grid grid-cols-[140px_minmax(190px,1fr)_160px_90px_110px] items-center px-4 py-4 text-sm ${
+                    index % 2 === 0 ? "bg-[#0d252d]" : "bg-[#14272e]"
+                  }`}
+                >
+                  <div className="flex items-center gap-2">
+                    <span className="grid h-7 w-7 place-items-center rounded-sm bg-[#163943] text-[10px] font-black text-[#84d8e8]">
+                      {row.playerCode}
+                    </span>
+                    <span className="font-black text-[#dce8eb]">
+                      {row.player}
+                    </span>
+                  </div>
+                  <span className="font-bold text-[#9fb2b8]">{row.match}</span>
+                  <span className="font-black lowercase text-[#dce8eb]">
+                    {row.prediction}
+                  </span>
+                  <span
+                    className={`font-black ${
+                      row.points && row.points > 0
+                        ? "text-[#84d8e8]"
+                        : "text-[#9fb2b8]"
+                    }`}
+                  >
+                    {row.points == null
+                      ? "--"
+                      : row.points > 0
+                        ? `+${row.points}`
+                        : row.points}
+                  </span>
+                  <PredictionStatusBadge status={row.status} />
+                </div>
+              ))}
+              {visibleRows.length === 0 && (
+                <p className="px-4 py-14 text-center text-sm text-[#9fb2b8]">
+                  No predictions match your filter.
+                </p>
+              )}
+            </div>
+          </div>
+        </div>
+
+        <div className="flex flex-wrap items-center justify-between gap-3 border-t border-[#243c43] px-4 py-4 text-xs font-bold text-[#9fb2b8]">
+          <span>
+            Showing {visibleRows.length ? 1 : 0} to{" "}
+            {Math.min(8, visibleRows.length)} of {predictionRows.length} entries
+          </span>
+          <div className="flex gap-2">
+            <button className="grid h-9 w-9 place-items-center border border-[#243c43] text-[#789098]">
+              ‹
+            </button>
+            <button className="grid h-9 w-9 place-items-center border border-[#243c43] text-[#789098]">
+              ›
+            </button>
+          </div>
+        </div>
+      </section>
+    </section>
+  );
+}
+
+function PredictionMetricCard({
+  title,
+  value,
+  meta,
+  icon,
+}: {
+  title: string;
+  value: string;
+  meta: string;
+  icon: React.ReactNode;
+}) {
+  return (
+    <article className="border border-[#243c43] bg-[#0d252d] p-5">
+      <div className="flex items-start justify-between gap-4">
+        <div className="min-w-0">
+          <p className="text-[10px] font-black uppercase tracking-[0.12em] text-[#789098]">
+            {title}
+          </p>
+          <p className="mt-5 truncate text-2xl font-black text-white">
+            {value}
+          </p>
+          <p className="mt-2 text-xs font-black text-[#84d8e8]">{meta}</p>
+        </div>
+        <span className="text-[#84d8e8]">{icon}</span>
+      </div>
+    </article>
+  );
+}
+
+function PredictionStatusBadge({ status }: { status: PredictionRow["status"] }) {
+  const className =
+    status === "CORRECT"
+      ? "bg-[#183229] text-[#a7e8c0]"
+      : status === "INCORRECT"
+        ? "bg-[#35171b] text-[#ff8a8a]"
+        : "bg-[#14272e] text-[#9fb2b8]";
+
+  return (
+    <span
+      className={`inline-flex h-7 w-fit items-center rounded-sm px-3 text-[10px] font-black uppercase ${className}`}
+    >
+      {status}
+    </span>
+  );
+}
+
+function buildPredictionRows(matches: MatchRow[]): PredictionRow[] {
+  const players = [
+    { code: "X7", name: "Xeno77" },
+    { code: "BL", name: "BladeRunner99" },
+    { code: "GZ", name: "GhostZero" },
+    { code: "AR", name: "ArcRider" },
+    { code: "NP", name: "NeonPulse" },
+  ];
+
+  return matches.slice(0, 6).flatMap((match, matchIndex) => {
+    const matchName = `${match.homeName ?? "TBD"} vs. ${match.awayName ?? "TBD"}`;
+    const predictions = [
+      `${match.homeName ?? "home"} win`,
+      "draw",
+      `${match.awayName ?? "away"} win`,
+    ];
+
+    return players.slice(0, 3).map((player, playerIndex) => ({
+      id: `${match.id}-${player.code}-${playerIndex}`,
+      playerCode: player.code,
+      player: players[(matchIndex + playerIndex) % players.length].name,
+      match: matchName,
+      prediction: predictions[playerIndex],
+      points:
+        playerIndex === 2 && !isFinishedStatus(match.status)
+          ? null
+          : playerIndex === 0
+            ? 50
+            : 0,
+      status:
+        playerIndex === 2 && !isFinishedStatus(match.status)
+          ? "PENDING"
+          : playerIndex === 0
+            ? "CORRECT"
+            : "INCORRECT",
+    }));
+  });
+}
+
+function getMostPredictedTeam(rows: PredictionRow[]) {
+  const counts = new Map<string, number>();
+
+  rows.forEach((row) => {
+    const team = row.prediction.replace(/\s+win$/i, "");
+
+    if (team !== "draw") {
+      counts.set(team, (counts.get(team) ?? 0) + 1);
+    }
+  });
+
+  return [...counts.entries()].sort((a, b) => b[1] - a[1])[0]?.[0];
+}
+
+function getWinnerText(match: MatchRow) {
+  if (
+    match.actualHomeScore == null ||
+    match.actualAwayScore == null ||
+    match.actualHomeScore === match.actualAwayScore
+  ) {
+    return "Draw";
+  }
+
+  return match.actualHomeScore > match.actualAwayScore
+    ? `${match.homeName ?? "Home"} Win`
+    : `${match.awayName ?? "Away"} Win`;
+}
+
 function CompactMatchRow({ match }: { match: MatchRow }) {
   return (
     <article className="grid gap-4 px-5 py-5 sm:grid-cols-[120px_minmax(0,1fr)_120px] sm:items-center">

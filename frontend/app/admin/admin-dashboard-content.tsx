@@ -605,13 +605,27 @@ export default function AdminDashboardContent({
     : isTournamentView
       ? "Tournament Management"
       : "Dashboard";
+  const editingTournament =
+    editingTournamentId == null
+      ? null
+      : dashboard.tournaments.find(
+          (tournament) => tournament.id === editingTournamentId,
+        ) ?? null;
+  const isActiveTournamentEdit =
+    Boolean(editingTournamentId) && tournamentForm.status === "ACTIVE";
+
   async function saveTournament() {
     if (!isAdmin) {
       showNotice("Only admin can save tournaments.", "error");
       return;
     }
 
-    if (!tournamentForm.name.trim()) {
+    const effectiveTournamentName =
+      isActiveTournamentEdit && editingTournament
+        ? editingTournament.name
+        : tournamentForm.name;
+
+    if (!effectiveTournamentName.trim()) {
       showNotice("Tournament name is required.", "error");
       return;
     }
@@ -620,9 +634,18 @@ export default function AdminDashboardContent({
 
     try {
       if (editingTournamentId) {
+        const payload =
+          isActiveTournamentEdit && editingTournament
+            ? {
+                ...tournamentForm,
+                name: editingTournament.name,
+                visibility: editingTournament.visibility,
+              }
+            : tournamentForm;
+
         await apiRequest(`/tournaments/admin/${editingTournamentId}`, {
           method: "PATCH",
-          body: JSON.stringify(tournamentForm),
+          body: JSON.stringify(payload),
         });
         showNotice("Tournament updated successfully.", "success");
       } else {
@@ -1184,6 +1207,7 @@ export default function AdminDashboardContent({
               onChange={(value) =>
                 setTournamentForm((form) => ({ ...form, name: value }))
               }
+              disabled={isActiveTournamentEdit}
             />
             <div className="grid gap-4 sm:grid-cols-2">
               <TournamentSelect
@@ -1207,8 +1231,15 @@ export default function AdminDashboardContent({
                     visibility: value as TournamentForm["visibility"],
                   }))
                 }
+                disabled={isActiveTournamentEdit}
               />
             </div>
+            {isActiveTournamentEdit && (
+              <p className="mt-1 text-xs font-bold text-[#84d8e8]">
+                Active tournaments lock name and visibility. Change status first
+                to edit those fields.
+              </p>
+            )}
             <div className="mt-7 flex justify-end gap-3">
               <button
                 onClick={() => setOpenTournamentForm(false)}
