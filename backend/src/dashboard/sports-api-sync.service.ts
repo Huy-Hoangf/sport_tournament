@@ -1,4 +1,4 @@
-import { Injectable, Logger } from '@nestjs/common';
+import { Injectable } from '@nestjs/common';
 import { InjectRepository } from '@nestjs/typeorm';
 import { Repository } from 'typeorm';
 import { User } from '../users/user.entity';
@@ -6,7 +6,6 @@ import { User } from '../users/user.entity';
 // Cito LoL free tier is limited, so list calls are cached for a day unless an import forces fresh data.
 const LOL_CACHE_MS = 24 * 60 * 60 * 1000;
 const EXTERNAL_FETCH_TIMEOUT_MS = 12_000;
-const FOOTBALL_API_BASE_URL = 'https://v3.football.api-sports.io';
 const FOOTBALL_DATA_ORG_API_BASE_URL = 'https://api.football-data.org/v4';
 const OPENF1_API_BASE_URL = 'https://api.openf1.org/v1';
 const CITO_API_BASE_URL = 'https://api.citoapi.com/api/v1';
@@ -46,23 +45,57 @@ const FOOTBALL_DATA_ORG_COMPETITION_CODES = new Map<number, string>([
   [61, 'FL1'],
   [3, 'EL'],
 ]);
-
-type FootballCompetition = {
-  league: {
-    id: number;
-    name: string;
-    type?: string;
-  };
-  country?: {
-    name?: string;
-  };
-  seasons?: Array<{
-    year: number;
-    start?: string;
-    end?: string;
-    current?: boolean;
-  }>;
-};
+const FOOTBALL_DATA_ORG_IMPORT_COMPETITIONS = [
+  {
+    id: 39,
+    code: 'PL',
+    name: 'Premier League',
+    country: 'England',
+    type: 'League',
+  },
+  {
+    id: 2,
+    code: 'CL',
+    name: 'UEFA Champions League',
+    country: 'Europe',
+    type: 'Cup',
+  },
+  {
+    id: 140,
+    code: 'PD',
+    name: 'La Liga',
+    country: 'Spain',
+    type: 'League',
+  },
+  {
+    id: 135,
+    code: 'SA',
+    name: 'Serie A',
+    country: 'Italy',
+    type: 'League',
+  },
+  {
+    id: 78,
+    code: 'BL1',
+    name: 'Bundesliga',
+    country: 'Germany',
+    type: 'League',
+  },
+  {
+    id: 61,
+    code: 'FL1',
+    name: 'Ligue 1',
+    country: 'France',
+    type: 'League',
+  },
+  {
+    id: 3,
+    code: 'EL',
+    name: 'UEFA Europa League',
+    country: 'Europe',
+    type: 'Cup',
+  },
+] as const;
 
 export type FootballCompetitionOption = {
   id: number;
@@ -248,7 +281,6 @@ type LolScheduleSnapshot = {
 
 @Injectable()
 export class SportsApiSyncService {
-  private readonly logger = new Logger(SportsApiSyncService.name);
   private lolScheduleCache: {
     expiresAt: number;
     snapshot: LolScheduleSnapshot;
@@ -358,63 +390,9 @@ export class SportsApiSyncService {
 
   // Import options intentionally list competitions first; matches are fetched only after admin selection to protect quota.
   async listFootballCompetitions() {
-    const apiKey = this.getApiSportsFootballKey();
-    const headers = { 'x-apisports-key': apiKey };
-    const responses = await Promise.all([
-      this.fetchJson<{ response?: FootballCompetition[] }>(
-        `${FOOTBALL_API_BASE_URL}/leagues?current=true`,
-        headers,
-      ),
-      this.fetchJson<{ response?: FootballCompetition[] }>(
-        `${FOOTBALL_API_BASE_URL}/leagues?search=ASEAN`,
-        headers,
-      ),
-      this.fetchJson<{ response?: FootballCompetition[] }>(
-        `${FOOTBALL_API_BASE_URL}/leagues?search=AFF`,
-        headers,
-      ),
-    ]);
-    const optionsByKey = new Map<string, FootballCompetitionOption>();
-
-    for (const competition of responses.flatMap(
-      (response) => response.response ?? [],
-    )) {
-      for (const option of this.toFootballCompetitionOptions(competition)) {
-        optionsByKey.set(`${option.id}:${option.season}`, option);
-      }
-    }
-
-    const missingFeaturedLeagueIds = Array.from(
-      new Set(
-        FEATURED_FOOTBALL_COMPETITIONS.map((competition) => competition.id)
-          .filter((id): id is number => typeof id === 'number')
-          .filter(
-            (id) =>
-              !Array.from(optionsByKey.values()).some(
-                (option) => option.id === id,
-              ),
-          ),
-      ),
-    );
-    const featuredResponses = await Promise.all(
-      missingFeaturedLeagueIds.map((id) =>
-        this.fetchOptionalJson<{ response?: FootballCompetition[] }>(
-          `${FOOTBALL_API_BASE_URL}/leagues?id=${id}`,
-          headers,
-        ),
-      ),
-    );
-
-    for (const competition of featuredResponses.flatMap(
-      (response) => response?.response ?? [],
-    )) {
-      for (const option of this.toFootballCompetitionOptions(competition)) {
-        optionsByKey.set(`${option.id}:${option.season}`, option);
-      }
-    }
-
-    return Array.from(optionsByKey.values())
-      .filter((option) => this.isCompetitionImportable(option))
+    return FOOTBALL_DATA_ORG_IMPORT_COMPETITIONS.map((competition) =>
+      this.toFootballDataOrgCompetitionOption(competition),
+    )
       .sort((first, second) => {
         const firstPhasePriority = this.getCompetitionPhasePriority(first);
         const secondPhasePriority = this.getCompetitionPhasePriority(second);
@@ -431,8 +409,7 @@ export class SportsApiSyncService {
         }
 
         return first.name.localeCompare(second.name);
-      })
-      .slice(0, 120);
+      });
   }
 
   async syncSelectedFootballLeagues(
@@ -453,8 +430,6 @@ export class SportsApiSyncService {
       throw new Error('Admin account was not found.');
     }
 
-    const apiKey = this.getApiSportsFootballKey();
-
     const selectedLeagues = leagues
       .map((league) => ({
         id: Number(league.id),
@@ -473,7 +448,6 @@ export class SportsApiSyncService {
       throw new Error('Please choose at least one football competition.');
     }
 
-    const headers = { 'x-apisports-key': apiKey };
     let competitionCount = 0;
     let matchCount = 0;
     const importNotes = new Set<string>();
@@ -482,14 +456,12 @@ export class SportsApiSyncService {
       try {
         const isAseanChampionship =
           league.name.trim().toLowerCase() === 'asean championship';
-        const tournamentStatus = await this.resolveFootballTournamentStatus(
-          league.id,
+        const tournamentStatus = this.resolveFootballTournamentStatus(
           league.season,
           league.start,
           league.end,
           league.current,
           isAseanChampionship,
-          headers,
         );
         const includeFinishedFixtures = tournamentStatus !== 'UPCOMING';
         const fixtures = isAseanChampionship
@@ -497,10 +469,8 @@ export class SportsApiSyncService {
               league.season,
               includeFinishedFixtures,
             )
-          : await this.fetchFootballFixturesForLeagueWithFallback(
+          : await this.fetchFootballDataOrgFixturesForLeague(
               league.id,
-              league.season,
-              headers,
               includeFinishedFixtures,
             );
         const competitionName = fixtures[0]?.league?.name || league.name;
@@ -785,62 +755,45 @@ export class SportsApiSyncService {
   }
 
   private async syncFootball(adminId: number) {
-    const credentials = this.getOptionalApiSportsFootballCredentials();
+    let competitionCount = 0;
+    let matchCount = 0;
 
-    if (!credentials) {
-      return {
-        competitions: 0,
-        matches: 0,
-        error:
-          'FOOTBALL_DATA_API_KEY or FOOTBALL_API_SPORTS_KEY is not configured.',
-      };
-    }
+    for (const competition of await this.listFootballCompetitions()) {
+      const tournamentStatus = this.resolveFootballTournamentStatus(
+        competition.season,
+        competition.start,
+        competition.end,
+        competition.current,
+        false,
+      );
+      const fixtures = await this.fetchFootballDataOrgFixturesForLeague(
+        competition.id,
+        tournamentStatus !== 'UPCOMING',
+      );
 
-    this.logApiSportsFootballKeySource(credentials);
+      if (fixtures.length === 0) {
+        continue;
+      }
 
-    const headers = { 'x-apisports-key': credentials.key };
-    const today = this.formatApiDate(new Date());
-    const [liveMatchesResponse, todayMatchesResponse] = await Promise.all([
-      this.fetchJson<{ response?: FootballMatch[] }>(
-        `${FOOTBALL_API_BASE_URL}/fixtures?live=all`,
-        headers,
-      ),
-      this.fetchJson<{ response?: FootballMatch[] }>(
-        `${FOOTBALL_API_BASE_URL}/fixtures?date=${today}`,
-        headers,
-      ),
-    ]);
-    const matchesById = new Map<string, FootballMatch>();
+      const importedMatches = await this.syncFootballMatches(
+        adminId,
+        fixtures,
+        'FOOTBALL_DATA',
+        tournamentStatus,
+      );
 
-    for (const match of [
-      ...(liveMatchesResponse.response ?? []),
-      ...(todayMatchesResponse.response ?? []),
-    ]) {
-      if (
-        match.fixture?.id &&
-        (this.isFootballFixtureToday(match) ||
-          this.mapMatchStatus(match.fixture.status?.short ?? '') === 'LIVE')
-      ) {
-        matchesById.set(String(match.fixture.id), match);
+      if (importedMatches > 0) {
+        competitionCount += 1;
+        matchCount += importedMatches;
       }
     }
 
-    const competitionNames = new Set(
-      Array.from(matchesById.values())
-        .map((match) => match.league?.name?.trim())
-        .filter((name): name is string => Boolean(name)),
-    );
-    const matchCount = await this.syncFootballMatches(
-      adminId,
-      matchesById.values(),
-    );
-
     return {
-      competitions: competitionNames.size,
+      competitions: competitionCount,
       matches: matchCount,
       error:
         matchCount === 0
-          ? 'No live or scheduled football fixtures were returned for today.'
+          ? 'No football-data.org fixtures were returned for supported competitions.'
           : null,
     };
   }
@@ -989,93 +942,6 @@ export class SportsApiSyncService {
     return Number.isFinite(parsed) ? parsed : null;
   }
 
-  private async fetchFootballFixturesForLeague(
-    leagueId: number,
-    season: number,
-    headers: Record<string, string>,
-    includeFinishedFixtures = false,
-  ) {
-    const now = new Date();
-    const shortFrom = this.formatApiDate(
-      new Date(now.getTime() - 14 * 24 * 60 * 60 * 1000),
-    );
-    const shortTo = this.formatApiDate(
-      new Date(now.getTime() + 45 * 24 * 60 * 60 * 1000),
-    );
-    const queries = includeFinishedFixtures
-      ? [
-          `league=${leagueId}&season=${season}&from=${shortFrom}&to=${shortTo}`,
-          `league=${leagueId}&season=${season}&last=50`,
-          `league=${leagueId}&season=${season}&next=50`,
-        ]
-      : [
-          `league=${leagueId}&season=${season}&from=${shortFrom}&to=${shortTo}`,
-          `league=${leagueId}&season=${season}&next=50`,
-        ];
-    const fixturesById = new Map<string, FootballMatch>();
-
-    for (const query of queries) {
-      const response = await this.fetchJson<{ response?: FootballMatch[] }>(
-        `${FOOTBALL_API_BASE_URL}/fixtures?${query}`,
-        headers,
-      );
-
-      for (const match of response.response ?? []) {
-        if (
-          match.fixture?.id &&
-          this.isFootballFixtureFromLeagueSeason(match, leagueId, season) &&
-          this.isFootballFixtureImportable(match, includeFinishedFixtures)
-        ) {
-          fixturesById.set(String(match.fixture.id), match);
-        }
-      }
-
-      if (fixturesById.size > 0) {
-        break;
-      }
-    }
-
-    return Array.from(fixturesById.values());
-  }
-
-  private async fetchFootballFixturesForLeagueWithFallback(
-    leagueId: number,
-    selectedSeason: number,
-    headers: Record<string, string>,
-    includeFinishedFixtures = false,
-  ) {
-    const footballDataOrgFixtures =
-      await this.fetchFootballDataOrgFixturesForLeague(
-        leagueId,
-        includeFinishedFixtures,
-      );
-
-    if (footballDataOrgFixtures.length > 0) {
-      return footballDataOrgFixtures;
-    }
-
-    const seasons = await this.getFootballFixtureCandidateSeasons(
-      leagueId,
-      selectedSeason,
-      headers,
-    );
-
-    for (const season of seasons) {
-      const fixtures = await this.fetchFootballFixturesForLeague(
-        leagueId,
-        season,
-        headers,
-        includeFinishedFixtures,
-      );
-
-      if (fixtures.length > 0) {
-        return fixtures;
-      }
-    }
-
-    return [];
-  }
-
   private async fetchFootballDataOrgFixturesForLeague(
     leagueId: number,
     includeFinishedFixtures = false,
@@ -1185,66 +1051,13 @@ export class SportsApiSyncService {
     return logoUrl;
   }
 
-  private async getFootballFixtureCandidateSeasons(
-    leagueId: number,
-    selectedSeason: number,
-    headers: Record<string, string>,
-  ) {
-    const seasonCandidates = new Set<number>([selectedSeason]);
-    const response = await this.fetchOptionalJson<{
-      response?: FootballCompetition[];
-    }>(`${FOOTBALL_API_BASE_URL}/leagues?id=${leagueId}`, headers);
-    const competition = response?.response?.[0];
-    const now = new Date();
-
-    for (const season of competition?.seasons ?? []) {
-      const seasonEnd = season.end ? new Date(season.end) : null;
-      const isStillRelevant = !seasonEnd || seasonEnd >= now;
-
-      if (season.year && (season.current || isStillRelevant)) {
-        seasonCandidates.add(season.year);
-      }
-    }
-
-    return Array.from(seasonCandidates)
-      .filter((season) => Number.isInteger(season))
-      .sort((first, second) => {
-        if (first === selectedSeason) {
-          return -1;
-        }
-
-        if (second === selectedSeason) {
-          return 1;
-        }
-
-        return second - first;
-      })
-      .slice(0, 4);
-  }
-
-  private async getFootballTournamentStatusForLeague(
-    leagueId: number,
-    selectedSeason: number,
-    headers: Record<string, string>,
-  ): Promise<TournamentStatus> {
-    const response = await this.fetchOptionalJson<{
-      response?: FootballCompetition[];
-    }>(`${FOOTBALL_API_BASE_URL}/leagues?id=${leagueId}`, headers);
-    const seasons = response?.response?.[0]?.seasons ?? [];
-    const season = seasons.find((item) => item.year === selectedSeason);
-
-    return this.mapTournamentStatusFromDates(season?.start, season?.end);
-  }
-
-  private async resolveFootballTournamentStatus(
-    leagueId: number,
+  private resolveFootballTournamentStatus(
     selectedSeason: number,
     start: string | null,
     end: string | null,
     current: boolean,
     isAseanChampionship: boolean,
-    headers: Record<string, string>,
-  ): Promise<TournamentStatus> {
+  ): TournamentStatus {
     if (isAseanChampionship) {
       return this.getAseanTournamentStatus(selectedSeason);
     }
@@ -1257,16 +1070,6 @@ export class SportsApiSyncService {
       return 'ACTIVE';
     }
 
-    const statusFromApi = await this.getFootballTournamentStatusForLeague(
-      leagueId,
-      selectedSeason,
-      headers,
-    );
-
-    if (statusFromApi !== 'ACTIVE') {
-      return statusFromApi;
-    }
-
     const currentYear = new Date().getUTCFullYear();
 
     if (selectedSeason < currentYear) {
@@ -1277,7 +1080,7 @@ export class SportsApiSyncService {
       return 'UPCOMING';
     }
 
-    return statusFromApi;
+    return 'ACTIVE';
   }
 
   private getAseanTournamentStatus(season: number): TournamentStatus {
@@ -1304,17 +1107,6 @@ export class SportsApiSyncService {
     }
 
     return 'ACTIVE';
-  }
-
-  private isFootballFixtureFromLeagueSeason(
-    match: FootballMatch,
-    leagueId: number,
-    season: number,
-  ) {
-    const fixtureLeagueId = Number(match.league?.id);
-    const fixtureSeason = Number(match.league?.season);
-
-    return fixtureLeagueId === leagueId && fixtureSeason === season;
   }
 
   private isFootballFixtureImportable(
@@ -1344,19 +1136,6 @@ export class SportsApiSyncService {
     const scheduledTime = new Date(match.fixture.date).getTime();
 
     return Number.isFinite(scheduledTime) && scheduledTime >= Date.now();
-  }
-
-  private isFootballFixtureToday(match: FootballMatch) {
-    const scheduledTime = new Date(match.fixture.date);
-
-    if (Number.isNaN(scheduledTime.getTime())) {
-      return false;
-    }
-
-    return (
-      this.formatVietnamDateKey(scheduledTime) ===
-      this.formatVietnamDateKey(new Date())
-    );
   }
 
   private async syncF1(adminId: number) {
@@ -2618,141 +2397,14 @@ export class SportsApiSyncService {
       const text = await response.text();
       if (response.status === 429) {
         throw new ApiRateLimitError(
-          'API-Football is rate-limited per minute. Please wait a few seconds, then import fewer competitions at once.',
+          'External sports API is rate-limited. Please wait a few seconds, then import fewer items at once.',
         );
       }
 
       throw new Error(`API request failed ${response.status}: ${text}`);
     }
 
-    const data = (await response.json()) as T;
-    this.assertNoApiFootballError(url, data);
-
-    return data;
-  }
-
-  private getApiSportsFootballKey() {
-    const credentials = this.getOptionalApiSportsFootballCredentials();
-
-    if (!credentials) {
-      throw new Error(
-        'FOOTBALL_DATA_API_KEY or FOOTBALL_API_SPORTS_KEY is not configured.',
-      );
-    }
-
-    this.logApiSportsFootballKeySource(credentials);
-
-    return credentials.key;
-  }
-
-  private getOptionalApiSportsFootballCredentials() {
-    const footballDataApiKey = process.env.FOOTBALL_DATA_API_KEY?.trim();
-    const apiSportsAliasKey = process.env.FOOTBALL_API_SPORTS_KEY?.trim();
-
-    if (
-      footballDataApiKey &&
-      apiSportsAliasKey &&
-      footballDataApiKey !== apiSportsAliasKey
-    ) {
-      this.logger.warn(
-        `Both FOOTBALL_DATA_API_KEY (${this.maskSecret(footballDataApiKey)}) and FOOTBALL_API_SPORTS_KEY (${this.maskSecret(apiSportsAliasKey)}) are configured. Using FOOTBALL_DATA_API_KEY.`,
-      );
-    }
-
-    if (footballDataApiKey) {
-      return { key: footballDataApiKey, source: 'FOOTBALL_DATA_API_KEY' };
-    }
-
-    if (apiSportsAliasKey) {
-      return { key: apiSportsAliasKey, source: 'FOOTBALL_API_SPORTS_KEY' };
-    }
-
-    return null;
-  }
-
-  private logApiSportsFootballKeySource(credentials: {
-    key: string;
-    source: string;
-  }) {
-    this.logger.log(
-      `Using ${credentials.source} for API-Football (${this.maskSecret(credentials.key)}).`,
-    );
-  }
-
-  private maskSecret(value: string) {
-    if (value.length <= 8) {
-      return '***';
-    }
-
-    return `${value.slice(0, 4)}...${value.slice(-4)}`;
-  }
-
-  private assertNoApiFootballError(url: string, data: unknown) {
-    if (!url.startsWith(FOOTBALL_API_BASE_URL) || !this.isRecord(data)) {
-      return;
-    }
-
-    const errors = data.errors;
-    const messages = this.toApiFootballErrorMessages(errors);
-
-    if (messages.length === 0) {
-      return;
-    }
-
-    const message = messages.join(' ');
-    const normalizedMessage = message.toLowerCase();
-
-    if (
-      normalizedMessage.includes('rate') ||
-      normalizedMessage.includes('quota') ||
-      normalizedMessage.includes('limit')
-    ) {
-      throw new ApiRateLimitError(
-        `API-Football limit reached: ${message}. Please wait, then try again.`,
-      );
-    }
-
-    throw new Error(
-      `API-Football rejected the request: ${message}. Check FOOTBALL_DATA_API_KEY or FOOTBALL_API_SPORTS_KEY in backend env.`,
-    );
-  }
-
-  private toApiFootballErrorMessages(errors: unknown): string[] {
-    if (!errors) {
-      return [];
-    }
-
-    if (typeof errors === 'string') {
-      return errors.trim() ? [errors.trim()] : [];
-    }
-
-    if (Array.isArray(errors)) {
-      return errors
-        .filter((error): error is string => typeof error === 'string')
-        .map((error) => error.trim())
-        .filter(Boolean);
-    }
-
-    if (!this.isRecord(errors)) {
-      return [];
-    }
-
-    return Object.values(errors)
-      .flatMap((value) => {
-        if (typeof value === 'string') {
-          return [value];
-        }
-
-        if (Array.isArray(value)) {
-          return value.filter(
-            (item): item is string => typeof item === 'string',
-          );
-        }
-
-        return [];
-      })
-      .map((message) => message.trim())
-      .filter(Boolean);
+    return (await response.json()) as T;
   }
 
   private async fetchOptionalJson<T>(
@@ -2766,37 +2418,31 @@ export class SportsApiSyncService {
     }
   }
 
-  private toFootballCompetitionOptions(
-    competition: FootballCompetition,
-  ): FootballCompetitionOption[] {
-    if (!competition.league?.id || !competition.league.name) {
-      return [];
-    }
+  private toFootballDataOrgCompetitionOption(
+    competition: (typeof FOOTBALL_DATA_ORG_IMPORT_COMPETITIONS)[number],
+  ): FootballCompetitionOption {
+    const season = this.getCurrentEuropeanFootballSeason();
+    const start = `${season}-08-01`;
+    const end = `${season + 1}-06-30`;
 
-    return (competition.seasons ?? [])
-      .filter((season) => Boolean(season.year))
-      .map((season) => ({
-        id: competition.league.id,
-        name: competition.league.name,
-        country: competition.country?.name || 'International',
-        season: season.year,
-        start: season.start ?? null,
-        end: season.end ?? null,
-        current: Boolean(season.current),
-        type: competition.league.type || 'League',
-      }));
+    return {
+      id: competition.id,
+      name: competition.name,
+      country: competition.country,
+      season,
+      start,
+      end,
+      current: this.mapTournamentStatusFromDates(start, end) === 'ACTIVE',
+      type: competition.type,
+    };
   }
 
-  private isCompetitionImportable(option: FootballCompetitionOption) {
+  private getCurrentEuropeanFootballSeason() {
     const now = new Date();
-    const start = option.start ? new Date(option.start) : null;
-    const end = option.end ? new Date(option.end) : null;
+    const year = now.getUTCFullYear();
+    const month = now.getUTCMonth();
 
-    if (end && end < now) {
-      return false;
-    }
-
-    return Boolean(start || end);
+    return month >= 6 ? year : year - 1;
   }
 
   private getCompetitionPhasePriority(option: FootballCompetitionOption) {
@@ -2867,10 +2513,6 @@ export class SportsApiSyncService {
     }
 
     return 1;
-  }
-
-  private formatApiDate(date: Date) {
-    return this.formatVietnamDateKey(date);
   }
 
   private formatVietnamDateKey(date: Date) {
