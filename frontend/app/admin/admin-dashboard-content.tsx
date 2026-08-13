@@ -804,6 +804,7 @@ export default function AdminDashboardContent({
           onUnavailableFeature={() =>
             showNotice("this feature not available", "info")
           }
+          canManage={isAdmin}
           onOpenStageMatches={(stage) =>
             onOpenMatches?.({
               tournamentId: selectedTournament.id,

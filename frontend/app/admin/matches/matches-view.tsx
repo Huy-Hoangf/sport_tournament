@@ -29,9 +29,11 @@ export type MatchesInitialFilter = {
 
 export default function MatchesView({
   initialFilter,
+  canManage,
   onUnavailableFeature,
 }: {
   initialFilter?: MatchesInitialFilter;
+  canManage: boolean;
   onUnavailableFeature: () => void;
 }) {
   const [matches, setMatches] = useState<MatchRow[]>([]);
@@ -104,13 +106,15 @@ export default function MatchesView({
             </p>
           )}
         </div>
-        <button
-          type="button"
-          onClick={onUnavailableFeature}
-          className="h-12 rounded bg-[#84d8e8] px-6 font-black text-[#06161b]"
-        >
-          + Add Match
-        </button>
+        {canManage && (
+          <button
+            type="button"
+            onClick={onUnavailableFeature}
+            className="h-12 rounded bg-[#84d8e8] px-6 font-black text-[#06161b]"
+          >
+            + Add Match
+          </button>
+        )}
       </div>
 
       <section className="mb-5 grid gap-3 xl:grid-cols-[minmax(280px,1fr)_180px_180px]">
@@ -153,7 +157,7 @@ export default function MatchesView({
           <span>Time</span>
           <span>Status</span>
           <span>Score</span>
-          <span>Action</span>
+          <span>{canManage ? "Action" : "Source"}</span>
         </div>
         <div className="divide-y divide-[#243c43]">
           {filteredMatches.map((match) => (
@@ -177,22 +181,26 @@ export default function MatchesView({
               <p className="font-black text-white">{formatScore(match)}</p>
               <div className="flex items-center gap-2">
                 <DashboardSourceBadge source={match.source} />
-                <button
-                  type="button"
-                  onClick={onUnavailableFeature}
-                  title="Edit match"
-                  className="grid h-9 w-9 place-items-center border border-[#3a4d54] text-[#84d8e8] hover:border-[#84d8e8]"
-                >
-                  <Pencil size={15} />
-                </button>
-                <button
-                  type="button"
-                  onClick={onUnavailableFeature}
-                  title="Delete match"
-                  className="grid h-9 w-9 place-items-center border border-[#3a4d54] text-[#ff8a8a] hover:border-[#ff8a8a]"
-                >
-                  <Trash2 size={15} />
-                </button>
+                {canManage && (
+                  <>
+                    <button
+                      type="button"
+                      onClick={onUnavailableFeature}
+                      title="Edit match"
+                      className="grid h-9 w-9 place-items-center border border-[#3a4d54] text-[#84d8e8] hover:border-[#84d8e8]"
+                    >
+                      <Pencil size={15} />
+                    </button>
+                    <button
+                      type="button"
+                      onClick={onUnavailableFeature}
+                      title="Delete match"
+                      className="grid h-9 w-9 place-items-center border border-[#3a4d54] text-[#ff8a8a] hover:border-[#ff8a8a]"
+                    >
+                      <Trash2 size={15} />
+                    </button>
+                  </>
+                )}
               </div>
             </article>
           ))}

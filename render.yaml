@@ -26,6 +26,8 @@
         sync: false
       - key: FOOTBALL_DATA_API_KEY
         sync: false
+      - key: FOOTBALL_API_SPORTS_KEY
+        sync: false
       - key: FOOTBALL_DATA_ORG_API_KEY
         sync: false
       - key: THESPORTSDB_API_KEY

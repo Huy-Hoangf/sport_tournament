@@ -53,7 +53,13 @@ const defaultRules: ScoringRule[] = [
   },
 ];
 
-export function ScoringRulesView({ tournament }: { tournament: TournamentRow }) {
+export function ScoringRulesView({
+  tournament,
+  canManage,
+}: {
+  tournament: TournamentRow;
+  canManage: boolean;
+}) {
   const [rules, setRules] = useState(defaultRules);
   const [query, setQuery] = useState("");
   const [category, setCategory] = useState("ALL");
@@ -129,6 +135,8 @@ export function ScoringRulesView({ tournament }: { tournament: TournamentRow }) 
   });
 
   function addRule() {
+    if (!canManage) return;
+
     const id = `custom-${Date.now()}`;
     const newRule = {
       id,
@@ -152,6 +160,8 @@ export function ScoringRulesView({ tournament }: { tournament: TournamentRow }) 
   }
 
   function removeRule(id: string) {
+    if (!canManage) return;
+
     setRules((current) => current.filter((rule) => rule.id !== id));
     if (editingId === id) {
       setEditingId(null);
@@ -177,6 +187,8 @@ export function ScoringRulesView({ tournament }: { tournament: TournamentRow }) 
   }
 
   function startEditing(rule: ScoringRule) {
+    if (!canManage) return;
+
     setEditingId(rule.id);
     setRuleDraft({
       category: rule.category,
@@ -197,6 +209,8 @@ export function ScoringRulesView({ tournament }: { tournament: TournamentRow }) 
   }
 
   function saveRuleDetails(id: string) {
+    if (!canManage) return;
+
     setRules((current) =>
       current.map((rule) =>
         rule.id === id
@@ -217,6 +231,8 @@ export function ScoringRulesView({ tournament }: { tournament: TournamentRow }) 
   }
 
   function importRules(event: ChangeEvent<HTMLInputElement>) {
+    if (!canManage) return;
+
     const file = event.target.files?.[0];
     if (!file) return;
 
@@ -245,6 +261,8 @@ export function ScoringRulesView({ tournament }: { tournament: TournamentRow }) 
   }
 
   async function saveRules() {
+    if (!canManage) return;
+
     setIsSaving(true);
 
     try {
@@ -299,30 +317,38 @@ export function ScoringRulesView({ tournament }: { tournament: TournamentRow }) 
           <h4 className="mt-3 text-3xl font-black text-white">Scoring Configuration</h4>
           <p className="mt-2 text-sm text-[#9fb2b8]">Manage points distribution and prediction rules for this tournament.</p>
         </div>
-        <div className="flex flex-wrap gap-3">
-          <button type="button" onClick={() => setImportMessage("Version history will be connected to the API next.")} className="inline-flex items-center gap-2 border border-[#3a4d54] bg-[#0d252d] px-4 py-3 text-[11px] font-black uppercase tracking-[0.1em] text-[#dce8eb] hover:border-[#84d8e8]">
-            <History size={15} /> Version History
-          </button>
-          <button type="button" onClick={() => void saveRules()} disabled={isSaving || isLoading} className="inline-flex items-center gap-2 border border-[#84d8e8] bg-[#84d8e8] px-4 py-3 text-[11px] font-black uppercase tracking-[0.1em] text-[#06161b] hover:bg-[#a5e5f0] disabled:cursor-not-allowed disabled:opacity-60">
-            <Check size={15} /> {isSaving ? "Saving..." : saved ? "Saved" : "Save Changes"}
-          </button>
-        </div>
+        {canManage ? (
+          <div className="flex flex-wrap gap-3">
+            <button type="button" onClick={() => setImportMessage("Version history will be connected to the API next.")} className="inline-flex items-center gap-2 border border-[#3a4d54] bg-[#0d252d] px-4 py-3 text-[11px] font-black uppercase tracking-[0.1em] text-[#dce8eb] hover:border-[#84d8e8]">
+              <History size={15} /> Version History
+            </button>
+            <button type="button" onClick={() => void saveRules()} disabled={isSaving || isLoading} className="inline-flex items-center gap-2 border border-[#84d8e8] bg-[#84d8e8] px-4 py-3 text-[11px] font-black uppercase tracking-[0.1em] text-[#06161b] hover:bg-[#a5e5f0] disabled:cursor-not-allowed disabled:opacity-60">
+              <Check size={15} /> {isSaving ? "Saving..." : saved ? "Saved" : "Save Changes"}
+            </button>
+          </div>
+        ) : (
+          <span className="border border-[#3a4d54] bg-[#0d252d] px-4 py-3 text-[11px] font-black uppercase tracking-[0.1em] text-[#789098]">
+            View Only
+          </span>
+        )}
       </div>
 
-      <div className="grid gap-5 lg:grid-cols-[270px_minmax(0,1fr)]">
-        <section className="border border-[#3a4d54] bg-[#0d252d] p-4">
-          <p className="flex items-center gap-2 text-[11px] font-black uppercase tracking-[0.12em] text-[#dce8eb]"><Upload size={15} /> Import Rules</p>
-          <button type="button" onClick={() => fileInputRef.current?.click()} className="mt-4 flex min-h-44 w-full flex-col items-center justify-center border border-dashed border-[#3a4d54] bg-[#07181d] px-4 text-center hover:border-[#84d8e8]">
-            <span className="mb-3 grid h-11 w-11 place-items-center rounded-lg bg-[#203841] text-[#84d8e8]"><FileJson size={21} /></span>
-            <span className="text-sm font-black text-[#dce8eb]">Drag &amp; Drop Config File</span>
-            <span className="mt-2 text-xs text-[#789098]">Supports .json for easy rule mapping</span>
-            <span className="mt-4 border border-[#3a4d54] px-3 py-2 text-[10px] font-black uppercase tracking-[0.1em] text-[#84d8e8]">Browse Files</span>
-          </button>
-          <input ref={fileInputRef} onChange={importRules} type="file" accept=".json,application/json" className="hidden" />
-          <div className="mt-4 border border-[#243c43] bg-[#10242b] px-3 py-3 text-xs text-[#9fb2b8]">
-            <span className="font-black text-[#dce8eb]">Last imported:</span> {importMessage || "No file imported yet"}
-          </div>
-        </section>
+      <div className={`grid gap-5 ${canManage ? "lg:grid-cols-[270px_minmax(0,1fr)]" : ""}`}>
+        {canManage && (
+          <section className="border border-[#3a4d54] bg-[#0d252d] p-4">
+            <p className="flex items-center gap-2 text-[11px] font-black uppercase tracking-[0.12em] text-[#dce8eb]"><Upload size={15} /> Import Rules</p>
+            <button type="button" onClick={() => fileInputRef.current?.click()} className="mt-4 flex min-h-44 w-full flex-col items-center justify-center border border-dashed border-[#3a4d54] bg-[#07181d] px-4 text-center hover:border-[#84d8e8]">
+              <span className="mb-3 grid h-11 w-11 place-items-center rounded-lg bg-[#203841] text-[#84d8e8]"><FileJson size={21} /></span>
+              <span className="text-sm font-black text-[#dce8eb]">Drag &amp; Drop Config File</span>
+              <span className="mt-2 text-xs text-[#789098]">Supports .json for easy rule mapping</span>
+              <span className="mt-4 border border-[#3a4d54] px-3 py-2 text-[10px] font-black uppercase tracking-[0.1em] text-[#84d8e8]">Browse Files</span>
+            </button>
+            <input ref={fileInputRef} onChange={importRules} type="file" accept=".json,application/json" className="hidden" />
+            <div className="mt-4 border border-[#243c43] bg-[#10242b] px-3 py-3 text-xs text-[#9fb2b8]">
+              <span className="font-black text-[#dce8eb]">Last imported:</span> {importMessage || "No file imported yet"}
+            </div>
+          </section>
+        )}
 
         <section className="border border-[#3a4d54] bg-[#0d252d] p-4 sm:p-5">
           <div className="flex flex-wrap items-center justify-between gap-3 border-b border-[#3a4d54] pb-4">
@@ -339,7 +365,9 @@ export function ScoringRulesView({ tournament }: { tournament: TournamentRow }) 
                 ariaLabel="Filter rule category"
                 className="h-9 min-w-[118px]"
               />
-              <button type="button" onClick={addRule} aria-label="Add scoring rule" title="Add scoring rule" className="grid h-9 w-9 place-items-center border border-[#3a4d54] text-[#84d8e8] hover:border-[#84d8e8]"><Plus size={16} /></button>
+              {canManage && (
+                <button type="button" onClick={addRule} aria-label="Add scoring rule" title="Add scoring rule" className="grid h-9 w-9 place-items-center border border-[#3a4d54] text-[#84d8e8] hover:border-[#84d8e8]"><Plus size={16} /></button>
+              )}
             </div>
           </div>
           <div className="mt-4 space-y-3">
@@ -349,7 +377,7 @@ export function ScoringRulesView({ tournament }: { tournament: TournamentRow }) 
               </p>
             )}
             {!isLoading && visibleRules.map((rule) => {
-              const isEditing = editingId === rule.id;
+              const isEditing = canManage && editingId === rule.id;
 
               return (
                 <article
@@ -432,7 +460,8 @@ export function ScoringRulesView({ tournament }: { tournament: TournamentRow }) 
                     </label>
                   </div>
 
-                  <div className="flex flex-wrap items-center justify-between gap-2 border-t border-[#243c43] px-4 py-3 sm:px-5">
+                  {canManage && (
+                    <div className="flex flex-wrap items-center justify-between gap-2 border-t border-[#243c43] px-4 py-3 sm:px-5">
                     <p className="text-[11px] font-bold text-[#789098]">
                       {isEditing ? "Editing title and content" : "Ready to edit"}
                     </p>
@@ -474,7 +503,8 @@ export function ScoringRulesView({ tournament }: { tournament: TournamentRow }) 
                         <Trash2 size={15} />
                       </button>
                     </div>
-                  </div>
+                    </div>
+                  )}
                 </article>
               );
             })}

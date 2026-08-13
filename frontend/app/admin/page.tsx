@@ -488,8 +488,8 @@ export default function AdminPage() {
   }
 
   function openDeleteAllPlayersConfirmation() {
-    if (!isAdmin) {
-      showNotice("Only admin can delete players.");
+    if (!isSuperAdmin) {
+      showNotice("Only super admin can delete all players.");
       return;
     }
 
@@ -504,8 +504,8 @@ export default function AdminPage() {
   }
 
   async function deleteAllPlayers() {
-    if (!isAdmin) {
-      showNotice("Only admin can delete players.");
+    if (!isSuperAdmin) {
+      showNotice("Only super admin can delete all players.");
       return;
     }
 
@@ -844,6 +844,7 @@ export default function AdminPage() {
         ) : activeView === "matches" ? (
           <MatchesView
             initialFilter={matchesInitialFilter}
+            canManage={isAdmin}
             onUnavailableFeature={() => showNotice("this feature is not ready")}
           />
         ) : (
@@ -880,14 +881,16 @@ export default function AdminPage() {
                 <UserPlus size={27} />
                 Add Player From List
               </button>
-              <button
-                onClick={openDeleteAllPlayersConfirmation}
-                disabled={isLoading}
-                className="flex h-[56px] items-center justify-center gap-3 rounded border border-[#ff6b6b99] bg-[#35171b] px-5 text-base font-black text-[#ff8a8a] transition hover:border-[#ff6b6b] hover:bg-[#421b20] disabled:opacity-60 sm:h-[62px] sm:px-6 sm:text-lg"
-              >
-                <Trash2 size={24} />
-                Delete All Players
-              </button>
+              {isSuperAdmin && (
+                <button
+                  onClick={openDeleteAllPlayersConfirmation}
+                  disabled={isLoading}
+                  className="flex h-[56px] items-center justify-center gap-3 rounded border border-[#ff6b6b99] bg-[#35171b] px-5 text-base font-black text-[#ff8a8a] transition hover:border-[#ff6b6b] hover:bg-[#421b20] disabled:opacity-60 sm:h-[62px] sm:px-6 sm:text-lg"
+                >
+                  <Trash2 size={24} />
+                  Delete All Players
+                </button>
+              )}
             </div>
           </div>
 
@@ -1634,7 +1637,7 @@ export default function AdminPage() {
         </Modal>
       )}
 
-      {openModal === "deleteAllPlayers" && (
+      {isSuperAdmin && openModal === "deleteAllPlayers" && (
         <Modal title="Delete All Players" tone="danger">
           <p className="text-base font-bold text-white">
             Do you want to delete all players?
