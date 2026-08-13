@@ -21,6 +21,7 @@ type DashboardTournamentRow = {
   id: string | number;
   name: string;
   sportType: string;
+  format: string | null;
   status: string;
   visibility: TournamentVisibility | null;
   teams: string | number | null;
@@ -141,6 +142,7 @@ export class DashboardService {
         id: Number(row.id),
         name: row.name,
         sportType: row.sportType,
+        format: row.format ?? 'ROUND_ROBIN',
         status: row.status,
         teams: Number(row.teams ?? 0),
         matches: Number(row.matches ?? 0),
@@ -288,6 +290,7 @@ export class DashboardService {
         t.id,
         t.name,
         t.sport_type AS "sportType",
+        t.format,
         t.status,
         t.visibility,
         COUNT(DISTINCT team.id) AS teams,
@@ -304,7 +307,7 @@ export class DashboardService {
       LEFT JOIN matches m ON ${matchJoinCondition}
       LEFT JOIN stages s ON s.tournament_id = t.id
       ${whereClause}
-      GROUP BY t.id, t.name, t.sport_type, t.status, t.visibility, t.updated_at, t.created_at
+      GROUP BY t.id, t.name, t.sport_type, t.format, t.status, t.visibility, t.updated_at, t.created_at
       ORDER BY
         CASE t.status
           WHEN 'ACTIVE' THEN 0
