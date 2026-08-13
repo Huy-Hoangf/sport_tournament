@@ -115,18 +115,23 @@ export function DashboardPanelTitle({
 
 export function MatchTeams({ match }: { match: MatchRow }) {
   const score = formatScore(match);
+  const homeName = match.homeName ?? "TBD";
+  const awayName = match.awayName ?? "TBD";
 
   return (
-    <div className="grid min-w-0 grid-cols-[minmax(0,1fr)_auto_minmax(0,1fr)] items-center gap-3 font-black text-white">
-      <div className="flex min-w-0 items-center gap-2">
+    <div className="grid min-w-0 grid-cols-[minmax(0,1fr)_54px_minmax(0,1fr)] items-center gap-3 font-black text-white">
+      <div className="flex min-w-0 items-center gap-2 overflow-hidden">
         <TeamLogo
           name={match.homeName ?? "Home team"}
           src={match.homeLogoUrl}
         />
-        <span className="min-w-0 truncate">{match.homeName ?? "TBD"}</span>
+        <span title={homeName} className="min-w-0 truncate whitespace-nowrap">
+          {homeName}
+        </span>
       </div>
       <span
-        className={`shrink-0 rounded-sm px-2 py-1 text-xs uppercase ${
+        title={score === "-" ? "Versus" : score}
+        className={`flex h-7 w-[54px] shrink-0 items-center justify-center rounded-sm px-2 py-1 text-center text-xs uppercase tabular-nums ${
           score === "-"
             ? "text-[#84d8e8]"
             : "bg-[#183229] text-[#a7e8c0]"
@@ -134,8 +139,10 @@ export function MatchTeams({ match }: { match: MatchRow }) {
       >
         {score === "-" ? "vs" : score}
       </span>
-      <div className="flex min-w-0 items-center justify-end gap-2 text-right">
-        <span className="min-w-0 truncate">{match.awayName ?? "TBD"}</span>
+      <div className="flex min-w-0 items-center justify-end gap-2 overflow-hidden text-right">
+        <span title={awayName} className="min-w-0 truncate whitespace-nowrap">
+          {awayName}
+        </span>
         <TeamLogo
           name={match.awayName ?? "Away team"}
           src={match.awayLogoUrl}
@@ -180,7 +187,7 @@ export function DashboardStatusBadge({ status }: { status: string }) {
 
   return (
     <span
-      className={`inline-flex h-[27px] items-center px-3 text-xs font-black uppercase ${className}`}
+      className={`inline-flex h-[27px] items-center whitespace-nowrap px-3 text-xs font-black uppercase ${className}`}
     >
       {normalized}
     </span>
@@ -188,9 +195,14 @@ export function DashboardStatusBadge({ status }: { status: string }) {
 }
 
 export function DashboardSourceBadge({ source }: { source: string }) {
+  const label = source || "MANUAL";
+
   return (
-    <span className="inline-flex max-w-full items-center rounded-sm bg-[#203940] px-2 py-1 text-xs font-black uppercase text-[#dce8eb]">
-      {source || "MANUAL"}
+    <span
+      title={label}
+      className="inline-flex max-w-full items-center truncate whitespace-nowrap rounded-sm bg-[#203940] px-2 py-1 text-xs font-black uppercase text-[#dce8eb]"
+    >
+      {label}
     </span>
   );
 }

@@ -3,6 +3,8 @@
 import { useEffect, useMemo, useState } from "react";
 import {
   CalendarDays,
+  ChevronLeft,
+  ChevronRight,
   Pencil,
   Search,
   Trash2,
@@ -19,6 +21,8 @@ import {
 } from "../shared/dashboard-ui";
 import type { MatchRow } from "../tournament/types";
 import { formatDateTime, formatScore, isFinishedStatus } from "../tournament/utils";
+
+const MATCHES_PAGE_SIZE = 8;
 
 export type MatchesInitialFilter = {
   tournamentId?: number;
@@ -39,24 +43,57 @@ export default function MatchesView({
   const [matches, setMatches] = useState<MatchRow[]>([]);
   const [query, setQuery] = useState("");
   const [status, setStatus] = useState("ALL");
+  const [currentPage, setCurrentPage] = useState(1);
   const [isLoading, setIsLoading] = useState(true);
   const [notice, setNotice] = useState("");
 
   const filteredMatches = useMemo(() => {
     const keyword = query.trim().toLowerCase();
 
-    return matches.filter((match) => {
-      const matchesStatus =
-        status === "ALL" || match.status.toUpperCase() === status;
-      const matchesQuery =
-        !keyword ||
-        `${match.homeName} ${match.awayName} ${match.tournamentName} ${match.stageName}`
-          .toLowerCase()
-          .includes(keyword);
+    return matches
+      .filter((match) => {
+        const matchesStatus =
+          status === "ALL" || match.status.toUpperCase() === status;
+        const matchesQuery =
+          !keyword ||
+          `${match.homeName} ${match.awayName} ${match.tournamentName} ${match.stageName}`
+            .toLowerCase()
+            .includes(keyword);
 
-      return matchesStatus && matchesQuery;
-    });
+        return matchesStatus && matchesQuery;
+      })
+      .sort((first, second) => {
+        const firstTime = new Date(first.scheduledTime).getTime();
+        const secondTime = new Date(second.scheduledTime).getTime();
+
+        if (!Number.isFinite(firstTime) && !Number.isFinite(secondTime)) {
+          return first.id - second.id;
+        }
+
+        if (!Number.isFinite(firstTime)) {
+          return 1;
+        }
+
+        if (!Number.isFinite(secondTime)) {
+          return -1;
+        }
+
+        return firstTime - secondTime;
+      });
   }, [matches, query, status]);
+  const totalPages = Math.max(1, Math.ceil(filteredMatches.length / MATCHES_PAGE_SIZE));
+  const activePage = Math.min(currentPage, totalPages);
+  const firstVisibleIndex = (activePage - 1) * MATCHES_PAGE_SIZE;
+  const visibleMatches = filteredMatches.slice(
+    firstVisibleIndex,
+    firstVisibleIndex + MATCHES_PAGE_SIZE,
+  );
+  const visibleRangeStart =
+    filteredMatches.length === 0 ? 0 : firstVisibleIndex + 1;
+  const visibleRangeEnd = Math.min(
+    firstVisibleIndex + MATCHES_PAGE_SIZE,
+    filteredMatches.length,
+  );
 
   const todayCount = matches.filter((match) => {
     const matchDate = new Date(match.scheduledTime);
@@ -84,6 +121,7 @@ export default function MatchesView({
     apiRequest<MatchRow[]>(`/matches${params.size ? `?${params}` : ""}`)
       .then((data) => {
         setMatches(data);
+        setCurrentPage(1);
         setNotice("");
       })
       .catch((error) => {
@@ -122,14 +160,20 @@ export default function MatchesView({
           <Search size={18} className="shrink-0 text-[#84d8e8]" />
           <input
             value={query}
-            onChange={(event) => setQuery(event.target.value)}
+            onChange={(event) => {
+              setQuery(event.target.value);
+              setCurrentPage(1);
+            }}
             placeholder="Search team or tournament..."
             className="h-full min-w-0 flex-1 bg-transparent text-sm font-bold text-white outline-none placeholder:text-[#789098]"
           />
         </label>
         <AdminSelect
           value={status}
-          onChange={setStatus}
+          onChange={(nextStatus) => {
+            setStatus(nextStatus);
+            setCurrentPage(1);
+          }}
           options={[
             { value: "ALL", label: "All Status" },
             { value: "PENDING", label: "Pending" },
@@ -151,7 +195,7 @@ export default function MatchesView({
       </section>
 
       <section className="overflow-hidden rounded border border-[#3a4d54] bg-[#0d252d]">
-        <div className="hidden grid-cols-[minmax(260px,1.35fr)_minmax(180px,0.8fr)_180px_120px_120px_110px] border-b border-[#3a4d54] bg-[#14272e] px-5 py-4 text-xs font-black uppercase tracking-[0.08em] text-[#84d8e8] lg:grid">
+        <div className="hidden grid-cols-[minmax(340px,1.45fr)_minmax(190px,0.85fr)_180px_112px_92px_150px] border-b border-[#3a4d54] bg-[#14272e] px-5 py-4 text-xs font-black uppercase tracking-[0.08em] text-[#84d8e8] xl:grid">
           <span>Match</span>
           <span>Tournament</span>
           <span>Time</span>
@@ -160,12 +204,14 @@ export default function MatchesView({
           <span>{canManage ? "Action" : "Source"}</span>
         </div>
         <div className="divide-y divide-[#243c43]">
-          {filteredMatches.map((match) => (
+          {visibleMatches.map((match) => (
             <article
               key={match.id}
-              className="grid gap-4 px-5 py-5 text-sm lg:grid-cols-[minmax(260px,1.35fr)_minmax(180px,0.8fr)_180px_120px_120px_110px] lg:items-center"
+              className="grid min-w-0 gap-4 px-5 py-5 text-sm xl:grid-cols-[minmax(340px,1.45fr)_minmax(190px,0.85fr)_180px_112px_92px_150px] xl:items-center"
             >
-              <MatchTeams match={match} />
+              <div className="min-w-0">
+                <MatchTeams match={match} />
+              </div>
               <div className="min-w-0">
                 <p className="truncate font-black text-white">
                   {match.tournamentName}
@@ -174,20 +220,24 @@ export default function MatchesView({
                   {match.stageName ?? "Stage TBD"}
                 </p>
               </div>
-              <p className="font-bold text-[#dce8eb]">
+              <p className="truncate whitespace-nowrap font-bold text-[#dce8eb]">
                 {formatDateTime(match.scheduledTime)}
               </p>
-              <DashboardStatusBadge status={match.status} />
-              <p className="font-black text-white">{formatScore(match)}</p>
-              <div className="flex items-center gap-2">
-                <DashboardSourceBadge source={match.source} />
+              <div className="flex min-w-0">
+                <DashboardStatusBadge status={match.status} />
+              </div>
+              <p className="truncate whitespace-nowrap font-black text-white">{formatScore(match)}</p>
+              <div className="flex min-w-0 items-center gap-2">
+                <div className="min-w-0 flex-1">
+                  <DashboardSourceBadge source={match.source} />
+                </div>
                 {canManage && (
                   <>
                     <button
                       type="button"
                       onClick={onUnavailableFeature}
                       title="Edit match"
-                      className="grid h-9 w-9 place-items-center border border-[#3a4d54] text-[#84d8e8] hover:border-[#84d8e8]"
+                      className="grid h-9 w-9 shrink-0 place-items-center rounded border border-[#3a4d54] bg-[#102d35] text-[#84d8e8] transition hover:border-[#84d8e8] hover:bg-[#143943] focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-[#84d8e8]"
                     >
                       <Pencil size={15} />
                     </button>
@@ -195,7 +245,7 @@ export default function MatchesView({
                       type="button"
                       onClick={onUnavailableFeature}
                       title="Delete match"
-                      className="grid h-9 w-9 place-items-center border border-[#3a4d54] text-[#ff8a8a] hover:border-[#ff8a8a]"
+                      className="grid h-9 w-9 shrink-0 place-items-center rounded border border-[#5d3037] bg-[#2a1115] text-[#ff8a8a] transition hover:border-[#ff8a8a] hover:bg-[#35171b] focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-[#ff8a8a]"
                     >
                       <Trash2 size={15} />
                     </button>
@@ -215,6 +265,39 @@ export default function MatchesView({
             </p>
           )}
         </div>
+        {!isLoading && filteredMatches.length > 0 && (
+          <div className="flex flex-col gap-3 border-t border-[#3a4d54] bg-[#14272e] px-5 py-4 text-xs font-black uppercase tracking-[0.08em] text-[#9fb2b8] sm:flex-row sm:items-center sm:justify-between">
+            <span className="whitespace-nowrap">
+              Showing {visibleRangeStart}-{visibleRangeEnd} of{" "}
+              {filteredMatches.length}
+            </span>
+            <div className="flex items-center gap-2">
+              <button
+                type="button"
+                onClick={() => setCurrentPage((page) => Math.max(1, page - 1))}
+                disabled={activePage === 1}
+                className="grid h-9 w-9 place-items-center rounded border border-[#3a4d54] text-[#84d8e8] transition hover:border-[#84d8e8] disabled:cursor-not-allowed disabled:opacity-40"
+                aria-label="Previous matches page"
+              >
+                <ChevronLeft size={16} />
+              </button>
+              <span className="flex h-9 min-w-[82px] items-center justify-center rounded border border-[#243c43] bg-[#06161b] text-[#dce8eb]">
+                {activePage} / {totalPages}
+              </span>
+              <button
+                type="button"
+                onClick={() =>
+                  setCurrentPage((page) => Math.min(totalPages, page + 1))
+                }
+                disabled={activePage === totalPages}
+                className="grid h-9 w-9 place-items-center rounded border border-[#3a4d54] text-[#84d8e8] transition hover:border-[#84d8e8] disabled:cursor-not-allowed disabled:opacity-40"
+                aria-label="Next matches page"
+              >
+                <ChevronRight size={16} />
+              </button>
+            </div>
+          </div>
+        )}
       </section>
       {notice && <p className="mt-4 text-sm font-bold text-[#ff8a8a]">{notice}</p>}
     </div>
