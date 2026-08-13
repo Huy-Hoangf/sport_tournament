@@ -1,4 +1,4 @@
-import { Injectable } from '@nestjs/common';
+import { Injectable, Logger } from '@nestjs/common';
 import { InjectRepository } from '@nestjs/typeorm';
 import { Repository } from 'typeorm';
 import { User } from '../users/user.entity';
@@ -248,6 +248,7 @@ type LolScheduleSnapshot = {
 
 @Injectable()
 export class SportsApiSyncService {
+  private readonly logger = new Logger(SportsApiSyncService.name);
   private lolScheduleCache: {
     expiresAt: number;
     snapshot: LolScheduleSnapshot;
@@ -784,11 +785,9 @@ export class SportsApiSyncService {
   }
 
   private async syncFootball(adminId: number) {
-    const apiKey =
-      process.env.FOOTBALL_API_SPORTS_KEY?.trim() ||
-      process.env.FOOTBALL_DATA_API_KEY?.trim();
+    const credentials = this.getOptionalApiSportsFootballCredentials();
 
-    if (!apiKey) {
+    if (!credentials) {
       return {
         competitions: 0,
         matches: 0,
@@ -797,7 +796,9 @@ export class SportsApiSyncService {
       };
     }
 
-    const headers = { 'x-apisports-key': apiKey };
+    this.logApiSportsFootballKeySource(credentials);
+
+    const headers = { 'x-apisports-key': credentials.key };
     const today = this.formatApiDate(new Date());
     const [liveMatchesResponse, todayMatchesResponse] = await Promise.all([
       this.fetchJson<{ response?: FootballMatch[] }>(
@@ -2631,17 +2632,59 @@ export class SportsApiSyncService {
   }
 
   private getApiSportsFootballKey() {
-    const apiKey =
-      process.env.FOOTBALL_API_SPORTS_KEY?.trim() ||
-      process.env.FOOTBALL_DATA_API_KEY?.trim();
+    const credentials = this.getOptionalApiSportsFootballCredentials();
 
-    if (!apiKey) {
+    if (!credentials) {
       throw new Error(
         'FOOTBALL_DATA_API_KEY or FOOTBALL_API_SPORTS_KEY is not configured.',
       );
     }
 
-    return apiKey;
+    this.logApiSportsFootballKeySource(credentials);
+
+    return credentials.key;
+  }
+
+  private getOptionalApiSportsFootballCredentials() {
+    const footballDataApiKey = process.env.FOOTBALL_DATA_API_KEY?.trim();
+    const apiSportsAliasKey = process.env.FOOTBALL_API_SPORTS_KEY?.trim();
+
+    if (
+      footballDataApiKey &&
+      apiSportsAliasKey &&
+      footballDataApiKey !== apiSportsAliasKey
+    ) {
+      this.logger.warn(
+        `Both FOOTBALL_DATA_API_KEY (${this.maskSecret(footballDataApiKey)}) and FOOTBALL_API_SPORTS_KEY (${this.maskSecret(apiSportsAliasKey)}) are configured. Using FOOTBALL_DATA_API_KEY.`,
+      );
+    }
+
+    if (footballDataApiKey) {
+      return { key: footballDataApiKey, source: 'FOOTBALL_DATA_API_KEY' };
+    }
+
+    if (apiSportsAliasKey) {
+      return { key: apiSportsAliasKey, source: 'FOOTBALL_API_SPORTS_KEY' };
+    }
+
+    return null;
+  }
+
+  private logApiSportsFootballKeySource(credentials: {
+    key: string;
+    source: string;
+  }) {
+    this.logger.log(
+      `Using ${credentials.source} for API-Football (${this.maskSecret(credentials.key)}).`,
+    );
+  }
+
+  private maskSecret(value: string) {
+    if (value.length <= 8) {
+      return '***';
+    }
+
+    return `${value.slice(0, 4)}...${value.slice(-4)}`;
   }
 
   private assertNoApiFootballError(url: string, data: unknown) {
