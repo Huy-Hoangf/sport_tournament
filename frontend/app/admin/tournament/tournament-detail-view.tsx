@@ -324,17 +324,10 @@ function PredictionAnalyticsView({
   matches: MatchRow[];
 }) {
   const [playerSearch, setPlayerSearch] = useState("");
-  const [tournamentFilter, setTournamentFilter] = useState(String(tournament.id));
   const [stageFilter, setStageFilter] = useState("GROUP_STAGE");
   const [pointFilter, setPointFilter] = useState("ALL");
   const [statusFilter, setStatusFilter] = useState("ALL");
   const predictionRows = buildPredictionRows(matches);
-  const tournamentOptions = [
-    {
-      value: String(tournament.id),
-      label: tournament.name,
-    },
-  ];
   const stageOptions = [
     { value: "GROUP_STAGE", label: "Group Stage" },
     { value: "KNOCKOUT", label: "Knockout" },
@@ -417,17 +410,7 @@ function PredictionAnalyticsView({
 
       <section className="mt-6 overflow-hidden border border-[#243c43] bg-[#0d252d]">
         <div className="border-b border-[#243c43] bg-[#07181d] px-4 py-4 sm:px-5">
-          <div className="grid gap-3 xl:grid-cols-[minmax(170px,1fr)_minmax(170px,1fr)_minmax(170px,1fr)_minmax(170px,1fr)_minmax(220px,1.1fr)]">
-            <PredictionFilterField label="Tournament">
-              <AdminSelect
-                value={tournamentFilter}
-                onChange={setTournamentFilter}
-                options={tournamentOptions}
-                ariaLabel="Filter prediction tournament"
-                size="compact"
-                className="h-10"
-              />
-            </PredictionFilterField>
+          <div className="grid gap-3 lg:grid-cols-[minmax(170px,1fr)_minmax(170px,1fr)_minmax(170px,1fr)_minmax(220px,1.2fr)]">
             <PredictionFilterField label="Stage">
               <AdminSelect
                 value={stageFilter}
