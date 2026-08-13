@@ -120,7 +120,7 @@ export function TournamentDetailView({
           </p>
         </div>
 
-        <div className="grid gap-5 lg:grid-cols-[minmax(0,1fr)_200px] lg:items-start">
+        <div className="grid gap-5 lg:grid-cols-[minmax(300px,0.85fr)_minmax(420px,1.35fr)_200px] lg:items-start">
           <div className="min-w-0">
             <div className="flex flex-wrap items-center gap-3">
               <span className="inline-flex items-center gap-2 border-l-4 border-[#84d8e8] bg-[#14272e] px-4 py-2 text-xs font-black uppercase tracking-[0.08em] text-[#dce8eb] shadow-[0_0_24px_rgba(132,216,232,0.12)]">
@@ -145,24 +145,27 @@ export function TournamentDetailView({
                 <CalendarDays size={15} /> {dateRange}
               </span>
             </div>
-            <div className="mt-6 max-w-full">
-              <div className="mb-3 flex flex-wrap items-center gap-3">
-                <p className="text-xs font-black uppercase tracking-[0.12em] text-[#84d8e8]">
-                  Stages
-                </p>
-                <span className="rounded border border-[#243c43] bg-[#0d252d] px-2 py-1 text-[10px] font-black uppercase tracking-[0.08em] text-[#9fb2b8]">
-                  {formatLabels[tournamentFormat]}
-                </span>
-              </div>
-              <div className="flex flex-wrap items-center gap-2">
+          </div>
+
+          <div className="min-w-0 lg:pt-1">
+            <div className="mb-3 flex items-center gap-3">
+              <p className="shrink-0 text-xs font-black uppercase tracking-[0.12em] text-[#84d8e8]">
+                Stages
+              </p>
+              <span className="shrink-0 rounded border border-[#243c43] bg-[#0d252d] px-2 py-1 text-[10px] font-black uppercase tracking-[0.08em] text-[#9fb2b8]">
+                {formatLabels[tournamentFormat]}
+              </span>
+            </div>
+            <div className="overflow-x-auto pb-1">
+              <div className="flex w-max items-center gap-2">
                 {stageItems.map((stage, index) => (
-                  <div key={stage.label} className="flex items-center gap-2">
+                  <div key={stage.label} className="flex shrink-0 items-center gap-2">
                     <span className="inline-flex h-10 items-center gap-2 whitespace-nowrap border border-[#31505a] bg-[#0d252d] px-3 text-xs font-black uppercase tracking-[0.06em] text-[#dce8eb] shadow-[0_0_20px_rgba(132,216,232,0.08)]">
                       <span className="text-[#84d8e8]">{stage.icon}</span>
                       {stage.label}
                     </span>
                     {index < stageItems.length - 1 && (
-                      <span className="hidden text-[#4d6870] sm:inline">/</span>
+                      <span className="text-[#4d6870]">/</span>
                     )}
                   </div>
                 ))}
