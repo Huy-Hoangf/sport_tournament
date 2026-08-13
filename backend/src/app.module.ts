@@ -13,6 +13,8 @@ import { MatchesModule } from './matches/matches.module';
 import { PredictionsModule } from './predictions/predictions.module';
 import { LeaderboardModule } from './leaderboard/leaderboard.module';
 import { DashboardModule } from './dashboard/dashboard.module';
+import { DatabaseModule } from './database/database.module';
+import { ScoringRulesModule } from './scoring-rules/scoring-rules.module';
 
 function readSslConfig() {
   return process.env.DB_SSL === 'false' ? false : { rejectUnauthorized: false };
@@ -55,6 +57,8 @@ function requireEnv(name: string) {
     PredictionsModule,
     LeaderboardModule,
     DashboardModule,
+    DatabaseModule,
+    ScoringRulesModule,
   ],
   controllers: [AppController],
   providers: [AppService],

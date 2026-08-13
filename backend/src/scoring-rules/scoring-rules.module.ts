@@ -2,12 +2,12 @@ import { Module } from '@nestjs/common';
 import { TypeOrmModule } from '@nestjs/typeorm';
 import { AuthModule } from '../auth/auth.module';
 import { User } from '../users/user.entity';
-import { MatchesController } from './matches.controller';
-import { MatchesService } from './matches.service';
+import { ScoringRulesController } from './scoring-rules.controller';
+import { ScoringRulesService } from './scoring-rules.service';
 
 @Module({
   imports: [AuthModule, TypeOrmModule.forFeature([User])],
-  controllers: [MatchesController],
-  providers: [MatchesService],
+  controllers: [ScoringRulesController],
+  providers: [ScoringRulesService],
 })
-export class MatchesModule {}
+export class ScoringRulesModule {}

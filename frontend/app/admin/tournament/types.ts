@@ -34,6 +34,16 @@ export type TournamentRow = {
   source: string;
 };
 
+export type TournamentStage = {
+  id: number;
+  tournamentId: number;
+  name: string;
+  sortOrder: number;
+  correctPoints: number;
+  exactScoreBonus: number;
+  isKnockout: boolean;
+};
+
 export type TournamentFormat =
   | "GROUP_AND_KNOCKOUT"
   | "ROUND_ROBIN"
@@ -89,6 +99,8 @@ export type LolCompetitionOption = {
 export type MatchRow = {
   id: number;
   tournamentId?: number;
+  stageId?: number;
+  stageName?: string;
   homeName?: string;
   awayName?: string;
   homeLogoUrl?: string | null;

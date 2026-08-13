@@ -4,6 +4,7 @@ import { apiRequest, type CurrentUser } from "../api";
 import { logoutAll, readCurrentUser } from "../auth-sync";
 import NoticeBanner, { type Notice } from "../notice-banner";
 import DashboardView from "./dashboard/dashboard-view";
+import MatchesView, { type MatchesInitialFilter } from "./matches/matches-view";
 import { AdminSelect } from "./shared/admin-select";
 import { DashboardActivityIcon } from "./shared/dashboard-ui";
 import TournamentView from "./tournament/tournament-view";
@@ -85,7 +86,7 @@ type RecentActivityResponse = {
   recentActivity?: ActivityRow[];
 };
 
-type AdminView = 'dashboard' | 'tournaments' | 'players';
+type AdminView = 'dashboard' | 'tournaments' | 'matches' | 'players';
 
 const PLAYERS_PER_PAGE = 7;
 const COMPANY_EMAIL_DOMAIN = "@tech.com";
@@ -95,6 +96,8 @@ export default function AdminPage() {
   const [players, setPlayers] = useState<Player[]>([]);
   const [activeView, setActiveView] = useState<AdminView>("dashboard");
   const [dashboardRefreshKey, setDashboardRefreshKey] = useState(0);
+  const [matchesInitialFilter, setMatchesInitialFilter] =
+    useState<MatchesInitialFilter>({});
   const [currentUser, setCurrentUser] = useState<CurrentUser | null>(null);
   const [fullName, setFullName] = useState("");
   const [email, setEmail] = useState("");
@@ -615,6 +618,9 @@ export default function AdminPage() {
   }
 
   function openAdminView(view: AdminView) {
+    if (view === "matches") {
+      setMatchesInitialFilter({});
+    }
     setActiveView(view);
     setIsMobileMenuOpen(false);
     setOpenPlayerActionId(null);
@@ -722,7 +728,7 @@ export default function AdminPage() {
             <nav className="mt-5 space-y-2 text-sm font-bold">
               <MenuItem active={activeView === "dashboard"} icon={<LayoutDashboard size={21} />} label="Dashboard" onClick={() => openAdminView("dashboard")} />
               <MenuItem active={activeView === "tournaments"} icon={<Trophy size={21} />} label="Tournaments" onClick={() => openAdminView("tournaments")} />
-              <MenuItem icon={<Gamepad2 size={21} />} label="Matches" onClick={() => showNotice("this feature is not ready")} />
+              <MenuItem active={activeView === "matches"} icon={<Gamepad2 size={21} />} label="Matches" onClick={() => openAdminView("matches")} />
               {isAdmin && (
                 <MenuItem active={activeView === "players"} icon={<Users size={18} />} label="Players" onClick={() => openAdminView("players")} />
               )}
@@ -789,7 +795,7 @@ export default function AdminPage() {
         <nav className="mt-6 flex overflow-x-auto text-sm font-bold xl:mt-8 xl:block xl:space-y-2 xl:overflow-visible">
           <MenuItem active={activeView === "dashboard"} icon={<LayoutDashboard size={21} />} label="Dashboard" onClick={() => openAdminView("dashboard")} />
           <MenuItem active={activeView === "tournaments"} icon={<Trophy size={21} />} label="Tournaments" onClick={() => openAdminView("tournaments")} />
-          <MenuItem icon={<Gamepad2 size={21} />} label="Matches" onClick={() => showNotice("this feature is not ready")} />
+          <MenuItem active={activeView === "matches"} icon={<Gamepad2 size={21} />} label="Matches" onClick={() => openAdminView("matches")} />
           {isAdmin && (
             <MenuItem active={activeView === "players"} icon={<Users size={18} />} label="Players" onClick={() => openAdminView("players")} />
           )}
@@ -821,9 +827,25 @@ export default function AdminPage() {
             isAdmin={isAdmin}
             refreshKey={dashboardRefreshKey}
             onOpenTournamentManagement={() => setActiveView("tournaments")}
+            onOpenMatches={(filters) => {
+              setMatchesInitialFilter(filters);
+              setActiveView("matches");
+            }}
           />
         ) : activeView === "tournaments" ? (
-          <TournamentView isAdmin={isAdmin} refreshKey={dashboardRefreshKey} />
+          <TournamentView
+            isAdmin={isAdmin}
+            refreshKey={dashboardRefreshKey}
+            onOpenMatches={(filters) => {
+              setMatchesInitialFilter(filters);
+              setActiveView("matches");
+            }}
+          />
+        ) : activeView === "matches" ? (
+          <MatchesView
+            initialFilter={matchesInitialFilter}
+            onUnavailableFeature={() => showNotice("this feature is not ready")}
+          />
         ) : (
         <div className="px-4 py-6 sm:px-6 xl:px-8 xl:py-9">
           <div className="mb-8 grid gap-6 xl:grid-cols-[1fr_auto] xl:items-start">

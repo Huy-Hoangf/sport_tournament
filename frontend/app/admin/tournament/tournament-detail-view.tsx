@@ -10,6 +10,8 @@ import {
   Users,
   Zap,
 } from "lucide-react";
+import { useEffect } from "react";
+import { apiRequest } from "../../api";
 import { ScoringRulesView } from "./scoring-rules-view";
 import {
   DashboardPanelTitle,
@@ -18,7 +20,7 @@ import {
   MatchTeams,
 } from "../shared/dashboard-ui";
 import { AdminSelect } from "../shared/admin-select";
-import type { MatchRow, TournamentRow } from "./types";
+import type { MatchRow, TournamentRow, TournamentStage } from "./types";
 import {
   formatDateOnly,
   formatDateTime,
@@ -30,24 +32,16 @@ import {
 
 const stagesByFormat: Record<
   NonNullable<TournamentRow["format"]>,
-  Array<{ label: string; icon: React.ReactNode }>
+  string[]
 > = {
-  ROUND_ROBIN: [
-    { label: "League Schedule", icon: <CalendarDays size={16} /> },
-    { label: "Final Table", icon: <Trophy size={16} /> },
-  ],
-  KNOCKOUT: [
-    { label: "Round of 16", icon: <GitBranch size={16} /> },
-    { label: "Quarter Finals", icon: <Trophy size={16} /> },
-    { label: "Semi Finals", icon: <Medal size={16} /> },
-    { label: "Final", icon: <Trophy size={16} /> },
-  ],
+  ROUND_ROBIN: ["League Schedule", "Final Table"],
+  KNOCKOUT: ["Round of 16", "Quarter Finals", "Semi Finals", "Final"],
   GROUP_AND_KNOCKOUT: [
-    { label: "Group Stage", icon: <Users size={16} /> },
-    { label: "Round of 16", icon: <GitBranch size={16} /> },
-    { label: "Quarter Finals", icon: <Trophy size={16} /> },
-    { label: "Semi Finals", icon: <Medal size={16} /> },
-    { label: "Final", icon: <Trophy size={16} /> },
+    "Group Stage",
+    "Round of 16",
+    "Quarter Finals",
+    "Semi Finals",
+    "Final",
   ],
 };
 
@@ -62,12 +56,14 @@ export function TournamentDetailView({
   isTodayScope,
   onBack,
   onUnavailableFeature,
+  onOpenStageMatches,
 }: {
   tournament: TournamentRow;
   matches: MatchRow[];
   isTodayScope: boolean;
   onBack: () => void;
   onUnavailableFeature: () => void;
+  onOpenStageMatches: (stage: TournamentStage) => void;
 }) {
   const sortedMatches = [...matches].sort(
     (first, second) =>
@@ -90,8 +86,18 @@ export function TournamentDetailView({
   const schedulePageSize = 8;
   const [schedulePage, setSchedulePage] = useState(1);
   const [activeTab, setActiveTab] = useState("Overview");
+  const [stages, setStages] = useState<TournamentStage[]>([]);
   const tournamentFormat = tournament.format ?? "ROUND_ROBIN";
-  const stageItems = stagesByFormat[tournamentFormat];
+  const fallbackStages = stagesByFormat[tournamentFormat].map((name, index) => ({
+    id: -(index + 1),
+    tournamentId: tournament.id,
+    name,
+    sortOrder: index + 1,
+    correctPoints: 1,
+    exactScoreBonus: 0,
+    isKnockout: name !== "Group Stage" && name !== "League Schedule",
+  }));
+  const stageItems = stages.length ? stages : fallbackStages;
   const scheduleTotalPages = Math.max(1, Math.ceil(sortedMatches.length / schedulePageSize));
   const activeSchedulePage = Math.min(schedulePage, scheduleTotalPages);
   const scheduleStart = (activeSchedulePage - 1) * schedulePageSize;
@@ -100,8 +106,28 @@ export function TournamentDetailView({
     scheduleStart + schedulePageSize,
   );
   const emptyScheduleMessage = isTodayScope
-    ? `Gi?i ${tournament.name} không có l?ch thi đ?u hôm nay.`
+    ? `${tournament.name} has no matches scheduled today.`
     : 'No schedule has been imported for this tournament.';
+
+  useEffect(() => {
+    let isMounted = true;
+
+    apiRequest<TournamentStage[]>(`/stages?tournamentId=${tournament.id}`)
+      .then((data) => {
+        if (isMounted) {
+          setStages(data);
+        }
+      })
+      .catch(() => {
+        if (isMounted) {
+          setStages([]);
+        }
+      });
+
+    return () => {
+      isMounted = false;
+    };
+  }, [tournament.id]);
 
   return (
     <section className="min-w-0 overflow-hidden rounded border border-[#3a4d54] bg-[#07181d] bg-[radial-gradient(circle_at_1px_1px,rgba(132,216,232,0.08)_1px,transparent_0)] [background-size:24px_24px]">
@@ -159,11 +185,17 @@ export function TournamentDetailView({
             <div className="overflow-x-auto pb-1">
               <div className="flex w-max items-center gap-2">
                 {stageItems.map((stage, index) => (
-                  <div key={stage.label} className="flex shrink-0 items-center gap-2">
-                    <span className="inline-flex h-10 items-center gap-2 whitespace-nowrap border border-[#31505a] bg-[#0d252d] px-3 text-xs font-black uppercase tracking-[0.06em] text-[#dce8eb] shadow-[0_0_20px_rgba(132,216,232,0.08)]">
-                      <span className="text-[#84d8e8]">{stage.icon}</span>
-                      {stage.label}
-                    </span>
+                  <div key={stage.id} className="flex shrink-0 items-center gap-2">
+                    <button
+                      type="button"
+                      onClick={() => onOpenStageMatches(stage)}
+                      className="inline-flex h-10 items-center gap-2 whitespace-nowrap border border-[#31505a] bg-[#0d252d] px-3 text-xs font-black uppercase tracking-[0.06em] text-[#dce8eb] shadow-[0_0_20px_rgba(132,216,232,0.08)] transition hover:border-[#84d8e8] hover:bg-[#102b33] hover:text-[#84d8e8] focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-[#84d8e8]"
+                    >
+                      <span className="text-[#84d8e8]">
+                        {getStageIcon(stage.name)}
+                      </span>
+                      {stage.name}
+                    </button>
                     {index < stageItems.length - 1 && (
                       <span className="text-[#4d6870]">/</span>
                     )}
@@ -744,6 +776,16 @@ function getWinnerText(match: MatchRow) {
   return match.actualHomeScore > match.actualAwayScore
     ? `${match.homeName ?? "Home"} Win`
     : `${match.awayName ?? "Away"} Win`;
+}
+
+function getStageIcon(stageName: string) {
+  const normalized = stageName.toLowerCase();
+
+  if (normalized.includes("group")) return <Users size={16} />;
+  if (normalized.includes("round")) return <GitBranch size={16} />;
+  if (normalized.includes("semi")) return <Medal size={16} />;
+  if (normalized.includes("final")) return <Trophy size={16} />;
+  return <CalendarDays size={16} />;
 }
 
 function CompactMatchRow({ match }: { match: MatchRow }) {

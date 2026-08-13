@@ -33,6 +33,8 @@ type DashboardMatchRow = {
   id: string | number;
   tournamentId?: string | number;
   tournamentName: string;
+  stageId: string | number;
+  stageName: string;
   homeTeam: string | null;
   awayTeam: string | null;
   homeLogoUrl: string | null;
@@ -152,6 +154,8 @@ export class DashboardService {
       tournamentMatches: tournamentMatches.map((row) => ({
         id: Number(row.id),
         tournamentId: Number(row.tournamentId),
+        stageId: Number(row.stageId),
+        stageName: row.stageName,
         homeName: row.homeTeam ?? 'TBD',
         awayName: row.awayTeam ?? 'TBD',
         homeLogoUrl: row.homeLogoUrl ?? null,
@@ -361,6 +365,8 @@ export class DashboardService {
       SELECT
         m.id,
         t.name AS "tournamentName",
+        m.stage_id AS "stageId",
+        s.name AS "stageName",
         COALESCE(home.name, m.home_placeholder) AS "homeTeam",
         COALESCE(away.name, m.away_placeholder) AS "awayTeam",
         home.logo_url AS "homeLogoUrl",
@@ -373,6 +379,7 @@ export class DashboardService {
         m.actual_away_score AS "actualAwayScore"
       FROM matches m
       JOIN tournaments t ON t.id = m.tournament_id
+      JOIN stages s ON s.id = m.stage_id
       LEFT JOIN teams home ON home.id = m.home_team_id
       LEFT JOIN teams away ON away.id = m.away_team_id
       WHERE 1 = 1
@@ -416,10 +423,12 @@ export class DashboardService {
         ranked."actualAwayScore"
       FROM (
         SELECT
-          m.id,
-          m.tournament_id AS "tournamentId",
-          t.name AS "tournamentName",
-          COALESCE(home.name, m.home_placeholder) AS "homeTeam",
+        m.id,
+        m.tournament_id AS "tournamentId",
+        t.name AS "tournamentName",
+        m.stage_id AS "stageId",
+        s.name AS "stageName",
+        COALESCE(home.name, m.home_placeholder) AS "homeTeam",
           COALESCE(away.name, m.away_placeholder) AS "awayTeam",
           home.logo_url AS "homeLogoUrl",
           away.logo_url AS "awayLogoUrl",
@@ -436,9 +445,10 @@ export class DashboardService {
               CASE WHEN m.scheduled_time >= NOW() THEN m.scheduled_time END ASC,
               CASE WHEN m.scheduled_time < NOW() THEN m.scheduled_time END DESC
           ) AS row_number
-        FROM matches m
-        JOIN tournaments t ON t.id = m.tournament_id
-        LEFT JOIN teams home ON home.id = m.home_team_id
+      FROM matches m
+      JOIN tournaments t ON t.id = m.tournament_id
+      JOIN stages s ON s.id = m.stage_id
+      LEFT JOIN teams home ON home.id = m.home_team_id
         LEFT JOIN teams away ON away.id = m.away_team_id
         WHERE 1 = 1
           ${visibilityCondition}
