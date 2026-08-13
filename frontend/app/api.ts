@@ -37,10 +37,26 @@ export async function apiRequest<T>(
   const data = text ? safeJsonParse(text) : null;
 
   if (!response.ok) {
-    throw new Error(data?.message ?? `Request failed: ${response.status}`);
+    throw new Error(
+      data?.message ?? getFallbackErrorMessage(response.status, text),
+    );
   }
 
   return data as T;
+}
+
+function getFallbackErrorMessage(status: number, text: string) {
+  const normalizedText = text.toLowerCase();
+
+  if (status === 504 || normalizedText.includes("gateway time-out")) {
+    return "Server timed out while processing the request. Please try importing fewer items or try again later.";
+  }
+
+  if (normalizedText.includes("<html")) {
+    return `Request failed: ${status}`;
+  }
+
+  return text || `Request failed: ${status}`;
 }
 
 function safeJsonParse(text: string) {

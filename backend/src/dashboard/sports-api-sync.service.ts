@@ -5,6 +5,7 @@ import { User } from '../users/user.entity';
 
 // Cito LoL free tier is limited, so list calls are cached for a day unless an import forces fresh data.
 const LOL_CACHE_MS = 24 * 60 * 60 * 1000;
+const EXTERNAL_FETCH_TIMEOUT_MS = 12_000;
 const FOOTBALL_API_BASE_URL = 'https://v3.football.api-sports.io';
 const FOOTBALL_DATA_ORG_API_BASE_URL = 'https://api.football-data.org/v4';
 const OPENF1_API_BASE_URL = 'https://api.openf1.org/v1';
@@ -690,7 +691,7 @@ export class SportsApiSyncService {
 
     await this.ensureTeamLogoColumn();
     const snapshot = await this.getLolScheduleSnapshot(false);
-    const lolLogosByName = await this.getLolTeamLogosByName(false);
+    const lolLogosByName = new Map<string, string>();
     const selectedMatches = snapshot.matches.filter((match) =>
       selectedIds.has(match.__competitionId),
     );
@@ -2597,7 +2598,26 @@ export class SportsApiSyncService {
   }
 
   private async fetchJson<T>(url: string, headers?: Record<string, string>) {
-    const response = await fetch(url, { headers });
+    const controller = new AbortController();
+    const timeout = setTimeout(
+      () => controller.abort(),
+      EXTERNAL_FETCH_TIMEOUT_MS,
+    );
+    let response: Response;
+
+    try {
+      response = await fetch(url, { headers, signal: controller.signal });
+    } catch (error) {
+      if (error instanceof Error && error.name === 'AbortError') {
+        throw new Error(
+          `External API timed out after ${EXTERNAL_FETCH_TIMEOUT_MS / 1000}s: ${url}`,
+        );
+      }
+
+      throw error;
+    } finally {
+      clearTimeout(timeout);
+    }
 
     if (!response.ok) {
       const text = await response.text();
