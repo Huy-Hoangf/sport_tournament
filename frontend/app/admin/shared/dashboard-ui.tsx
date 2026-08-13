@@ -36,38 +36,37 @@ export function DashboardStatCard({
   onClick?: () => void;
 }) {
   const content = (
-    <>
-      <div className="flex items-start justify-between gap-4">
-        <div>
-          <h3
-            className={`text-sm font-black uppercase tracking-[0.1em] ${
-              tone === "warning" ? "text-[#f4c95d]" : "text-[#c8d6db]"
-            }`}
-          >
-            {title}
-          </h3>
-          <p
-            className={`mt-2 text-[36px] font-black leading-none ${
-              tone === "warning" ? "text-[#f4c95d]" : "text-white"
-            }`}
-          >
-            {value.toLocaleString()}
-          </p>
-        </div>
-        <div
-          className={`flex h-[54px] w-[49px] items-center justify-center rounded ${
-            tone === "warning"
-              ? "bg-[#302713] text-[#f4c95d]"
-              : "bg-[#213740] text-white"
+    <div className="grid h-full min-w-0 grid-cols-[minmax(0,1fr)_54px] items-start gap-4">
+      <div className="min-w-0">
+        <h3
+          title={title}
+          className={`truncate whitespace-nowrap text-[13px] font-black uppercase leading-5 tracking-[0.08em] ${
+            tone === "warning" ? "text-[#f4c95d]" : "text-[#c8d6db]"
           }`}
         >
-          {icon}
-        </div>
+          {title}
+        </h3>
+        <p
+          className={`mt-4 whitespace-nowrap text-[36px] font-black leading-none tabular-nums ${
+            tone === "warning" ? "text-[#f4c95d]" : "text-white"
+          }`}
+        >
+          {value.toLocaleString()}
+        </p>
       </div>
-    </>
+      <div
+        className={`flex h-[54px] w-[54px] shrink-0 items-center justify-center rounded ${
+          tone === "warning"
+            ? "bg-[#302713] text-[#f4c95d]"
+            : "bg-[#213740] text-white"
+        }`}
+      >
+        {icon}
+      </div>
+    </div>
   );
 
-  const className = `h-[144px] w-full rounded border bg-[#0d252d] px-6 py-6 text-left shadow-[0_2px_0_rgba(255,255,255,0.08)] ${
+  const className = `h-[144px] min-w-0 overflow-hidden rounded border bg-[#0d252d] px-6 py-6 text-left shadow-[0_2px_0_rgba(255,255,255,0.08)] ${
     tone === "warning" ? "border-[#8b7133]" : "border-[#3a4d54]"
   }`;
 

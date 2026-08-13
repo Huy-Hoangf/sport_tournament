@@ -48,17 +48,20 @@ export function StatCard({
   meter?: boolean;
 }) {
   return (
-    <div className="min-h-[144px] rounded border border-[#3a4d54] bg-[#0d252d] px-6 py-6 shadow-[0_2px_0_rgba(255,255,255,0.08)]">
-      <div className="flex items-start justify-between">
-        <div>
-          <h3 className="text-sm font-black uppercase tracking-[0.1em] text-[#c8d6db]">
+    <div className="h-[144px] min-w-0 overflow-hidden rounded border border-[#3a4d54] bg-[#0d252d] px-6 py-6 shadow-[0_2px_0_rgba(255,255,255,0.08)]">
+      <div className="grid min-w-0 grid-cols-[minmax(0,1fr)_54px] items-start gap-4">
+        <div className="min-w-0">
+          <h3
+            title={title}
+            className="truncate whitespace-nowrap text-[13px] font-black uppercase leading-5 tracking-[0.08em] text-[#c8d6db]"
+          >
             {title}
           </h3>
-          <p className="mt-2 text-[36px] font-black leading-none text-white">
+          <p className="mt-4 whitespace-nowrap text-[36px] font-black leading-none tabular-nums text-white">
             {value}
           </p>
         </div>
-        <div className="flex h-[54px] w-[49px] items-center justify-center rounded bg-[#213740] text-white">
+        <div className="flex h-[54px] w-[54px] shrink-0 items-center justify-center rounded bg-[#213740] text-white">
           {icon}
         </div>
       </div>
@@ -68,7 +71,12 @@ export function StatCard({
           <div className="h-full w-[62px] rounded bg-white shadow-[0_0_12px_rgba(255,255,255,0.8)]" />
         </div>
       ) : (
-        <p className="mt-4 text-xs font-bold text-white">{detail}</p>
+        <p
+          title={detail}
+          className="mt-4 truncate whitespace-nowrap text-xs font-bold text-white"
+        >
+          {detail}
+        </p>
       )}
     </div>
   );
