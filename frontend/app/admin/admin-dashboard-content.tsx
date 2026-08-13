@@ -57,10 +57,18 @@ const DASHBOARD_REFRESH_MS = 14.4 * 60 * 1000;
 
 const emptyTournamentForm: TournamentForm = {
   name: "",
+  sportType: "FOOTBALL",
   format: "ROUND_ROBIN",
   status: "UPCOMING",
   visibility: "PUBLIC",
 };
+
+const sportTypeOptions = [
+  { value: "FOOTBALL", label: "Football" },
+  { value: "F1", label: "Formula 1" },
+  { value: "BASKETBALL", label: "Basketball" },
+  { value: "ESPORTS", label: "Esports" },
+] satisfies Array<{ value: TournamentForm["sportType"]; label: string }>;
 
 const tournamentFormatOptions = [
   { value: "ROUND_ROBIN", label: "Round Robin" },
@@ -542,6 +550,12 @@ export default function AdminDashboardContent({
     setEditingTournamentId(tournament.id);
     setTournamentForm({
       name: tournament.name,
+      sportType:
+        tournament.sportType === "F1" ||
+        tournament.sportType === "BASKETBALL" ||
+        tournament.sportType === "ESPORTS"
+          ? tournament.sportType
+          : "FOOTBALL",
       format: tournament.format ?? "ROUND_ROBIN",
       status: normalizeStatus(tournament.status),
       visibility: tournament.visibility ?? "PUBLIC",
@@ -648,6 +662,13 @@ export default function AdminDashboardContent({
                 ...tournamentForm,
                 name: editingTournament.name,
                 visibility: editingTournament.visibility,
+                sportType:
+                  editingTournament.sportType === "F1" ||
+                  editingTournament.sportType === "BASKETBALL" ||
+                  editingTournament.sportType === "ESPORTS"
+                    ? editingTournament.sportType
+                    : "FOOTBALL",
+                format: editingTournament.format ?? "ROUND_ROBIN",
               }
             : tournamentForm;
 
@@ -1238,27 +1259,48 @@ export default function AdminDashboardContent({
                 disabled={isActiveTournamentEdit}
               />
             </div>
-            <label className="mb-4 block">
-              <span className="mb-2 block text-xs font-black uppercase tracking-[0.12em] text-[#9fb2b8]">
-                Format
-              </span>
-              <AdminSelect
-                value={tournamentForm.format}
-                options={tournamentFormatOptions}
-                onChange={(value) =>
-                  setTournamentForm((form) => ({
-                    ...form,
-                    format: value as TournamentForm["format"],
-                  }))
-                }
-                ariaLabel="Tournament format"
-                className="w-full"
-              />
-            </label>
+            <div className="grid gap-4 sm:grid-cols-2">
+              <label className="mb-4 block">
+                <span className="mb-2 block text-xs font-black uppercase tracking-[0.12em] text-[#9fb2b8]">
+                  Sport Type
+                </span>
+                <AdminSelect
+                  value={tournamentForm.sportType}
+                  options={sportTypeOptions}
+                  onChange={(value) =>
+                    setTournamentForm((form) => ({
+                      ...form,
+                      sportType: value as TournamentForm["sportType"],
+                    }))
+                  }
+                  ariaLabel="Tournament sport type"
+                  className="w-full"
+                  disabled={isActiveTournamentEdit}
+                />
+              </label>
+              <label className="mb-4 block">
+                <span className="mb-2 block text-xs font-black uppercase tracking-[0.12em] text-[#9fb2b8]">
+                  Format
+                </span>
+                <AdminSelect
+                  value={tournamentForm.format}
+                  options={tournamentFormatOptions}
+                  onChange={(value) =>
+                    setTournamentForm((form) => ({
+                      ...form,
+                      format: value as TournamentForm["format"],
+                    }))
+                  }
+                  ariaLabel="Tournament format"
+                  className="w-full"
+                  disabled={isActiveTournamentEdit}
+                />
+              </label>
+            </div>
             {isActiveTournamentEdit && (
               <p className="mt-1 text-xs font-bold text-[#84d8e8]">
-                Active tournaments lock name and visibility. Change status first
-                to edit those fields.
+                Active tournaments lock name, visibility, sport type and format.
+                Change status first to edit those fields.
               </p>
             )}
             <div className="mt-7 flex justify-end gap-3">
