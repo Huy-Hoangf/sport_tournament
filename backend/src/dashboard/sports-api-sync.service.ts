@@ -357,12 +357,7 @@ export class SportsApiSyncService {
 
   // Import options intentionally list competitions first; matches are fetched only after admin selection to protect quota.
   async listFootballCompetitions() {
-    const apiKey = process.env.FOOTBALL_DATA_API_KEY?.trim();
-
-    if (!apiKey) {
-      throw new Error('FOOTBALL_DATA_API_KEY is not configured.');
-    }
-
+    const apiKey = this.getApiSportsFootballKey();
     const headers = { 'x-apisports-key': apiKey };
     const responses = await Promise.all([
       this.fetchJson<{ response?: FootballCompetition[] }>(
@@ -457,11 +452,7 @@ export class SportsApiSyncService {
       throw new Error('Admin account was not found.');
     }
 
-    const apiKey = process.env.FOOTBALL_DATA_API_KEY?.trim();
-
-    if (!apiKey) {
-      throw new Error('FOOTBALL_DATA_API_KEY is not configured.');
-    }
+    const apiKey = this.getApiSportsFootballKey();
 
     const selectedLeagues = leagues
       .map((league) => ({
@@ -793,13 +784,16 @@ export class SportsApiSyncService {
   }
 
   private async syncFootball(adminId: number) {
-    const apiKey = process.env.FOOTBALL_DATA_API_KEY?.trim();
+    const apiKey =
+      process.env.FOOTBALL_API_SPORTS_KEY?.trim() ||
+      process.env.FOOTBALL_DATA_API_KEY?.trim();
 
     if (!apiKey) {
       return {
         competitions: 0,
         matches: 0,
-        error: 'FOOTBALL_DATA_API_KEY is not configured.',
+        error:
+          'FOOTBALL_DATA_API_KEY or FOOTBALL_API_SPORTS_KEY is not configured.',
       };
     }
 
@@ -2630,7 +2624,92 @@ export class SportsApiSyncService {
       throw new Error(`API request failed ${response.status}: ${text}`);
     }
 
-    return (await response.json()) as T;
+    const data = (await response.json()) as T;
+    this.assertNoApiFootballError(url, data);
+
+    return data;
+  }
+
+  private getApiSportsFootballKey() {
+    const apiKey =
+      process.env.FOOTBALL_API_SPORTS_KEY?.trim() ||
+      process.env.FOOTBALL_DATA_API_KEY?.trim();
+
+    if (!apiKey) {
+      throw new Error(
+        'FOOTBALL_DATA_API_KEY or FOOTBALL_API_SPORTS_KEY is not configured.',
+      );
+    }
+
+    return apiKey;
+  }
+
+  private assertNoApiFootballError(url: string, data: unknown) {
+    if (!url.startsWith(FOOTBALL_API_BASE_URL) || !this.isRecord(data)) {
+      return;
+    }
+
+    const errors = data.errors;
+    const messages = this.toApiFootballErrorMessages(errors);
+
+    if (messages.length === 0) {
+      return;
+    }
+
+    const message = messages.join(' ');
+    const normalizedMessage = message.toLowerCase();
+
+    if (
+      normalizedMessage.includes('rate') ||
+      normalizedMessage.includes('quota') ||
+      normalizedMessage.includes('limit')
+    ) {
+      throw new ApiRateLimitError(
+        `API-Football limit reached: ${message}. Please wait, then try again.`,
+      );
+    }
+
+    throw new Error(
+      `API-Football rejected the request: ${message}. Check FOOTBALL_DATA_API_KEY or FOOTBALL_API_SPORTS_KEY in backend env.`,
+    );
+  }
+
+  private toApiFootballErrorMessages(errors: unknown): string[] {
+    if (!errors) {
+      return [];
+    }
+
+    if (typeof errors === 'string') {
+      return errors.trim() ? [errors.trim()] : [];
+    }
+
+    if (Array.isArray(errors)) {
+      return errors
+        .filter((error): error is string => typeof error === 'string')
+        .map((error) => error.trim())
+        .filter(Boolean);
+    }
+
+    if (!this.isRecord(errors)) {
+      return [];
+    }
+
+    return Object.values(errors)
+      .flatMap((value) => {
+        if (typeof value === 'string') {
+          return [value];
+        }
+
+        if (Array.isArray(value)) {
+          return value.filter(
+            (item): item is string => typeof item === 'string',
+          );
+        }
+
+        return [];
+      })
+      .map((message) => message.trim())
+      .filter(Boolean);
   }
 
   private async fetchOptionalJson<T>(

@@ -56,6 +56,7 @@ export function TournamentDetailView({
   isTodayScope,
   onBack,
   onUnavailableFeature,
+  canManage,
   onOpenStageMatches,
 }: {
   tournament: TournamentRow;
@@ -63,6 +64,7 @@ export function TournamentDetailView({
   isTodayScope: boolean;
   onBack: () => void;
   onUnavailableFeature: () => void;
+  canManage: boolean;
   onOpenStageMatches: (stage: TournamentStage) => void;
 }) {
   const sortedMatches = [...matches].sort(
@@ -205,14 +207,20 @@ export function TournamentDetailView({
             </div>
           </div>
 
-          <button
-            type="button"
-            onClick={onUnavailableFeature}
-            className="inline-flex min-h-[54px] items-center justify-center gap-4 border border-[#3a4d54] bg-[#162b32] px-5 py-3 text-center text-xs font-black uppercase tracking-[0.08em] text-[#84d8e8] transition hover:border-[#84d8e8] hover:bg-[#1b343d]"
-          >
-            <FileDown size={20} />
-            Import Match
-          </button>
+          {canManage ? (
+            <button
+              type="button"
+              onClick={onUnavailableFeature}
+              className="inline-flex min-h-[54px] items-center justify-center gap-4 border border-[#3a4d54] bg-[#162b32] px-5 py-3 text-center text-xs font-black uppercase tracking-[0.08em] text-[#84d8e8] transition hover:border-[#84d8e8] hover:bg-[#1b343d]"
+            >
+              <FileDown size={20} />
+              Import Match
+            </button>
+          ) : (
+            <div className="inline-flex min-h-[54px] items-center justify-center border border-[#3a4d54] bg-[#0d252d] px-5 py-3 text-center text-xs font-black uppercase tracking-[0.08em] text-[#789098]">
+              View Only
+            </div>
+          )}
         </div>
 
         <div className="mt-7 flex flex-wrap gap-5 border-b border-[#3a4d54]">
@@ -244,7 +252,7 @@ export function TournamentDetailView({
       </div>
 
       {activeTab === "Scoring Rules" ? (
-        <ScoringRulesView tournament={tournament} />
+        <ScoringRulesView tournament={tournament} canManage={canManage} />
       ) : activeTab === "Predictions" ? (
         <PredictionAnalyticsView tournament={tournament} matches={matches} />
       ) : (
