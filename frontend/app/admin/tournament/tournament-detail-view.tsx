@@ -387,7 +387,7 @@ function PredictionAnalyticsView({
         </button>
       </div>
 
-      <div className="grid gap-4 md:grid-cols-3">
+      <div className="grid grid-cols-[repeat(auto-fit,minmax(230px,1fr))] gap-4">
         <PredictionMetricCard
           title="Total Predictions"
           value={totalPredictions.toLocaleString()}
@@ -567,18 +567,31 @@ function PredictionMetricCard({
   icon: React.ReactNode;
 }) {
   return (
-    <article className="border border-[#243c43] bg-[#0d252d] p-5">
-      <div className="flex items-start justify-between gap-4">
+    <article className="min-w-0 overflow-hidden border border-[#243c43] bg-[#0d252d] p-5">
+      <div className="grid min-w-0 grid-cols-[minmax(0,1fr)_24px] items-start gap-4">
         <div className="min-w-0">
-          <p className="text-[10px] font-black uppercase tracking-[0.12em] text-[#789098]">
+          <p
+            title={title}
+            className="truncate whitespace-nowrap text-[10px] font-black uppercase tracking-[0.12em] text-[#789098]"
+          >
             {title}
           </p>
-          <p className="mt-5 truncate text-2xl font-black text-white">
+          <p
+            title={value}
+            className="mt-5 truncate whitespace-nowrap text-2xl font-black tabular-nums text-white"
+          >
             {value}
           </p>
-          <p className="mt-2 text-xs font-black text-[#84d8e8]">{meta}</p>
+          <p
+            title={meta}
+            className="mt-2 truncate whitespace-nowrap text-xs font-black text-[#84d8e8]"
+          >
+            {meta}
+          </p>
         </div>
-        <span className="text-[#84d8e8]">{icon}</span>
+        <span className="flex h-6 w-6 shrink-0 items-start justify-center text-[#84d8e8]">
+          {icon}
+        </span>
       </div>
     </article>
   );

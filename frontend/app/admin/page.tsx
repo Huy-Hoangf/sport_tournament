@@ -865,7 +865,7 @@ export default function AdminPage() {
             </div>
           </div>
 
-          <div className="mb-8 grid gap-4 md:grid-cols-2 xl:grid-cols-3 xl:gap-6">
+          <div className="mb-8 grid grid-cols-[repeat(auto-fit,minmax(260px,1fr))] gap-4 xl:gap-6">
             <StatCard
               title="Total Players"
               value={players.length.toLocaleString()}
