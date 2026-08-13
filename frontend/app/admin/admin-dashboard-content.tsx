@@ -66,8 +66,8 @@ const emptyTournamentForm: TournamentForm = {
 const sportTypeOptions = [
   { value: "FOOTBALL", label: "Football" },
   { value: "F1", label: "Formula 1" },
-  { value: "BASKETBALL", label: "Basketball" },
-  { value: "ESPORTS", label: "Esports" },
+  { value: "LOL", label: "League of Legends" },
+  { value: "OTHER", label: "Other Sports" },
 ] satisfies Array<{ value: TournamentForm["sportType"]; label: string }>;
 
 const tournamentFormatOptions = [
@@ -552,8 +552,8 @@ export default function AdminDashboardContent({
       name: tournament.name,
       sportType:
         tournament.sportType === "F1" ||
-        tournament.sportType === "BASKETBALL" ||
-        tournament.sportType === "ESPORTS"
+        tournament.sportType === "LOL" ||
+        tournament.sportType === "OTHER"
           ? tournament.sportType
           : "FOOTBALL",
       format: tournament.format ?? "ROUND_ROBIN",
@@ -664,8 +664,8 @@ export default function AdminDashboardContent({
                 visibility: editingTournament.visibility,
                 sportType:
                   editingTournament.sportType === "F1" ||
-                  editingTournament.sportType === "BASKETBALL" ||
-                  editingTournament.sportType === "ESPORTS"
+                  editingTournament.sportType === "LOL" ||
+                  editingTournament.sportType === "OTHER"
                     ? editingTournament.sportType
                     : "FOOTBALL",
                 format: editingTournament.format ?? "ROUND_ROBIN",

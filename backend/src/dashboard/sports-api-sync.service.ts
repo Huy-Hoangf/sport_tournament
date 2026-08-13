@@ -291,7 +291,7 @@ export class SportsApiSyncService {
                 AND s.name = ANY($2::text[])
             )
             OR (
-              t.sport_type IN ('FOOTBALL', 'F1', 'ESPORTS')
+              t.sport_type IN ('FOOTBALL', 'F1', 'LOL')
               AND NOT EXISTS (
                 SELECT 1 FROM matches m WHERE m.tournament_id = t.id
               )
@@ -705,7 +705,7 @@ export class SportsApiSyncService {
       );
       const tournamentId = await this.upsertTournament({
         name: competition.name,
-        sportType: 'ESPORTS',
+        sportType: 'LOL',
         status: competition.current ? 'ACTIVE' : 'UPCOMING',
         adminId,
       });
@@ -1443,7 +1443,7 @@ export class SportsApiSyncService {
 
   private async upsertTournament(data: {
     name: string;
-    sportType: 'FOOTBALL' | 'F1' | 'ESPORTS';
+    sportType: 'FOOTBALL' | 'F1' | 'LOL' | 'OTHER';
     status: 'UPCOMING' | 'ACTIVE' | 'COMPLETED' | 'CANCELLED';
     adminId: number;
   }) {
@@ -2845,9 +2845,18 @@ export class SportsApiSyncService {
       DROP CONSTRAINT IF EXISTS chk_tournaments_sport_type
     `);
     await this.usersRepository.query(`
+      UPDATE tournaments
+      SET sport_type = CASE
+        WHEN sport_type = 'ESPORTS' THEN 'LOL'
+        WHEN sport_type = 'BASKETBALL' THEN 'OTHER'
+        ELSE sport_type
+      END
+      WHERE sport_type IN ('ESPORTS', 'BASKETBALL')
+    `);
+    await this.usersRepository.query(`
       ALTER TABLE tournaments
       ADD CONSTRAINT chk_tournaments_sport_type
-      CHECK (sport_type IN ('FOOTBALL', 'F1', 'BASKETBALL', 'ESPORTS'))
+      CHECK (sport_type IN ('FOOTBALL', 'F1', 'LOL', 'OTHER'))
     `);
   }
 }
