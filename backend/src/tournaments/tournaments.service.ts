@@ -16,7 +16,7 @@ type TournamentInput = {
   visibility?: string;
 };
 
-const SPORT_TYPES = ['FOOTBALL', 'F1', 'BASKETBALL', 'ESPORTS'];
+const SPORT_TYPES = ['FOOTBALL', 'F1', 'LOL', 'OTHER'];
 const FORMATS = ['GROUP_AND_KNOCKOUT', 'ROUND_ROBIN', 'KNOCKOUT'];
 const STATUSES = ['UPCOMING', 'ACTIVE', 'COMPLETED', 'CANCELLED'];
 const VISIBILITIES = ['PUBLIC', 'PRIVATE'];
@@ -237,9 +237,18 @@ export class TournamentsService implements OnModuleInit {
       DROP CONSTRAINT IF EXISTS chk_tournaments_sport_type
     `);
     await this.usersRepository.query(`
+      UPDATE tournaments
+      SET sport_type = CASE
+        WHEN sport_type = 'ESPORTS' THEN 'LOL'
+        WHEN sport_type = 'BASKETBALL' THEN 'OTHER'
+        ELSE sport_type
+      END
+      WHERE sport_type IN ('ESPORTS', 'BASKETBALL')
+    `);
+    await this.usersRepository.query(`
       ALTER TABLE tournaments
       ADD CONSTRAINT chk_tournaments_sport_type
-      CHECK (sport_type IN ('FOOTBALL', 'F1', 'BASKETBALL', 'ESPORTS'))
+      CHECK (sport_type IN ('FOOTBALL', 'F1', 'LOL', 'OTHER'))
     `);
   }
 }

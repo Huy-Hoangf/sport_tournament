@@ -41,7 +41,7 @@ export type TournamentFormat =
 
 export type TournamentForm = {
   name: string;
-  sportType: "FOOTBALL" | "F1" | "BASKETBALL" | "ESPORTS";
+  sportType: "FOOTBALL" | "F1" | "LOL" | "OTHER";
   format: TournamentFormat;
   status: "UPCOMING" | "ACTIVE" | "COMPLETED" | "CANCELLED";
   visibility: "PUBLIC" | "PRIVATE";
