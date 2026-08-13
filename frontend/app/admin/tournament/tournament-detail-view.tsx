@@ -1,5 +1,15 @@
 ﻿import { useState } from "react";
-import { CalendarDays, ChevronLeft, FileDown, Search, Trophy, Users, Zap } from "lucide-react";
+import {
+  CalendarDays,
+  ChevronLeft,
+  FileDown,
+  GitBranch,
+  Medal,
+  Search,
+  Trophy,
+  Users,
+  Zap,
+} from "lucide-react";
 import { ScoringRulesView } from "./scoring-rules-view";
 import {
   DashboardPanelTitle,
@@ -17,6 +27,35 @@ import {
   getTournamentDateRange,
   isFinishedStatus,
 } from "./utils";
+
+const stagesByFormat: Record<
+  NonNullable<TournamentRow["format"]>,
+  Array<{ label: string; icon: React.ReactNode }>
+> = {
+  ROUND_ROBIN: [
+    { label: "League Schedule", icon: <CalendarDays size={16} /> },
+    { label: "Final Table", icon: <Trophy size={16} /> },
+  ],
+  KNOCKOUT: [
+    { label: "Round of 16", icon: <GitBranch size={16} /> },
+    { label: "Quarter Finals", icon: <Trophy size={16} /> },
+    { label: "Semi Finals", icon: <Medal size={16} /> },
+    { label: "Final", icon: <Trophy size={16} /> },
+  ],
+  GROUP_AND_KNOCKOUT: [
+    { label: "Group Stage", icon: <Users size={16} /> },
+    { label: "Round of 16", icon: <GitBranch size={16} /> },
+    { label: "Quarter Finals", icon: <Trophy size={16} /> },
+    { label: "Semi Finals", icon: <Medal size={16} /> },
+    { label: "Final", icon: <Trophy size={16} /> },
+  ],
+};
+
+const formatLabels: Record<NonNullable<TournamentRow["format"]>, string> = {
+  ROUND_ROBIN: "Round Robin",
+  KNOCKOUT: "Knockout",
+  GROUP_AND_KNOCKOUT: "Group + Knockout",
+};
 export function TournamentDetailView({
   tournament,
   matches,
@@ -51,6 +90,8 @@ export function TournamentDetailView({
   const schedulePageSize = 8;
   const [schedulePage, setSchedulePage] = useState(1);
   const [activeTab, setActiveTab] = useState("Overview");
+  const tournamentFormat = tournament.format ?? "ROUND_ROBIN";
+  const stageItems = stagesByFormat[tournamentFormat];
   const scheduleTotalPages = Math.max(1, Math.ceil(sortedMatches.length / schedulePageSize));
   const activeSchedulePage = Math.min(schedulePage, scheduleTotalPages);
   const scheduleStart = (activeSchedulePage - 1) * schedulePageSize;
@@ -104,6 +145,29 @@ export function TournamentDetailView({
                 <CalendarDays size={15} /> {dateRange}
               </span>
             </div>
+            <div className="mt-6 max-w-full">
+              <div className="mb-3 flex flex-wrap items-center gap-3">
+                <p className="text-xs font-black uppercase tracking-[0.12em] text-[#84d8e8]">
+                  Stages
+                </p>
+                <span className="rounded border border-[#243c43] bg-[#0d252d] px-2 py-1 text-[10px] font-black uppercase tracking-[0.08em] text-[#9fb2b8]">
+                  {formatLabels[tournamentFormat]}
+                </span>
+              </div>
+              <div className="flex flex-wrap items-center gap-2">
+                {stageItems.map((stage, index) => (
+                  <div key={stage.label} className="flex items-center gap-2">
+                    <span className="inline-flex h-10 items-center gap-2 whitespace-nowrap border border-[#31505a] bg-[#0d252d] px-3 text-xs font-black uppercase tracking-[0.06em] text-[#dce8eb] shadow-[0_0_20px_rgba(132,216,232,0.08)]">
+                      <span className="text-[#84d8e8]">{stage.icon}</span>
+                      {stage.label}
+                    </span>
+                    {index < stageItems.length - 1 && (
+                      <span className="hidden text-[#4d6870] sm:inline">/</span>
+                    )}
+                  </div>
+                ))}
+              </div>
+            </div>
           </div>
 
           <button
@@ -117,7 +181,7 @@ export function TournamentDetailView({
         </div>
 
         <div className="mt-7 flex flex-wrap gap-5 border-b border-[#3a4d54]">
-          {['Overview', 'Predictions', 'Stages', 'Scoring Rules'].map(
+          {['Overview', 'Predictions', 'Scoring Rules'].map(
             (tab) => (
               <button
                 key={tab}
@@ -129,8 +193,6 @@ export function TournamentDetailView({
                     setActiveTab(tab);
                   } else if (tab === "Scoring Rules") {
                     setActiveTab(tab);
-                  } else {
-                    onUnavailableFeature();
                   }
                 }}
                 className={`pb-4 text-xs font-black uppercase tracking-[0.08em] ${

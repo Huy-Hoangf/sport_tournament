@@ -57,9 +57,16 @@ const DASHBOARD_REFRESH_MS = 14.4 * 60 * 1000;
 
 const emptyTournamentForm: TournamentForm = {
   name: "",
+  format: "ROUND_ROBIN",
   status: "UPCOMING",
   visibility: "PUBLIC",
 };
+
+const tournamentFormatOptions = [
+  { value: "ROUND_ROBIN", label: "Round Robin" },
+  { value: "KNOCKOUT", label: "Knockout" },
+  { value: "GROUP_AND_KNOCKOUT", label: "Group + Knockout" },
+] satisfies Array<{ value: TournamentForm["format"]; label: string }>;
 
 const emptyDashboard: DashboardData = {
   apiStatus: {
@@ -535,6 +542,7 @@ export default function AdminDashboardContent({
     setEditingTournamentId(tournament.id);
     setTournamentForm({
       name: tournament.name,
+      format: tournament.format ?? "ROUND_ROBIN",
       status: normalizeStatus(tournament.status),
       visibility: tournament.visibility ?? "PUBLIC",
     });
@@ -1230,6 +1238,23 @@ export default function AdminDashboardContent({
                 disabled={isActiveTournamentEdit}
               />
             </div>
+            <label className="mb-4 block">
+              <span className="mb-2 block text-xs font-black uppercase tracking-[0.12em] text-[#9fb2b8]">
+                Format
+              </span>
+              <AdminSelect
+                value={tournamentForm.format}
+                options={tournamentFormatOptions}
+                onChange={(value) =>
+                  setTournamentForm((form) => ({
+                    ...form,
+                    format: value as TournamentForm["format"],
+                  }))
+                }
+                ariaLabel="Tournament format"
+                className="w-full"
+              />
+            </label>
             {isActiveTournamentEdit && (
               <p className="mt-1 text-xs font-bold text-[#84d8e8]">
                 Active tournaments lock name and visibility. Change status first

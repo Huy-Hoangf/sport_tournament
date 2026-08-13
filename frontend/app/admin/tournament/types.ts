@@ -26,6 +26,7 @@ export type TournamentRow = {
   id: number;
   name: string;
   sportType?: string;
+  format?: TournamentFormat;
   status: string;
   visibility: "PUBLIC" | "PRIVATE";
   teams: number;
@@ -33,8 +34,14 @@ export type TournamentRow = {
   source: string;
 };
 
+export type TournamentFormat =
+  | "GROUP_AND_KNOCKOUT"
+  | "ROUND_ROBIN"
+  | "KNOCKOUT";
+
 export type TournamentForm = {
   name: string;
+  format: TournamentFormat;
   status: "UPCOMING" | "ACTIVE" | "COMPLETED" | "CANCELLED";
   visibility: "PUBLIC" | "PRIVATE";
 };
@@ -110,4 +117,3 @@ export type InactivePlayerRow = {
   status: string;
   updatedAt: string;
 };
-
