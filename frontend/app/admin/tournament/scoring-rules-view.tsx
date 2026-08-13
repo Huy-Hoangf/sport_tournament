@@ -1,6 +1,6 @@
 "use client";
 
-import { ChangeEvent, useMemo, useRef, useState } from "react";
+import { ChangeEvent, useEffect, useMemo, useRef, useState } from "react";
 import {
   Check,
   FileJson,
@@ -15,6 +15,7 @@ import {
 } from "lucide-react";
 import type { TournamentRow } from "./types";
 import { AdminSelect } from "../shared/admin-select";
+import { apiRequest } from "../../api";
 
 type ScoringRule = {
   id: string;
@@ -58,6 +59,8 @@ export function ScoringRulesView({ tournament }: { tournament: TournamentRow }) 
   const [category, setCategory] = useState("ALL");
   const [saved, setSaved] = useState(false);
   const [importMessage, setImportMessage] = useState("");
+  const [isLoading, setIsLoading] = useState(true);
+  const [isSaving, setIsSaving] = useState(false);
   const [editingId, setEditingId] = useState<string | null>(null);
   const [ruleDraft, setRuleDraft] = useState<RuleDraft>({
     category: "",
@@ -66,6 +69,53 @@ export function ScoringRulesView({ tournament }: { tournament: TournamentRow }) 
     points: "0",
   });
   const fileInputRef = useRef<HTMLInputElement>(null);
+
+  useEffect(() => {
+    let isMounted = true;
+
+    apiRequest<
+      Array<{
+        id: number;
+        category: string;
+        title: string;
+        content: string;
+        points: number;
+      }>
+    >(`/scoring-rules?tournamentId=${tournament.id}`)
+      .then((data) => {
+        if (!isMounted) return;
+
+        setRules(
+          data.map((rule) => ({
+            id: String(rule.id),
+            category: rule.category,
+            name: rule.title,
+            description: rule.content,
+            points: rule.points,
+          })),
+        );
+        setSaved(true);
+        setImportMessage("");
+      })
+      .catch((error) => {
+        if (isMounted) {
+          setImportMessage(
+            error instanceof Error
+              ? error.message
+              : "Unable to load scoring rules.",
+          );
+        }
+      })
+      .finally(() => {
+        if (isMounted) {
+          setIsLoading(false);
+        }
+      });
+
+    return () => {
+      isMounted = false;
+    };
+  }, [tournament.id]);
 
   const categories = useMemo(
     () => ["ALL", ...Array.from(new Set(rules.map((rule) => rule.category)))],
@@ -194,6 +244,51 @@ export function ScoringRulesView({ tournament }: { tournament: TournamentRow }) 
     event.target.value = "";
   }
 
+  async function saveRules() {
+    setIsSaving(true);
+
+    try {
+      const savedRules = await apiRequest<
+        Array<{
+          id: number;
+          category: string;
+          title: string;
+          content: string;
+          points: number;
+        }>
+      >(`/scoring-rules?tournamentId=${tournament.id}`, {
+        method: "PUT",
+        body: JSON.stringify({
+          rules: rules.map((rule, index) => ({
+            category: rule.category,
+            title: rule.name,
+            content: rule.description,
+            points: rule.points,
+            sortOrder: index + 1,
+          })),
+        }),
+      });
+
+      setRules(
+        savedRules.map((rule) => ({
+          id: String(rule.id),
+          category: rule.category,
+          name: rule.title,
+          description: rule.content,
+          points: rule.points,
+        })),
+      );
+      setSaved(true);
+      setImportMessage("Scoring rules saved.");
+    } catch (error) {
+      setImportMessage(
+        error instanceof Error ? error.message : "Unable to save scoring rules.",
+      );
+    } finally {
+      setIsSaving(false);
+    }
+  }
+
   return (
     <section className="border-t border-[#314850] bg-[#07181d] p-4 sm:p-7 lg:p-8">
       <div className="mb-7 flex flex-wrap items-end justify-between gap-4">
@@ -208,8 +303,8 @@ export function ScoringRulesView({ tournament }: { tournament: TournamentRow }) 
           <button type="button" onClick={() => setImportMessage("Version history will be connected to the API next.")} className="inline-flex items-center gap-2 border border-[#3a4d54] bg-[#0d252d] px-4 py-3 text-[11px] font-black uppercase tracking-[0.1em] text-[#dce8eb] hover:border-[#84d8e8]">
             <History size={15} /> Version History
           </button>
-          <button type="button" onClick={() => { setSaved(true); setImportMessage("Scoring rules saved for this session."); }} className="inline-flex items-center gap-2 border border-[#84d8e8] bg-[#84d8e8] px-4 py-3 text-[11px] font-black uppercase tracking-[0.1em] text-[#06161b] hover:bg-[#a5e5f0]">
-            {saved ? <Check size={15} /> : <Check size={15} />} Save Changes
+          <button type="button" onClick={() => void saveRules()} disabled={isSaving || isLoading} className="inline-flex items-center gap-2 border border-[#84d8e8] bg-[#84d8e8] px-4 py-3 text-[11px] font-black uppercase tracking-[0.1em] text-[#06161b] hover:bg-[#a5e5f0] disabled:cursor-not-allowed disabled:opacity-60">
+            <Check size={15} /> {isSaving ? "Saving..." : saved ? "Saved" : "Save Changes"}
           </button>
         </div>
       </div>
@@ -248,7 +343,12 @@ export function ScoringRulesView({ tournament }: { tournament: TournamentRow }) 
             </div>
           </div>
           <div className="mt-4 space-y-3">
-            {visibleRules.map((rule) => {
+            {isLoading && (
+              <p className="border border-dashed border-[#3a4d54] px-6 py-14 text-center text-sm text-[#9fb2b8]">
+                Loading scoring rules...
+              </p>
+            )}
+            {!isLoading && visibleRules.map((rule) => {
               const isEditing = editingId === rule.id;
 
               return (

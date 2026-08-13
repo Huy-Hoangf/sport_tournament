@@ -92,7 +92,7 @@ CREATE TABLE tournaments (
     FOREIGN KEY (created_by) REFERENCES users(id),
 
     CONSTRAINT chk_tournaments_sport_type
-    CHECK (sport_type IN ('FOOTBALL', 'BASKETBALL', 'ESPORTS')),
+    CHECK (sport_type IN ('FOOTBALL', 'F1', 'LOL', 'OTHER')),
 
     CONSTRAINT chk_tournaments_format
     CHECK (format IN ('GROUP_AND_KNOCKOUT', 'ROUND_ROBIN', 'KNOCKOUT')),
@@ -250,6 +250,24 @@ CREATE TABLE predictions (
     CHECK (points_earned >= 0)
 );
 
+CREATE TABLE scoring_rules (
+    id INT IDENTITY(1,1) PRIMARY KEY,
+    tournament_id INT NOT NULL,
+    category NVARCHAR(100) NOT NULL DEFAULT 'CUSTOM',
+    title NVARCHAR(255) NOT NULL,
+    content NVARCHAR(MAX) NOT NULL,
+    points INT NOT NULL DEFAULT 0,
+    sort_order INT NOT NULL DEFAULT 0,
+    created_at DATETIME2 NOT NULL DEFAULT SYSDATETIME(),
+    updated_at DATETIME2 NOT NULL DEFAULT SYSDATETIME(),
+
+    CONSTRAINT fk_scoring_rules_tournament
+    FOREIGN KEY (tournament_id) REFERENCES tournaments(id),
+
+    CONSTRAINT chk_scoring_rules_points
+    CHECK (points >= 0)
+);
+
 CREATE TABLE leaderboard_snapshots (
     id INT IDENTITY(1,1) PRIMARY KEY,
     tournament_id INT NOT NULL,
@@ -309,6 +327,9 @@ ON predictions(match_id);
 
 CREATE INDEX idx_predictions_user
 ON predictions(user_id);
+
+CREATE INDEX idx_scoring_rules_tournament
+ON scoring_rules(tournament_id, sort_order, id);
 
 CREATE INDEX idx_leaderboard_snapshots_tournament_date_rank
 ON leaderboard_snapshots(tournament_id, snapshot_date, rank_no);

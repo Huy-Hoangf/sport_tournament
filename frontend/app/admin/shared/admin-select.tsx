@@ -67,6 +67,11 @@ export function AdminSelect({
             setIsOpen((open) => !open);
           }
         }}
+        onKeyDown={(event) => {
+          if (event.key === "Escape") {
+            setIsOpen(false);
+          }
+        }}
         disabled={disabled}
         className={`flex ${buttonHeight} w-full items-center gap-3 rounded-sm border bg-[#0d252d] px-4 text-left ${textSize} font-black uppercase tracking-[0.08em] text-[#dce8eb] transition ${
           disabled

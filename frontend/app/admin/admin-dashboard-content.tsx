@@ -105,11 +105,18 @@ export default function AdminDashboardContent({
   refreshKey,
   view = "dashboard",
   onOpenTournamentManagement,
+  onOpenMatches,
 }: {
   isAdmin: boolean;
   refreshKey: number;
   view?: "dashboard" | "tournaments";
   onOpenTournamentManagement?: () => void;
+  onOpenMatches?: (filters: {
+    tournamentId?: number;
+    stageId?: number;
+    tournamentName?: string;
+    stageName?: string;
+  }) => void;
 }) {
   const [dashboard, setDashboard] = useState<DashboardData>(emptyDashboard);
   const [isLoading, setIsLoading] = useState(true);
@@ -796,6 +803,14 @@ export default function AdminDashboardContent({
           }}
           onUnavailableFeature={() =>
             showNotice("this feature not available", "info")
+          }
+          onOpenStageMatches={(stage) =>
+            onOpenMatches?.({
+              tournamentId: selectedTournament.id,
+              stageId: stage.id > 0 ? stage.id : undefined,
+              tournamentName: selectedTournament.name,
+              stageName: stage.name,
+            })
           }
         />
       ) : (

@@ -88,7 +88,7 @@ export class UsersController {
   async deleteAllPlayersByAdmin(
     @Headers('authorization') authorization: string | undefined,
   ) {
-    await this.authService.verifyAdminToken(authorization);
+    await this.authService.verifySuperAdminToken(authorization);
     return this.usersService.deleteAllPlayersByAdmin();
   }
 

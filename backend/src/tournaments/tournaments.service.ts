@@ -2,7 +2,6 @@ import {
   BadRequestException,
   Injectable,
   NotFoundException,
-  OnModuleInit,
 } from '@nestjs/common';
 import { InjectRepository } from '@nestjs/typeorm';
 import { Repository } from 'typeorm';
@@ -16,21 +15,42 @@ type TournamentInput = {
   visibility?: string;
 };
 
+type TournamentFormat = 'GROUP_AND_KNOCKOUT' | 'ROUND_ROBIN' | 'KNOCKOUT';
+
 const SPORT_TYPES = ['FOOTBALL', 'F1', 'LOL', 'OTHER'];
 const FORMATS = ['GROUP_AND_KNOCKOUT', 'ROUND_ROBIN', 'KNOCKOUT'];
 const STATUSES = ['UPCOMING', 'ACTIVE', 'COMPLETED', 'CANCELLED'];
 const VISIBILITIES = ['PUBLIC', 'PRIVATE'];
 
+const STAGES_BY_FORMAT: Record<
+  TournamentFormat,
+  Array<{ name: string; isKnockout: boolean }>
+> = {
+  ROUND_ROBIN: [
+    { name: 'League Schedule', isKnockout: false },
+    { name: 'Final Table', isKnockout: false },
+  ],
+  KNOCKOUT: [
+    { name: 'Round of 16', isKnockout: true },
+    { name: 'Quarter Finals', isKnockout: true },
+    { name: 'Semi Finals', isKnockout: true },
+    { name: 'Final', isKnockout: true },
+  ],
+  GROUP_AND_KNOCKOUT: [
+    { name: 'Group Stage', isKnockout: false },
+    { name: 'Round of 16', isKnockout: true },
+    { name: 'Quarter Finals', isKnockout: true },
+    { name: 'Semi Finals', isKnockout: true },
+    { name: 'Final', isKnockout: true },
+  ],
+};
+
 @Injectable()
-export class TournamentsService implements OnModuleInit {
+export class TournamentsService {
   constructor(
     @InjectRepository(User)
     private readonly usersRepository: Repository<User>,
   ) {}
-
-  async onModuleInit() {
-    await this.ensureSportTypeConstraint();
-  }
 
   async findAll({
     includePrivateTournaments = false,
@@ -97,6 +117,8 @@ export class TournamentsService implements OnModuleInit {
       ],
     );
 
+    await this.ensureStagesForFormat(Number(row.id), data.format);
+
     return {
       message: 'Tournament created successfully.',
       tournament: row,
@@ -108,7 +130,52 @@ export class TournamentsService implements OnModuleInit {
       throw new BadRequestException('Invalid tournament id.');
     }
 
+    const [current] = await this.usersRepository.query(
+      `
+        SELECT
+          id,
+          name,
+          sport_type AS "sportType",
+          format,
+          status,
+          visibility
+        FROM tournaments
+        WHERE id = $1
+      `,
+      [id],
+    );
+
+    if (!current) {
+      throw new NotFoundException('Tournament not found.');
+    }
+
     const data = this.normalizeInput(input, false);
+    const lockedFields = [
+      ['name', data.name, current.name],
+      ['sportType', data.sportType, current.sportType],
+      ['format', data.format, current.format],
+      ['visibility', data.visibility, current.visibility],
+    ] as const;
+    const locksCoreFields =
+      current.status === 'ACTIVE' || data.status === 'ACTIVE';
+
+    if (locksCoreFields) {
+      const changedLockedField = lockedFields.find(
+        ([, nextValue, currentValue]) =>
+          nextValue !== undefined && nextValue !== currentValue,
+      );
+
+      if (changedLockedField) {
+        throw new BadRequestException(
+          'Active tournaments cannot change name, sport type, format or visibility.',
+        );
+      }
+    }
+
+    if (data.format && data.format !== current.format) {
+      await this.assertFormatCanChange(id);
+    }
+
     const fields: string[] = [];
     const values: unknown[] = [];
 
@@ -151,8 +218,8 @@ export class TournamentsService implements OnModuleInit {
       values,
     );
 
-    if (!row) {
-      throw new NotFoundException('Tournament not found.');
+    if (data.format && data.format !== current.format) {
+      await this.replaceStagesForFormat(id, data.format);
     }
 
     return {
@@ -225,30 +292,57 @@ export class TournamentsService implements OnModuleInit {
     return {
       name,
       sportType: sportType ?? (requireName ? 'FOOTBALL' : undefined),
-      format: format ?? (requireName ? 'ROUND_ROBIN' : undefined),
+      format: (format ?? (requireName ? 'ROUND_ROBIN' : undefined)) as
+        | TournamentFormat
+        | undefined,
       status: status ?? (requireName ? 'UPCOMING' : undefined),
       visibility: visibility ?? (requireName ? 'PUBLIC' : undefined),
     };
   }
 
-  private async ensureSportTypeConstraint() {
-    await this.usersRepository.query(`
-      ALTER TABLE tournaments
-      DROP CONSTRAINT IF EXISTS chk_tournaments_sport_type
-    `);
-    await this.usersRepository.query(`
-      UPDATE tournaments
-      SET sport_type = CASE
-        WHEN sport_type = 'ESPORTS' THEN 'LOL'
-        WHEN sport_type = 'BASKETBALL' THEN 'OTHER'
-        ELSE sport_type
-      END
-      WHERE sport_type IN ('ESPORTS', 'BASKETBALL')
-    `);
-    await this.usersRepository.query(`
-      ALTER TABLE tournaments
-      ADD CONSTRAINT chk_tournaments_sport_type
-      CHECK (sport_type IN ('FOOTBALL', 'F1', 'LOL', 'OTHER'))
-    `);
+  private async ensureStagesForFormat(
+    tournamentId: number,
+    format: TournamentFormat | undefined,
+  ) {
+    const stages = STAGES_BY_FORMAT[format ?? 'ROUND_ROBIN'];
+
+    for (const [index, stage] of stages.entries()) {
+      await this.usersRepository.query(
+        `
+          INSERT INTO stages (tournament_id, name, sort_order, is_knockout)
+          VALUES ($1, $2, $3, $4)
+          ON CONFLICT (tournament_id, sort_order)
+          DO UPDATE SET
+            name = EXCLUDED.name,
+            is_knockout = EXCLUDED.is_knockout,
+            updated_at = NOW()
+        `,
+        [tournamentId, stage.name, index + 1, stage.isKnockout],
+      );
+    }
+  }
+
+  private async replaceStagesForFormat(
+    tournamentId: number,
+    format: TournamentFormat,
+  ) {
+    await this.assertFormatCanChange(tournamentId);
+    await this.usersRepository.query('DELETE FROM stages WHERE tournament_id = $1', [
+      tournamentId,
+    ]);
+    await this.ensureStagesForFormat(tournamentId, format);
+  }
+
+  private async assertFormatCanChange(tournamentId: number) {
+    const [{ count }] = await this.usersRepository.query(
+      'SELECT COUNT(*) AS count FROM matches WHERE tournament_id = $1',
+      [tournamentId],
+    );
+
+    if (Number(count ?? 0) > 0) {
+      throw new BadRequestException(
+        'Cannot change tournament format after matches have been created.',
+      );
+    }
   }
 }
