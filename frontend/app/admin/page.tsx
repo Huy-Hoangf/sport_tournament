@@ -817,7 +817,11 @@ export default function AdminPage() {
 
       <section className="min-h-screen bg-[#06161b] xl:ml-[260px]">
         {activeView === "dashboard" ? (
-          <DashboardView isAdmin={isAdmin} refreshKey={dashboardRefreshKey} />
+          <DashboardView
+            isAdmin={isAdmin}
+            refreshKey={dashboardRefreshKey}
+            onOpenTournamentManagement={() => setActiveView("tournaments")}
+          />
         ) : activeView === "tournaments" ? (
           <TournamentView isAdmin={isAdmin} refreshKey={dashboardRefreshKey} />
         ) : (
