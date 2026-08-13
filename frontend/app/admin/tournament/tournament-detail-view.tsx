@@ -324,8 +324,28 @@ function PredictionAnalyticsView({
   matches: MatchRow[];
 }) {
   const [playerSearch, setPlayerSearch] = useState("");
+  const [tournamentFilter, setTournamentFilter] = useState(String(tournament.id));
+  const [stageFilter, setStageFilter] = useState("GROUP_STAGE");
+  const [pointFilter, setPointFilter] = useState("ALL");
   const [statusFilter, setStatusFilter] = useState("ALL");
   const predictionRows = buildPredictionRows(matches);
+  const tournamentOptions = [
+    {
+      value: String(tournament.id),
+      label: tournament.name,
+    },
+  ];
+  const stageOptions = [
+    { value: "GROUP_STAGE", label: "Group Stage" },
+    { value: "KNOCKOUT", label: "Knockout" },
+    { value: "FINAL", label: "Final" },
+  ];
+  const pointOptions = [
+    { value: "ALL", label: "All Points" },
+    { value: "POSITIVE", label: "Point Awarded" },
+    { value: "ZERO", label: "Zero Point" },
+    { value: "PENDING", label: "Pending Point" },
+  ];
   const statusOptions = ["ALL", "CORRECT", "INCORRECT", "PENDING"];
   const visibleRows = predictionRows.filter((row) => {
     const searchValue = playerSearch.trim().toLowerCase();
@@ -333,8 +353,13 @@ function PredictionAnalyticsView({
       .toLowerCase()
       .includes(searchValue);
     const matchesStatus = statusFilter === "ALL" || row.status === statusFilter;
+    const matchesPoint =
+      pointFilter === "ALL" ||
+      (pointFilter === "POSITIVE" && row.points != null && row.points > 0) ||
+      (pointFilter === "ZERO" && row.points === 0) ||
+      (pointFilter === "PENDING" && row.points == null);
 
-    return matchesSearch && matchesStatus;
+    return matchesSearch && matchesStatus && matchesPoint;
   });
   const totalPredictions = Math.max(predictionRows.length, matches.length * 9);
   const mostPredictedTeam =
@@ -391,33 +416,69 @@ function PredictionAnalyticsView({
       </div>
 
       <section className="mt-6 overflow-hidden border border-[#243c43] bg-[#0d252d]">
-        <div className="flex flex-wrap items-center justify-between gap-3 border-b border-[#243c43] px-4 py-4 sm:px-5">
-          <h5 className="text-lg font-black text-white">Prediction Log</h5>
-          <div className="grid w-full gap-2 sm:w-auto sm:grid-cols-[220px_170px]">
-            <label className="relative">
-              <Search
-                size={14}
-                className="absolute left-3 top-1/2 -translate-y-1/2 text-[#84d8e8]"
+        <div className="border-b border-[#243c43] bg-[#07181d] px-4 py-4 sm:px-5">
+          <div className="grid gap-3 xl:grid-cols-[minmax(170px,1fr)_minmax(170px,1fr)_minmax(170px,1fr)_minmax(170px,1fr)_minmax(220px,1.1fr)]">
+            <PredictionFilterField label="Tournament">
+              <AdminSelect
+                value={tournamentFilter}
+                onChange={setTournamentFilter}
+                options={tournamentOptions}
+                ariaLabel="Filter prediction tournament"
+                size="compact"
+                className="h-10"
               />
-              <input
-                value={playerSearch}
-                onChange={(event) => setPlayerSearch(event.target.value)}
-                placeholder="Search player or match..."
-                className="h-10 w-full border border-[#243c43] bg-[#07181d] pl-9 pr-3 text-xs font-bold text-white outline-none placeholder:text-[#789098] focus:border-[#84d8e8]"
+            </PredictionFilterField>
+            <PredictionFilterField label="Stage">
+              <AdminSelect
+                value={stageFilter}
+                onChange={setStageFilter}
+                options={stageOptions}
+                ariaLabel="Filter prediction stage"
+                size="compact"
+                className="h-10"
               />
-            </label>
-            <AdminSelect
-              value={statusFilter}
-              onChange={setStatusFilter}
-              options={statusOptions.map((status) => ({
-                value: status,
-                label: status === "ALL" ? "All Status" : status,
-              }))}
-              ariaLabel="Filter prediction status"
-              size="compact"
-              className="h-10"
-              menuClassName="right-0 left-auto min-w-[170px]"
-            />
+            </PredictionFilterField>
+            <PredictionFilterField label="Point Filter">
+              <AdminSelect
+                value={pointFilter}
+                onChange={setPointFilter}
+                options={pointOptions}
+                ariaLabel="Filter prediction points"
+                size="compact"
+                className="h-10"
+              />
+            </PredictionFilterField>
+            <PredictionFilterField label="Status">
+              <AdminSelect
+                value={statusFilter}
+                onChange={setStatusFilter}
+                options={statusOptions.map((status) => ({
+                  value: status,
+                  label: status === "ALL" ? "All Status" : status,
+                }))}
+                ariaLabel="Filter prediction status"
+                size="compact"
+                className="h-10"
+                menuClassName="right-0 left-auto min-w-[170px]"
+              />
+            </PredictionFilterField>
+            <PredictionFilterField label="Search">
+              <div className="grid grid-cols-[minmax(0,1fr)_42px]">
+                <input
+                  value={playerSearch}
+                  onChange={(event) => setPlayerSearch(event.target.value)}
+                  placeholder="Search player or match..."
+                  className="h-10 min-w-0 border border-r-0 border-[#243c43] bg-[#07181d] px-4 text-xs font-bold text-white outline-none placeholder:text-[#789098] focus:border-[#84d8e8]"
+                />
+                <button
+                  type="button"
+                  aria-label="Search predictions"
+                  className="grid h-10 place-items-center border border-[#243c43] bg-[#0d252d] text-[#dce8eb] transition hover:border-[#84d8e8] hover:text-[#84d8e8]"
+                >
+                  <Search size={16} />
+                </button>
+              </div>
+            </PredictionFilterField>
           </div>
         </div>
 
@@ -493,6 +554,21 @@ function PredictionAnalyticsView({
         </div>
       </section>
     </section>
+  );
+}
+
+function PredictionFilterField({
+  label,
+  children,
+}: {
+  label: string;
+  children: React.ReactNode;
+}) {
+  return (
+    <label className="grid gap-1">
+      <span className="text-[10px] font-black text-[#84d8e8]">{label}</span>
+      {children}
+    </label>
   );
 }
 
