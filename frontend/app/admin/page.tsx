@@ -166,7 +166,7 @@ export default function AdminPage() {
 
     queueMicrotask(() => {
       setCurrentUser(currentUser);
-      setActiveView(currentUser.role === "PLAYER" ? "dashboard" : "players");
+      setActiveView("dashboard");
 
       if (currentUser.role !== "PLAYER") {
         void fetchPlayers();

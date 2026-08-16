@@ -29,7 +29,6 @@ import type {
   SyncSport,
   TournamentForm,
   TournamentRow,
-  TournamentStatusFilter,
   MatchRow,
 } from "./tournament/types";
 import {
@@ -48,7 +47,6 @@ import {
   AlertTriangle,
   CalendarDays,
   Cloud,
-  ExternalLink,
   FileDown,
   Gamepad2,
   Plus,
@@ -165,8 +163,6 @@ export default function AdminDashboardContent({
   >(null);
   const [tournamentSearch, setTournamentSearch] = useState("");
   const [dashboardSportFilter, setDashboardSportFilter] = useState("ALL");
-  const [dashboardStatusFilter, setDashboardStatusFilter] =
-    useState<TournamentStatusFilter>("ALL");
   const [tournamentForm, setTournamentForm] =
     useState<TournamentForm>(emptyTournamentForm);
   const isTournamentView = view === "tournaments";
@@ -640,17 +636,11 @@ export default function AdminDashboardContent({
     : searchedTournaments
         .filter((tournament) => {
           const sportType = getTournamentSportFilterValue(tournament);
-          const status = tournament.status.toUpperCase();
           const matchesSport =
             dashboardSportFilter === "ALL" ||
             sportType === dashboardSportFilter;
-          const matchesStatus =
-            dashboardStatusFilter === "ALL" ||
-            (dashboardStatusFilter === "COMPLETED"
-              ? status === "COMPLETED" || status === "CANCELLED"
-              : status === dashboardStatusFilter);
 
-          return matchesSport && matchesStatus;
+          return matchesSport;
         })
         .sort((first, second) => {
           const firstPriority = getTournamentDashboardPriority(first);
@@ -892,7 +882,7 @@ export default function AdminDashboardContent({
             </div>
           </section>
 
-          <section className="mb-5 grid grid-cols-[repeat(auto-fit,minmax(260px,1fr))] gap-4 xl:gap-6">
+          <section className="mb-5 grid grid-cols-2 gap-3 md:gap-4 2xl:grid-cols-4 2xl:gap-6">
             <DashboardStatCard
               title="Active Tournaments"
               value={dashboard.stats.activeTournaments}
@@ -952,13 +942,9 @@ export default function AdminDashboardContent({
               emptyGroups={dashboardEmptyGroups}
               search={tournamentSearch}
               sportFilter={dashboardSportFilter}
-              statusFilter={dashboardStatusFilter}
               isAdmin={isAdmin}
               onSearchChange={setTournamentSearch}
               onSportFilterChange={setDashboardSportFilter}
-              onStatusFilterChange={(nextValue) =>
-                setDashboardStatusFilter(nextValue as TournamentStatusFilter)
-              }
               onSelectTournament={setSelectedTournamentId}
               onEditTournament={openEditTournament}
               onDeleteTournament={setTournamentToDelete}
@@ -1451,11 +1437,9 @@ function DashboardTournamentOverview({
   emptyGroups,
   search,
   sportFilter,
-  statusFilter,
   isAdmin,
   onSearchChange,
   onSportFilterChange,
-  onStatusFilterChange,
   onSelectTournament,
   onEditTournament,
   onDeleteTournament,
@@ -1472,11 +1456,9 @@ function DashboardTournamentOverview({
   }>;
   search: string;
   sportFilter: string;
-  statusFilter: TournamentStatusFilter;
   isAdmin: boolean;
   onSearchChange: (value: string) => void;
   onSportFilterChange: (value: string) => void;
-  onStatusFilterChange: (value: string) => void;
   onSelectTournament: React.Dispatch<React.SetStateAction<number | null>>;
   onEditTournament: (tournament: TournamentRow) => void;
   onDeleteTournament: (tournament: TournamentRow) => void;
@@ -1501,19 +1483,6 @@ function DashboardTournamentOverview({
               {tournaments.length} shown / {allTournamentsCount} total
             </p>
           </div>
-          <AdminSelect
-            value={statusFilter}
-            options={[
-              { value: "ALL", label: "All Status" },
-              { value: "ACTIVE", label: "Active" },
-              { value: "UPCOMING", label: "Upcoming" },
-              { value: "COMPLETED", label: "Completed" },
-            ]}
-            onChange={onStatusFilterChange}
-            ariaLabel="Filter dashboard tournaments by status"
-            className="w-full sm:w-[160px]"
-            size="compact"
-          />
         </div>
 
         <div className="mt-5 grid gap-3 2xl:grid-cols-[minmax(240px,1fr)_auto]">
@@ -1617,7 +1586,19 @@ function DashboardTournamentCard({
     : "No upcoming match";
 
   return (
-    <article className="grid gap-4 rounded border border-[#2c4750] bg-[#0b2027] p-4 shadow-[inset_0_1px_0_rgba(255,255,255,0.04)] xl:grid-cols-[112px_minmax(190px,1fr)_90px_110px_minmax(180px,1fr)_110px_112px] xl:items-center">
+    <article
+      role="button"
+      tabIndex={0}
+      onClick={() => onSelectTournament(tournament.id)}
+      onKeyDown={(event) => {
+        if (event.key === "Enter" || event.key === " ") {
+          event.preventDefault();
+          onSelectTournament(tournament.id);
+        }
+      }}
+      className="grid cursor-pointer gap-4 rounded border border-[#2c4750] bg-[#0b2027] p-4 shadow-[inset_0_1px_0_rgba(255,255,255,0.04)] transition hover:border-[#84d8e8] hover:bg-[#102d35] focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-[#84d8e8] xl:grid-cols-[112px_minmax(190px,1fr)_90px_110px_minmax(180px,1fr)_110px_112px] xl:items-center"
+      aria-label={`Open ${tournament.name} tournament details`}
+    >
       <div className="flex h-[96px] w-[96px] items-center justify-center rounded border border-[#3a4d54] bg-[#102d35] text-[#84d8e8]">
         {sportMeta.largeIcon}
       </div>
@@ -1658,19 +1639,14 @@ function DashboardTournamentCard({
       </div>
 
       <div className="grid gap-2">
-        <button
-          type="button"
-          onClick={() => onSelectTournament(tournament.id)}
-          className="flex h-9 items-center justify-center gap-2 rounded border border-[#84d8e8] bg-[#102d35] px-3 text-xs font-black text-[#84d8e8] transition hover:bg-[#143943]"
-        >
-          <ExternalLink size={14} />
-          Open
-        </button>
         {isAdmin && (
           <>
             <button
               type="button"
-              onClick={() => onEditTournament(tournament)}
+              onClick={(event) => {
+                event.stopPropagation();
+                onEditTournament(tournament);
+              }}
               className="flex h-9 items-center justify-center gap-2 rounded border border-[#3a4d54] bg-[#102d35] px-3 text-xs font-black text-[#84d8e8] transition hover:border-[#84d8e8]"
             >
               <Pencil size={14} />
@@ -1678,7 +1654,10 @@ function DashboardTournamentCard({
             </button>
             <button
               type="button"
-              onClick={() => onDeleteTournament(tournament)}
+              onClick={(event) => {
+                event.stopPropagation();
+                onDeleteTournament(tournament);
+              }}
               className="flex h-9 items-center justify-center gap-2 rounded border border-[#5d3037] bg-[#2a1115] px-3 text-xs font-black text-[#ff8a8a] transition hover:border-[#ff8a8a]"
             >
               <Trash2 size={14} />
