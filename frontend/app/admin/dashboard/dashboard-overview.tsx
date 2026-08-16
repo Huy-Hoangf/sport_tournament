@@ -69,9 +69,12 @@ export function DashboardTournamentOverview({
           <label className="flex h-11 min-w-0 items-center gap-3 rounded border border-[#3a4d54] bg-[#06161b] px-4 text-[#9fb2b8] focus-within:border-[#84d8e8]">
             <Search size={17} className="shrink-0 text-[#84d8e8]" />
             <input
+              type="search"
               value={search}
               onChange={(event) => onSearchChange(event.target.value)}
               placeholder="Search tournaments..."
+              autoComplete="off"
+              name="dashboard-tournament-search"
               className="h-full min-w-0 flex-1 bg-transparent text-sm font-bold text-white outline-none placeholder:text-[#789098]"
             />
           </label>

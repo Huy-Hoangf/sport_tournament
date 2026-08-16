@@ -187,6 +187,8 @@ export function PlayerModals({
             value={currentPassword}
             onChange={(event) => setCurrentPassword(event.target.value)}
             placeholder="Current password"
+            autoComplete="current-password"
+            name="current-password"
             className="mb-4 h-[54px] w-full rounded border border-white/10 bg-[#070d0d] px-4 text-zinc-100 outline-none focus:border-[#8ed8ec]"
           />
 
@@ -195,6 +197,8 @@ export function PlayerModals({
             value={newPassword}
             onChange={(event) => setNewPassword(event.target.value)}
             placeholder="New password"
+            autoComplete="new-password"
+            name="new-password"
             className="mb-4 h-[54px] w-full rounded border border-white/10 bg-[#070d0d] px-4 text-zinc-100 outline-none focus:border-[#8ed8ec]"
           />
 
@@ -203,6 +207,8 @@ export function PlayerModals({
             value={confirmPassword}
             onChange={(event) => setConfirmPassword(event.target.value)}
             placeholder="Confirm new password"
+            autoComplete="new-password"
+            name="confirm-new-password"
             className="mb-6 h-[54px] w-full rounded border border-white/10 bg-[#070d0d] px-4 text-zinc-100 outline-none focus:border-[#8ed8ec]"
           />
 
