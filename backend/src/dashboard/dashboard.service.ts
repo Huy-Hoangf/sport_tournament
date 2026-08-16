@@ -124,7 +124,7 @@ export class DashboardService {
     return {
       apiStatus: {
         connected: Boolean(summary.lastApiSync),
-        provider: 'API-SPORTS Football + ESPN ASEAN + OpenF1 + Cito LoL',
+        provider: 'football-data.org + TheSportsDB + OpenF1 + Cito LoL',
         lastSync: summary.lastApiSync,
         externalId: this.buildExternalId(summary.lastApiSync),
       },
@@ -219,15 +219,6 @@ export class DashboardService {
     const matchVisibilityCondition = includePrivateTournaments
       ? ''
       : "AND t.visibility = 'PUBLIC'";
-    const activeTournamentCondition =
-      scope === 'today'
-        ? `AND EXISTS (
-            SELECT 1
-            FROM matches tm
-            WHERE tm.tournament_id = t.id
-              AND ${this.todayDateCondition('tm.scheduled_time')}
-          )`
-        : '';
     const upcomingMatchCondition =
       scope === 'today'
         ? `AND ${this.todayDateCondition('m.scheduled_time')}`
@@ -240,7 +231,6 @@ export class DashboardService {
           FROM tournaments t
           WHERE t.status = 'ACTIVE'
             ${tournamentVisibilityCondition}
-            ${activeTournamentCondition}
         ) AS "activeTournaments",
         (SELECT COUNT(*) FROM users WHERE role = 'PLAYER') AS "totalPlayers",
         (SELECT COUNT(*) FROM users WHERE role = 'PLAYER' AND user_status = 'INACTIVE') AS "inactivePlayers",
@@ -543,11 +533,14 @@ export class DashboardService {
     }
 
     if (scope === 'today') {
-      conditions.push(`EXISTS (
-        SELECT 1
-        FROM matches today_match
-        WHERE today_match.tournament_id = t.id
-          AND ${this.todayDateCondition('today_match.scheduled_time')}
+      conditions.push(`(
+        t.status = 'ACTIVE'
+        OR EXISTS (
+          SELECT 1
+          FROM matches today_match
+          WHERE today_match.tournament_id = t.id
+            AND ${this.todayDateCondition('today_match.scheduled_time')}
+        )
       )`);
     }
 

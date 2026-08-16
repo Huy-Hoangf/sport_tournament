@@ -1571,17 +1571,17 @@ function DashboardTournamentOverview({
         )}
 
         {emptyGroups.length > 0 && (
-          <div className="grid overflow-hidden rounded border border-dashed border-[#3a4d54] md:grid-cols-2">
+          <div className="flex flex-wrap gap-3 rounded border border-dashed border-[#3a4d54] bg-[#0a1d23] p-4">
             {emptyGroups.slice(0, 4).map((group) => (
               <div
                 key={group.sportType}
-                className="flex min-h-[86px] items-center justify-center gap-3 border-b border-dashed border-[#243c43] px-4 py-5 text-center last:border-b-0 md:border-b-0 md:border-r md:last:border-r-0"
+                className="flex min-h-12 min-w-[220px] flex-1 items-center justify-center gap-3 rounded border border-[#243c43] bg-[#0d252d] px-4 py-3 text-center"
               >
                 <span className="flex h-10 w-10 shrink-0 items-center justify-center rounded border border-[#3a4d54] bg-[#143942] text-[#84d8e8]">
                   {getSportMeta(group.sportType).icon}
                 </span>
                 <p className="text-sm font-bold text-[#dce8eb]">
-                  No {getSportMeta(group.sportType).label} tournaments today
+                  No {getSportMeta(group.sportType).label} tournaments
                 </p>
               </div>
             ))}
@@ -1636,7 +1636,7 @@ function DashboardTournamentCard({
       </div>
 
       <MetricBlock label="Teams" value={tournament.teams} />
-      <MetricBlock label="Matches" value={tournament.matches} />
+      <MetricBlock label="Matches Today" value={tournament.matches} />
 
       <div className="min-w-0 border-[#29444d] xl:border-l xl:pl-6">
         <p className="text-xs font-bold uppercase tracking-[0.08em] text-[#9fb2b8]">
