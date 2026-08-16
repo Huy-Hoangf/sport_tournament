@@ -1,7 +1,7 @@
-﻿import type React from "react";
+import type React from "react";
 import { Trophy, Users, Zap } from "lucide-react";
-import type { MatchRow } from "../tournament/types";
-import { formatScore } from "../tournament/utils";
+import type { MatchRow } from "../tournaments/types";
+import { formatScore } from "../tournaments/utils";
 export function DashboardActionButton({
   icon,
   label,
@@ -218,6 +218,4 @@ export function DashboardActivityIcon({ type }: { type: string }) {
 
   return <Trophy size={14} />;
 }
-
-
 

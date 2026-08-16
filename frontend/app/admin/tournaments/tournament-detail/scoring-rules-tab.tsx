@@ -13,9 +13,9 @@ import {
   Upload,
   X,
 } from "lucide-react";
-import type { TournamentRow } from "./types";
-import { AdminSelect } from "../shared/admin-select";
-import { apiRequest } from "../../api";
+import type { TournamentRow } from "../types";
+import { AdminSelect } from "../../shared/admin-select";
+import { apiRequest } from "../../../api";
 
 type ScoringRule = {
   id: string;

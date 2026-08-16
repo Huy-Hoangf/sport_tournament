@@ -19,8 +19,8 @@ import {
   DashboardStatCard,
   MatchTeams,
 } from "../shared/dashboard-ui";
-import type { MatchRow } from "../tournament/types";
-import { formatDateTime, formatScore, isFinishedStatus } from "../tournament/utils";
+import type { MatchRow } from "../tournaments/types";
+import { formatDateTime, formatScore, isFinishedStatus } from "../tournaments/utils";
 
 const MATCHES_PAGE_SIZE = 8;
 
