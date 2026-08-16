@@ -2,16 +2,24 @@ import { Injectable } from '@nestjs/common';
 import { InjectRepository } from '@nestjs/typeorm';
 import { Repository } from 'typeorm';
 import { User } from '../users/user.entity';
+import { CITO_API_BASE_URL } from './lol/cito.client';
+import { OPENF1_API_BASE_URL } from './f1/openf1.client';
+import {
+  ESPN_SOCCER_API_BASE_URL,
+  FOOTBALL_DATA_ORG_API_BASE_URL,
+  THESPORTSDB_API_BASE_URL,
+} from './football/football-data-org.client';
+import type { FootballCompetitionOption } from './football/football.types';
+import type { F1MeetingOption } from './f1/f1.types';
+import type { LolCompetitionOption } from './lol/lol.types';
+import {
+  ApiRateLimitError,
+  fetchJson,
+  fetchOptionalJson,
+} from './shared/external-fetch';
 
 // Cito LoL free tier is limited, so list calls are cached for a day unless an import forces fresh data.
 const LOL_CACHE_MS = 24 * 60 * 60 * 1000;
-const EXTERNAL_FETCH_TIMEOUT_MS = 12_000;
-const FOOTBALL_DATA_ORG_API_BASE_URL = 'https://api.football-data.org/v4';
-const OPENF1_API_BASE_URL = 'https://api.openf1.org/v1';
-const CITO_API_BASE_URL = 'https://api.citoapi.com/api/v1';
-const THESPORTSDB_API_BASE_URL = 'https://www.thesportsdb.com/api/v1/json';
-const ESPN_SOCCER_API_BASE_URL =
-  'https://site.api.espn.com/apis/site/v2/sports/soccer';
 const FEATURED_FOOTBALL_COMPETITIONS: Array<{
   id?: number;
   rank: number;
@@ -97,17 +105,6 @@ const FOOTBALL_DATA_ORG_IMPORT_COMPETITIONS = [
   },
 ] as const;
 
-export type FootballCompetitionOption = {
-  id: number;
-  name: string;
-  country: string;
-  season: number;
-  start: string | null;
-  end: string | null;
-  current: boolean;
-  type: string;
-};
-
 type FootballMatch = {
   fixture: {
     id: number | string;
@@ -168,13 +165,6 @@ type FootballDataOrgMatch = {
 
 type TournamentStatus = 'UPCOMING' | 'ACTIVE' | 'COMPLETED' | 'CANCELLED';
 
-class ApiRateLimitError extends Error {
-  constructor(message: string) {
-    super(message);
-    this.name = 'ApiRateLimitError';
-  }
-}
-
 type EspnSoccerEvent = {
   id?: string;
   date?: string;
@@ -207,26 +197,6 @@ type OpenF1Meeting = {
   date_start: string;
   date_end: string;
   is_cancelled?: boolean;
-};
-
-export type F1MeetingOption = {
-  id: number;
-  name: string;
-  country: string;
-  circuit: string;
-  start: string;
-  end: string;
-  current: boolean;
-};
-
-export type LolCompetitionOption = {
-  id: string;
-  name: string;
-  region: string;
-  start: string | null;
-  nextMatchAt: string | null;
-  current: boolean;
-  matches: number;
 };
 
 type OpenF1Session = {
@@ -534,7 +504,7 @@ export class SportsApiSyncService {
     const years = [now.getUTCFullYear(), now.getUTCFullYear() + 1];
     const meetingResponses = await Promise.all(
       years.map((year) =>
-        this.fetchOptionalJson<OpenF1Meeting[]>(
+        fetchOptionalJson<OpenF1Meeting[]>(
           `${OPENF1_API_BASE_URL}/meetings?year=${year}`,
         ),
       ),
@@ -584,14 +554,14 @@ export class SportsApiSyncService {
     const [meetingResponses, sessionResponses] = await Promise.all([
       Promise.all(
         years.map((year) =>
-          this.fetchOptionalJson<OpenF1Meeting[]>(
+          fetchOptionalJson<OpenF1Meeting[]>(
             `${OPENF1_API_BASE_URL}/meetings?year=${year}`,
           ),
         ),
       ),
       Promise.all(
         years.map((year) =>
-          this.fetchOptionalJson<OpenF1Session[]>(
+          fetchOptionalJson<OpenF1Session[]>(
             `${OPENF1_API_BASE_URL}/sessions?year=${year}`,
           ),
         ),
@@ -870,7 +840,7 @@ export class SportsApiSyncService {
     season: number,
     includeFinishedFixtures = false,
   ) {
-    const response = await this.fetchJson<{ events?: EspnSoccerEvent[] }>(
+    const response = await fetchJson<{ events?: EspnSoccerEvent[] }>(
       `${ESPN_SOCCER_API_BASE_URL}/aff.championship/scoreboard?dates=${season}0101-${season}1231`,
     );
 
@@ -953,7 +923,7 @@ export class SportsApiSyncService {
       return [];
     }
 
-    const response = await this.fetchOptionalJson<{
+    const response = await fetchOptionalJson<{
       matches?: FootballDataOrgMatch[];
     }>(
       `${FOOTBALL_DATA_ORG_API_BASE_URL}/competitions/${competitionCode}/matches`,
@@ -1033,7 +1003,7 @@ export class SportsApiSyncService {
     }
 
     const apiKey = process.env.THESPORTSDB_API_KEY?.trim() || '123';
-    const response = await this.fetchOptionalJson<{
+    const response = await fetchOptionalJson<{
       teams?: Array<{ strBadge?: string; strLogo?: string }>;
     }>(
       `${THESPORTSDB_API_BASE_URL}/${apiKey}/searchteams.php?t=${encodeURIComponent(
@@ -1143,10 +1113,10 @@ export class SportsApiSyncService {
     const year = now.getUTCFullYear();
     const nextWindow = new Date(now.getTime() + 45 * 24 * 60 * 60 * 1000);
     const [meetings, sessions] = await Promise.all([
-      this.fetchJson<OpenF1Meeting[]>(
+      fetchJson<OpenF1Meeting[]>(
         `${OPENF1_API_BASE_URL}/meetings?year=${year}`,
       ),
-      this.fetchJson<OpenF1Session[]>(
+      fetchJson<OpenF1Session[]>(
         `${OPENF1_API_BASE_URL}/sessions?year=${year}`,
       ),
     ]);
@@ -1479,39 +1449,39 @@ export class SportsApiSyncService {
       lckChallengersResponse,
       lckChallengersResultsResponse,
     ] = await Promise.all([
-      this.fetchJson<unknown>(
+      fetchJson<unknown>(
         `${CITO_API_BASE_URL}/lol/schedule/today`,
         headers,
       ),
-      this.fetchJson<unknown>(
+      fetchJson<unknown>(
         `${CITO_API_BASE_URL}/lol/schedule/upcoming`,
         headers,
       ),
-      this.fetchOptionalJson<unknown>(
+      fetchOptionalJson<unknown>(
         `${CITO_API_BASE_URL}/lol/schedule/recent`,
         headers,
       ),
-      this.fetchOptionalJson<unknown>(
+      fetchOptionalJson<unknown>(
         `${CITO_API_BASE_URL}/lol/schedule/results`,
         headers,
       ),
-      this.fetchOptionalJson<unknown>(
+      fetchOptionalJson<unknown>(
         `${CITO_API_BASE_URL}/lol/schedule/past`,
         headers,
       ),
-      this.fetchOptionalJson<unknown>(
+      fetchOptionalJson<unknown>(
         `${CITO_API_BASE_URL}/lol/leagues/lck/schedule`,
         headers,
       ),
-      this.fetchOptionalJson<unknown>(
+      fetchOptionalJson<unknown>(
         `${CITO_API_BASE_URL}/lol/leagues/lck/results`,
         headers,
       ),
-      this.fetchOptionalJson<unknown>(
+      fetchOptionalJson<unknown>(
         `${CITO_API_BASE_URL}/lol/leagues/lck_challengers/schedule`,
         headers,
       ),
-      this.fetchOptionalJson<unknown>(
+      fetchOptionalJson<unknown>(
         `${CITO_API_BASE_URL}/lol/leagues/lck_challengers/results`,
         headers,
       ),
@@ -2013,7 +1983,7 @@ export class SportsApiSyncService {
       return new Map<string, string>();
     }
 
-    const payload = await this.fetchOptionalJson<unknown>(
+    const payload = await fetchOptionalJson<unknown>(
       `${CITO_API_BASE_URL}/lol/teams`,
       { 'x-api-key': apiKey },
     );
@@ -2369,53 +2339,6 @@ export class SportsApiSyncService {
 
   private isRecord(value: unknown): value is Record<string, unknown> {
     return Boolean(value) && typeof value === 'object' && !Array.isArray(value);
-  }
-
-  private async fetchJson<T>(url: string, headers?: Record<string, string>) {
-    const controller = new AbortController();
-    const timeout = setTimeout(
-      () => controller.abort(),
-      EXTERNAL_FETCH_TIMEOUT_MS,
-    );
-    let response: Response;
-
-    try {
-      response = await fetch(url, { headers, signal: controller.signal });
-    } catch (error) {
-      if (error instanceof Error && error.name === 'AbortError') {
-        throw new Error(
-          `External API timed out after ${EXTERNAL_FETCH_TIMEOUT_MS / 1000}s: ${url}`,
-        );
-      }
-
-      throw error;
-    } finally {
-      clearTimeout(timeout);
-    }
-
-    if (!response.ok) {
-      const text = await response.text();
-      if (response.status === 429) {
-        throw new ApiRateLimitError(
-          'External sports API is rate-limited. Please wait a few seconds, then import fewer items at once.',
-        );
-      }
-
-      throw new Error(`API request failed ${response.status}: ${text}`);
-    }
-
-    return (await response.json()) as T;
-  }
-
-  private async fetchOptionalJson<T>(
-    url: string,
-    headers?: Record<string, string>,
-  ) {
-    try {
-      return await this.fetchJson<T>(url, headers);
-    } catch {
-      return null;
-    }
   }
 
   private toFootballDataOrgCompetitionOption(

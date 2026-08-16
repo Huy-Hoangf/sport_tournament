@@ -10,7 +10,7 @@ import {
 } from '@nestjs/common';
 import { AuthService } from '../auth/auth.service';
 import { DashboardService } from './dashboard.service';
-import { SportsApiSyncService } from './sports-api-sync.service';
+import { SportsApiSyncService } from '../integrations/sports-sync.service';
 
 @Controller('dashboard')
 export class DashboardController {

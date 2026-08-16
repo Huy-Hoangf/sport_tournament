@@ -1,25 +1,27 @@
-﻿"use client";
+"use client";
 
 import { apiRequest } from "../api";
 import NoticeBanner, { type Notice } from "../notice-banner";
 import { useCallback, useEffect, useState } from "react";
 import { AdminSelect } from "./shared/admin-select";
+import { DashboardActionButton } from "./shared/dashboard-ui";
 import {
-  DashboardActionButton,
-  DashboardActivityIcon,
-  DashboardPanelTitle,
-  DashboardSourceBadge,
-  DashboardStatusBadge,
-  DashboardStatCard,
-} from "./shared/dashboard-ui";
-import { TournamentInput, TournamentSelect } from "./tournament/form-controls";
+  DashboardTournamentOverview,
+  getTournamentDashboardPriority,
+  getTournamentSportFilterValue,
+} from "./dashboard/dashboard-overview";
+import { ApiStatusBanner } from "./dashboard/api-status-banner";
+import { AttentionModal } from "./dashboard/attention-modal";
+import { DashboardStatGrid } from "./dashboard/dashboard-stat-grid";
+import { RecentActivityPanel } from "./dashboard/recent-activity-panel";
+import { TournamentInput, TournamentSelect } from "./tournaments/form-controls";
 import {
   F1MeetingGroup,
   FootballCompetitionGroup,
   LolCompetitionGroup,
-} from "./tournament/import-groups";
-import { TournamentDetailView } from "./tournament/tournament-detail-view";
-import { TournamentManagementTable } from "./tournament/tournament-management-table";
+} from "./tournaments/import-groups";
+import { TournamentDetailView } from "./tournaments/tournament-detail/tournament-detail-view";
+import { TournamentManagementTable } from "./tournaments/tournament-table";
 import type {
   DashboardData,
   F1MeetingOption,
@@ -29,36 +31,17 @@ import type {
   SyncSport,
   TournamentForm,
   TournamentRow,
-  MatchRow,
-} from "./tournament/types";
+} from "./tournaments/types";
 import {
-  formatDateTime,
-  formatRelative,
   getF1MeetingPhase,
   getFootballCompetitionPhase,
   getFootballLeagueKey,
   getImportSportLabel,
   getLolCompetitionPhase,
   getTournamentGroups,
-  normalizeSportType,
   normalizeStatus,
-} from "./tournament/utils";
-import {
-  AlertTriangle,
-  CalendarDays,
-  Cloud,
-  FileDown,
-  Gamepad2,
-  Plus,
-  Pencil,
-  RefreshCw,
-  Search,
-  ShieldCheck,
-  Trash2,
-  Trophy,
-  Users,
-  X,
-} from "lucide-react";
+} from "./tournaments/utils";
+import { FileDown, Plus, RefreshCw, Search } from "lucide-react";
 
 // Dashboard auto-refresh matches the earlier API budget rule: one refresh every 14.4 minutes.
 const DASHBOARD_REFRESH_MS = 14.4 * 60 * 1000;
@@ -851,64 +834,17 @@ export default function AdminDashboardContent({
         <>
       {!isTournamentView && (
         <>
-          <section className="mb-5 rounded border border-[#3a4d54] bg-[#0d252d] p-4">
-            <div className="flex flex-wrap items-center gap-4">
-              <div className="flex h-12 w-12 items-center justify-center bg-[#143942] text-[#84d8e8]">
-                <Cloud size={23} />
-              </div>
-              <div className="flex-1">
-                <p className="text-sm font-black uppercase text-[#84d8e8]">
-                  API Status:{" "}
-                  {dashboard.apiStatus.connected ? "Connected" : "Offline"}
-                </p>
-                <p className="mt-1 text-sm text-[#9fb2b8]">
-                  {dashboard.apiStatus.provider} - Last sync:{" "}
-                  {formatRelative(dashboard.apiStatus.lastSync)}
-                </p>
-              </div>
-              <div className="bg-[#14272e] px-4 py-2 text-xs font-black uppercase text-[#c4d3d8]">
-                ID: {dashboard.apiStatus.externalId}
-              </div>
-              <button
-                onClick={() => void loadDashboard()}
-                title="Refresh dashboard"
-                className="text-[#dce8eb]"
-              >
-                <RefreshCw
-                  size={20}
-                  className={isLoading ? "animate-spin" : ""}
-                />
-              </button>
-            </div>
-          </section>
+          <ApiStatusBanner
+            apiStatus={dashboard.apiStatus}
+            isLoading={isLoading}
+            onRefresh={() => void loadDashboard()}
+          />
 
-          <section className="mb-5 grid grid-cols-2 gap-3 md:gap-4 2xl:grid-cols-4 2xl:gap-6">
-            <DashboardStatCard
-              title="Active Tournaments"
-              value={dashboard.stats.activeTournaments}
-              icon={<Trophy size={22} />}
-            />
-            <DashboardStatCard
-              title="Total Players"
-              value={dashboard.stats.totalPlayers}
-              icon={<Users size={22} />}
-            />
-            <DashboardStatCard
-              title="Today Matches"
-              value={dashboard.stats.upcomingMatches}
-              
-              icon={<CalendarDays size={22} />}
-            />
-            {isAdmin && (
-              <DashboardStatCard
-                tone="warning"
-                title="Attention Needed"
-                value={dashboard.stats.attentionNeeded}
-                icon={<AlertTriangle size={24} />}
-                onClick={() => setOpenAttentionDetails(true)}
-              />
-            )}
-          </section>
+          <DashboardStatGrid
+            stats={dashboard.stats}
+            isAdmin={isAdmin}
+            onOpenAttentionDetails={() => setOpenAttentionDetails(true)}
+          />
         </>
       )}
 
@@ -953,103 +889,17 @@ export default function AdminDashboardContent({
         </div>
 
         {!isTournamentView && (
-          <aside className="overflow-hidden rounded border border-[#3a4d54] bg-[#0d252d]">
-            <DashboardPanelTitle title="Recent Activity" />
-            <div className="min-h-[420px] space-y-6 p-6">
-              {dashboard.recentActivity.map((activity) => (
-                <div key={activity.id} className="flex gap-4">
-                  <span className="flex h-7 w-7 shrink-0 items-center justify-center bg-[#143942] text-[#84d8e8]">
-                    <DashboardActivityIcon type={activity.type} />
-                  </span>
-                  <div>
-                    <p className="text-sm font-bold text-[#dce8eb]">
-                      {activity.message}
-                    </p>
-                    <p className="mt-2 text-xs uppercase text-[#789098]">
-                      {formatRelative(activity.createdAt)}
-                    </p>
-                  </div>
-                </div>
-              ))}
-              {dashboard.recentActivity.length === 0 && (
-                <p className="pt-12 text-center text-[#9fb2b8]">
-                  No recent activity in database.
-                </p>
-              )}
-            </div>
-          </aside>
+          <RecentActivityPanel activities={dashboard.recentActivity} />
         )}
       </div>
         </>
       )}
 
       {isAdmin && openAttentionDetails && (
-        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/70 px-4">
-          <section className="w-full max-w-[720px] overflow-hidden rounded border border-[#8b7133] bg-[#0d252d] shadow-2xl">
-            <header className="flex items-center justify-between border-b border-[#3a4d54] bg-[#14272e] px-6 py-5">
-              <div>
-                <h3 className="text-xl font-black uppercase text-[#f4c95d]">
-                  Players Needing Attention
-                </h3>
-                <p className="mt-2 text-sm text-[#9fb2b8]">
-                  {dashboard.stats.inactivePlayers} inactive,{" "}
-                  {dashboard.stats.pendingPlayers} pending players
-                </p>
-              </div>
-              <button
-                type="button"
-                onClick={() => setOpenAttentionDetails(false)}
-                className="flex h-10 w-10 items-center justify-center text-[#dce8eb] transition hover:text-white"
-                aria-label="Close attention details"
-                title="Close"
-              >
-                <X size={20} />
-              </button>
-            </header>
-
-            <div className="max-h-[480px] overflow-y-auto">
-              {dashboard.inactivePlayers.map((player) => (
-                <div
-                  key={player.id}
-                  className="grid gap-4 border-b border-[#243c43] px-6 py-5 last:border-b-0 sm:grid-cols-[minmax(0,1fr)_150px]"
-                >
-                  <div className="flex min-w-0 items-start gap-4">
-                    <span className="flex h-10 w-10 shrink-0 items-center justify-center bg-[#213740] text-[#84d8e8]">
-                      <Users size={18} />
-                    </span>
-                    <div className="min-w-0">
-                      <p className="truncate font-black text-white">
-                        {player.fullName}
-                      </p>
-                      <p className="mt-1 truncate text-sm text-[#b9c8cc]">
-                        {player.email}
-                      </p>
-                      <p className="mt-2 text-xs uppercase text-[#789098]">
-                        {player.memberCode || "No member ID"} - Updated{" "}
-                        {formatRelative(player.updatedAt)}
-                      </p>
-                    </div>
-                  </div>
-                  <div className="flex items-center sm:justify-end">
-                    <DashboardStatusBadge status={player.status} />
-                  </div>
-                </div>
-              ))}
-              {dashboard.inactivePlayers.length === 0 && (
-                <div className="px-6 py-16 text-center text-[#9fb2b8]">
-                  All players are active.
-                </div>
-              )}
-            </div>
-
-            <footer className="flex flex-wrap gap-x-6 gap-y-2 border-t border-[#3a4d54] bg-[#10242b] px-6 py-4 text-xs font-bold uppercase text-[#9fb2b8]">
-              <span>
-                Pending predictions: {dashboard.stats.pendingPredictions}
-              </span>
-              <span>Sync warnings: {dashboard.stats.warningMatches}</span>
-            </footer>
-          </section>
-        </div>
+        <AttentionModal
+          dashboard={dashboard}
+          onClose={() => setOpenAttentionDetails(false)}
+        />
       )}
 
       {openSyncApiModal && (
@@ -1429,358 +1279,5 @@ export default function AdminDashboardContent({
     </div>
   );
 }
-
-function DashboardTournamentOverview({
-  tournaments,
-  allTournamentsCount,
-  matches,
-  emptyGroups,
-  search,
-  sportFilter,
-  isAdmin,
-  onSearchChange,
-  onSportFilterChange,
-  onSelectTournament,
-  onEditTournament,
-  onDeleteTournament,
-}: {
-  tournaments: TournamentRow[];
-  allTournamentsCount: number;
-  matches: MatchRow[];
-  emptyGroups: Array<{
-    sportType: string;
-    title: string;
-    total: number;
-    tournaments: TournamentRow[];
-    emptyMessage: string;
-  }>;
-  search: string;
-  sportFilter: string;
-  isAdmin: boolean;
-  onSearchChange: (value: string) => void;
-  onSportFilterChange: (value: string) => void;
-  onSelectTournament: React.Dispatch<React.SetStateAction<number | null>>;
-  onEditTournament: (tournament: TournamentRow) => void;
-  onDeleteTournament: (tournament: TournamentRow) => void;
-}) {
-  const sportOptions = [
-    { value: "ALL", label: "All Sports", icon: <ShieldCheck size={15} /> },
-    { value: "FOOTBALL", label: "Football", icon: <Trophy size={15} /> },
-    { value: "F1", label: "F1", icon: <FlagIcon /> },
-    { value: "LOL", label: "League of Legends", icon: <Gamepad2 size={15} /> },
-    { value: "OTHER", label: "Other", icon: <Users size={15} /> },
-  ];
-
-  return (
-    <section className="overflow-hidden rounded border border-[#3a4d54] bg-[#0d252d]">
-      <header className="border-b border-[#3a4d54] bg-[#10242b] px-5 py-5">
-        <div className="flex flex-wrap items-center justify-between gap-4">
-          <div>
-            <h3 className="text-lg font-black text-white">
-              Tournament Overview
-            </h3>
-            <p className="mt-1 text-xs font-bold uppercase tracking-[0.08em] text-[#84d8e8]">
-              {tournaments.length} shown / {allTournamentsCount} total
-            </p>
-          </div>
-        </div>
-
-        <div className="mt-5 grid gap-3 2xl:grid-cols-[minmax(240px,1fr)_auto]">
-          <label className="flex h-11 min-w-0 items-center gap-3 rounded border border-[#3a4d54] bg-[#06161b] px-4 text-[#9fb2b8] focus-within:border-[#84d8e8]">
-            <Search size={17} className="shrink-0 text-[#84d8e8]" />
-            <input
-              value={search}
-              onChange={(event) => onSearchChange(event.target.value)}
-              placeholder="Search tournaments..."
-              className="h-full min-w-0 flex-1 bg-transparent text-sm font-bold text-white outline-none placeholder:text-[#789098]"
-            />
-          </label>
-          <div className="flex min-w-0 flex-wrap gap-2">
-            {sportOptions.map((option) => (
-              <button
-                key={option.value}
-                type="button"
-                onClick={() => onSportFilterChange(option.value)}
-                className={`flex h-11 min-w-0 items-center justify-center gap-2 rounded border px-4 text-xs font-black transition ${
-                  sportFilter === option.value
-                    ? "border-[#84d8e8] bg-[#143943] text-[#84d8e8]"
-                    : "border-[#3a4d54] bg-[#0d252d] text-[#dce8eb] hover:border-[#84d8e8] hover:text-[#84d8e8]"
-                }`}
-              >
-                {option.icon}
-                <span className="truncate">{option.label}</span>
-              </button>
-            ))}
-          </div>
-        </div>
-      </header>
-
-      <div className="space-y-3 p-4">
-        {tournaments.map((tournament) => (
-          <DashboardTournamentCard
-            key={tournament.id}
-            tournament={tournament}
-            matches={matches.filter(
-              (match) => match.tournamentId === tournament.id,
-            )}
-            isAdmin={isAdmin}
-            onSelectTournament={onSelectTournament}
-            onEditTournament={onEditTournament}
-            onDeleteTournament={onDeleteTournament}
-          />
-        ))}
-
-        {tournaments.length === 0 && (
-          <div className="rounded border border-dashed border-[#3a4d54] px-6 py-14 text-center">
-            <p className="font-black text-white">No tournaments match this view.</p>
-            <p className="mt-2 text-sm text-[#9fb2b8]">
-              Try another sport, status, or search keyword.
-            </p>
-          </div>
-        )}
-
-        {emptyGroups.length > 0 && (
-          <div className="flex flex-wrap gap-3 rounded border border-dashed border-[#3a4d54] bg-[#0a1d23] p-4">
-            {emptyGroups.slice(0, 4).map((group) => (
-              <div
-                key={group.sportType}
-                className="flex min-h-12 min-w-[220px] flex-1 items-center justify-center gap-3 rounded border border-[#243c43] bg-[#0d252d] px-4 py-3 text-center"
-              >
-                <span className="flex h-10 w-10 shrink-0 items-center justify-center rounded border border-[#3a4d54] bg-[#143942] text-[#84d8e8]">
-                  {getSportMeta(group.sportType).icon}
-                </span>
-                <p className="text-sm font-bold text-[#dce8eb]">
-                  No {getSportMeta(group.sportType).label} tournaments
-                </p>
-              </div>
-            ))}
-          </div>
-        )}
-      </div>
-    </section>
-  );
-}
-
-function DashboardTournamentCard({
-  tournament,
-  matches,
-  isAdmin,
-  onSelectTournament,
-  onEditTournament,
-  onDeleteTournament,
-}: {
-  tournament: TournamentRow;
-  matches: MatchRow[];
-  isAdmin: boolean;
-  onSelectTournament: React.Dispatch<React.SetStateAction<number | null>>;
-  onEditTournament: (tournament: TournamentRow) => void;
-  onDeleteTournament: (tournament: TournamentRow) => void;
-}) {
-  const sportMeta = getSportMeta(getTournamentSportFilterValue(tournament));
-  const nextMatch = getNextTournamentMatch(matches);
-  const nextMatchLabel = nextMatch
-    ? `${nextMatch.homeName ?? "TBD"} vs ${nextMatch.awayName ?? "TBD"}`
-    : "Schedule TBD";
-  const nextMatchTime = nextMatch
-    ? formatDateTime(nextMatch.scheduledTime)
-    : "No upcoming match";
-
-  return (
-    <article
-      role="button"
-      tabIndex={0}
-      onClick={() => onSelectTournament(tournament.id)}
-      onKeyDown={(event) => {
-        if (event.key === "Enter" || event.key === " ") {
-          event.preventDefault();
-          onSelectTournament(tournament.id);
-        }
-      }}
-      className="grid cursor-pointer gap-4 rounded border border-[#2c4750] bg-[#0b2027] p-4 shadow-[inset_0_1px_0_rgba(255,255,255,0.04)] transition hover:border-[#84d8e8] hover:bg-[#102d35] focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-[#84d8e8] xl:grid-cols-[112px_minmax(190px,1fr)_90px_110px_minmax(180px,1fr)_110px_112px] xl:items-center"
-      aria-label={`Open ${tournament.name} tournament details`}
-    >
-      <div className="flex h-[96px] w-[96px] items-center justify-center rounded border border-[#3a4d54] bg-[#102d35] text-[#84d8e8]">
-        {sportMeta.largeIcon}
-      </div>
-
-      <div className="min-w-0">
-        <h4 title={tournament.name} className="truncate text-2xl font-black text-white">
-          {tournament.name}
-        </h4>
-        <div className="mt-3 flex flex-wrap items-center gap-2">
-          <span className={`inline-flex items-center gap-2 rounded px-2 py-1 text-xs font-black ${sportMeta.badgeClass}`}>
-            {sportMeta.icon}
-            {sportMeta.label}
-          </span>
-          <DashboardStatusBadge status={tournament.status} />
-        </div>
-      </div>
-
-      <MetricBlock label="Teams" value={tournament.teams} />
-      <MetricBlock label="Matches Today" value={tournament.matches} />
-
-      <div className="min-w-0 border-[#29444d] xl:border-l xl:pl-6">
-        <p className="text-xs font-bold uppercase tracking-[0.08em] text-[#9fb2b8]">
-          Next Match
-        </p>
-        <p title={nextMatchLabel} className="mt-2 truncate text-base font-black text-white">
-          {nextMatchLabel}
-        </p>
-        <p className="mt-2 truncate text-xs font-bold text-[#9fb2b8]">
-          {nextMatchTime}
-        </p>
-      </div>
-
-      <div className="min-w-0 border-[#29444d] xl:border-l xl:pl-6">
-        <p className="mb-2 text-xs font-bold uppercase tracking-[0.08em] text-[#9fb2b8]">
-          Source
-        </p>
-        <DashboardSourceBadge source={tournament.source} />
-      </div>
-
-      <div className="grid gap-2">
-        {isAdmin && (
-          <>
-            <button
-              type="button"
-              onClick={(event) => {
-                event.stopPropagation();
-                onEditTournament(tournament);
-              }}
-              className="flex h-9 items-center justify-center gap-2 rounded border border-[#3a4d54] bg-[#102d35] px-3 text-xs font-black text-[#84d8e8] transition hover:border-[#84d8e8]"
-            >
-              <Pencil size={14} />
-              Edit
-            </button>
-            <button
-              type="button"
-              onClick={(event) => {
-                event.stopPropagation();
-                onDeleteTournament(tournament);
-              }}
-              className="flex h-9 items-center justify-center gap-2 rounded border border-[#5d3037] bg-[#2a1115] px-3 text-xs font-black text-[#ff8a8a] transition hover:border-[#ff8a8a]"
-            >
-              <Trash2 size={14} />
-              Delete
-            </button>
-          </>
-        )}
-      </div>
-    </article>
-  );
-}
-
-function MetricBlock({ label, value }: { label: string; value: number }) {
-  return (
-    <div className="min-w-0 border-[#29444d] xl:border-l xl:pl-6">
-      <p className="text-[28px] font-black leading-none text-white tabular-nums">
-        {value.toLocaleString()}
-      </p>
-      <p className="mt-2 text-xs font-bold text-[#9fb2b8]">{label}</p>
-    </div>
-  );
-}
-
-function getNextTournamentMatch(matches: MatchRow[]) {
-  const now = Date.now();
-  const sortedMatches = [...matches].sort(
-    (first, second) =>
-      new Date(first.scheduledTime).getTime() -
-      new Date(second.scheduledTime).getTime(),
-  );
-  const upcoming = sortedMatches.find((match) => {
-    const timestamp = new Date(match.scheduledTime).getTime();
-
-    return Number.isFinite(timestamp) && timestamp >= now;
-  });
-
-  return upcoming ?? sortedMatches[0] ?? null;
-}
-
-function getTournamentDashboardPriority(tournament: TournamentRow) {
-  const status = tournament.status.toUpperCase();
-
-  if (status === "ACTIVE") {
-    return 0;
-  }
-
-  if (status === "UPCOMING") {
-    return 1;
-  }
-
-  if (status === "COMPLETED") {
-    return 2;
-  }
-
-  return 3;
-}
-
-function getTournamentSportFilterValue(tournament: TournamentRow) {
-  if (
-    tournament.source?.toUpperCase() === "CITO_LOL" ||
-    normalizeSportType(tournament.sportType) === "LOL"
-  ) {
-    return "LOL";
-  }
-
-  const sportType = normalizeSportType(tournament.sportType);
-
-  if (sportType === "FOOTBALL" || sportType === "F1") {
-    return sportType;
-  }
-
-  return "OTHER";
-}
-
-function getSportMeta(sportType: string) {
-  const normalized = sportType.toUpperCase();
-
-  if (normalized === "LOL") {
-    return {
-      label: "League of Legends",
-      icon: <Gamepad2 size={14} />,
-      largeIcon: <Gamepad2 size={40} />,
-      badgeClass: "bg-[#2b2050] text-[#d8c7ff]",
-    };
-  }
-
-  if (normalized === "F1") {
-    return {
-      label: "F1",
-      icon: <FlagIcon />,
-      largeIcon: <FlagIcon size={42} />,
-      badgeClass: "bg-[#35171b] text-[#ff8a8a]",
-    };
-  }
-
-  if (normalized === "OTHER") {
-    return {
-      label: "Other Sports",
-      icon: <Users size={14} />,
-      largeIcon: <Users size={40} />,
-      badgeClass: "bg-[#203940] text-[#dce8eb]",
-    };
-  }
-
-  return {
-    label: "Football",
-    icon: <Trophy size={14} />,
-    largeIcon: <Trophy size={42} />,
-    badgeClass: "bg-[#143943] text-[#84d8e8]",
-  };
-}
-
-function FlagIcon({ size = 14 }: { size?: number }) {
-  return (
-    <span
-      aria-hidden="true"
-      className="inline-flex items-center justify-center font-black leading-none"
-      style={{ width: size, height: size, fontSize: Math.max(10, size - 4) }}
-    >
-      F1
-    </span>
-  );
-}
-
 
 
