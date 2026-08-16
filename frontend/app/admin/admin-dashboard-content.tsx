@@ -793,9 +793,12 @@ export default function AdminDashboardContent({
             <label className="flex h-12 items-center gap-3 border border-[#3a4d54] bg-[#06161b] px-4 text-[#9fb2b8] focus-within:border-[#84d8e8]">
               <Search size={18} className="shrink-0 text-[#84d8e8]" />
               <input
+                type="search"
                 value={tournamentSearch}
                 onChange={(event) => setTournamentSearch(event.target.value)}
                 placeholder="Search tournaments by name, source, or ID..."
+                autoComplete="off"
+                name="tournament-management-search"
                 className="h-full min-w-0 flex-1 bg-transparent text-sm font-bold text-white outline-none placeholder:text-[#789098]"
               />
             </label>
