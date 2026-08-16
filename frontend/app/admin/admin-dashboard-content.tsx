@@ -8,6 +8,7 @@ import {
   DashboardActionButton,
   DashboardActivityIcon,
   DashboardPanelTitle,
+  DashboardSourceBadge,
   DashboardStatusBadge,
   DashboardStatCard,
 } from "./shared/dashboard-ui";
@@ -28,8 +29,11 @@ import type {
   SyncSport,
   TournamentForm,
   TournamentRow,
+  TournamentStatusFilter,
+  MatchRow,
 } from "./tournament/types";
 import {
+  formatDateTime,
   formatRelative,
   getF1MeetingPhase,
   getFootballCompetitionPhase,
@@ -37,16 +41,22 @@ import {
   getImportSportLabel,
   getLolCompetitionPhase,
   getTournamentGroups,
+  normalizeSportType,
   normalizeStatus,
 } from "./tournament/utils";
 import {
   AlertTriangle,
   CalendarDays,
   Cloud,
+  ExternalLink,
   FileDown,
+  Gamepad2,
   Plus,
+  Pencil,
   RefreshCw,
   Search,
+  ShieldCheck,
+  Trash2,
   Trophy,
   Users,
   X,
@@ -154,6 +164,9 @@ export default function AdminDashboardContent({
     number | null
   >(null);
   const [tournamentSearch, setTournamentSearch] = useState("");
+  const [dashboardSportFilter, setDashboardSportFilter] = useState("ALL");
+  const [dashboardStatusFilter, setDashboardStatusFilter] =
+    useState<TournamentStatusFilter>("ALL");
   const [tournamentForm, setTournamentForm] =
     useState<TournamentForm>(emptyTournamentForm);
   const isTournamentView = view === "tournaments";
@@ -622,6 +635,36 @@ export default function AdminDashboardContent({
     );
   });
   const tournamentGroups = getTournamentGroups(searchedTournaments);
+  const dashboardOverviewTournaments = isTournamentView
+    ? []
+    : searchedTournaments
+        .filter((tournament) => {
+          const sportType = getTournamentSportFilterValue(tournament);
+          const status = tournament.status.toUpperCase();
+          const matchesSport =
+            dashboardSportFilter === "ALL" ||
+            sportType === dashboardSportFilter;
+          const matchesStatus =
+            dashboardStatusFilter === "ALL" ||
+            (dashboardStatusFilter === "COMPLETED"
+              ? status === "COMPLETED" || status === "CANCELLED"
+              : status === dashboardStatusFilter);
+
+          return matchesSport && matchesStatus;
+        })
+        .sort((first, second) => {
+          const firstPriority = getTournamentDashboardPriority(first);
+          const secondPriority = getTournamentDashboardPriority(second);
+
+          if (firstPriority !== secondPriority) {
+            return firstPriority - secondPriority;
+          }
+
+          return first.name.localeCompare(second.name);
+        });
+  const dashboardEmptyGroups = getTournamentGroups(dashboard.tournaments).filter(
+    (group) => group.total === 0,
+  );
   const selectedTournament =
     dashboard.tournaments.find(
       (tournament) => tournament.id === selectedTournamentId,
@@ -885,21 +928,42 @@ export default function AdminDashboardContent({
         }`}
       >
         <div className="space-y-5">
-          {tournamentGroups.map((group) => (
-            <TournamentManagementTable
-              key={group.sportType}
-              title={isTournamentView ? group.title : `Today ${group.title}`}
-              total={group.total}
-              tournaments={group.tournaments}
-              emptyMessage={group.emptyMessage}
-              tournamentMatches={dashboard.tournamentMatches}
-              selectedTournamentId={selectedTournamentId}
-              onSelectTournament={setSelectedTournamentId}
+          {isTournamentView ? (
+            tournamentGroups.map((group) => (
+              <TournamentManagementTable
+                key={group.sportType}
+                title={group.title}
+                total={group.total}
+                tournaments={group.tournaments}
+                emptyMessage={group.emptyMessage}
+                tournamentMatches={dashboard.tournamentMatches}
+                selectedTournamentId={selectedTournamentId}
+                onSelectTournament={setSelectedTournamentId}
+                isAdmin={isAdmin}
+                onEditTournament={openEditTournament}
+                onDeleteTournament={setTournamentToDelete}
+              />
+            ))
+          ) : (
+            <DashboardTournamentOverview
+              tournaments={dashboardOverviewTournaments}
+              allTournamentsCount={searchedTournaments.length}
+              matches={dashboard.tournamentMatches}
+              emptyGroups={dashboardEmptyGroups}
+              search={tournamentSearch}
+              sportFilter={dashboardSportFilter}
+              statusFilter={dashboardStatusFilter}
               isAdmin={isAdmin}
-                  onEditTournament={openEditTournament}
+              onSearchChange={setTournamentSearch}
+              onSportFilterChange={setDashboardSportFilter}
+              onStatusFilterChange={(nextValue) =>
+                setDashboardStatusFilter(nextValue as TournamentStatusFilter)
+              }
+              onSelectTournament={setSelectedTournamentId}
+              onEditTournament={openEditTournament}
               onDeleteTournament={setTournamentToDelete}
             />
-          ))}
+          )}
         </div>
 
         {!isTournamentView && (
@@ -1377,6 +1441,365 @@ export default function AdminDashboardContent({
         </div>
       )}
     </div>
+  );
+}
+
+function DashboardTournamentOverview({
+  tournaments,
+  allTournamentsCount,
+  matches,
+  emptyGroups,
+  search,
+  sportFilter,
+  statusFilter,
+  isAdmin,
+  onSearchChange,
+  onSportFilterChange,
+  onStatusFilterChange,
+  onSelectTournament,
+  onEditTournament,
+  onDeleteTournament,
+}: {
+  tournaments: TournamentRow[];
+  allTournamentsCount: number;
+  matches: MatchRow[];
+  emptyGroups: Array<{
+    sportType: string;
+    title: string;
+    total: number;
+    tournaments: TournamentRow[];
+    emptyMessage: string;
+  }>;
+  search: string;
+  sportFilter: string;
+  statusFilter: TournamentStatusFilter;
+  isAdmin: boolean;
+  onSearchChange: (value: string) => void;
+  onSportFilterChange: (value: string) => void;
+  onStatusFilterChange: (value: string) => void;
+  onSelectTournament: React.Dispatch<React.SetStateAction<number | null>>;
+  onEditTournament: (tournament: TournamentRow) => void;
+  onDeleteTournament: (tournament: TournamentRow) => void;
+}) {
+  const sportOptions = [
+    { value: "ALL", label: "All Sports", icon: <ShieldCheck size={15} /> },
+    { value: "FOOTBALL", label: "Football", icon: <Trophy size={15} /> },
+    { value: "F1", label: "F1", icon: <FlagIcon /> },
+    { value: "LOL", label: "League of Legends", icon: <Gamepad2 size={15} /> },
+    { value: "OTHER", label: "Other", icon: <Users size={15} /> },
+  ];
+
+  return (
+    <section className="overflow-hidden rounded border border-[#3a4d54] bg-[#0d252d]">
+      <header className="border-b border-[#3a4d54] bg-[#10242b] px-5 py-5">
+        <div className="flex flex-wrap items-center justify-between gap-4">
+          <div>
+            <h3 className="text-lg font-black text-white">
+              Tournament Overview
+            </h3>
+            <p className="mt-1 text-xs font-bold uppercase tracking-[0.08em] text-[#84d8e8]">
+              {tournaments.length} shown / {allTournamentsCount} total
+            </p>
+          </div>
+          <AdminSelect
+            value={statusFilter}
+            options={[
+              { value: "ALL", label: "All Status" },
+              { value: "ACTIVE", label: "Active" },
+              { value: "UPCOMING", label: "Upcoming" },
+              { value: "COMPLETED", label: "Completed" },
+            ]}
+            onChange={onStatusFilterChange}
+            ariaLabel="Filter dashboard tournaments by status"
+            className="w-full sm:w-[160px]"
+            size="compact"
+          />
+        </div>
+
+        <div className="mt-5 grid gap-3 2xl:grid-cols-[minmax(240px,1fr)_auto]">
+          <label className="flex h-11 min-w-0 items-center gap-3 rounded border border-[#3a4d54] bg-[#06161b] px-4 text-[#9fb2b8] focus-within:border-[#84d8e8]">
+            <Search size={17} className="shrink-0 text-[#84d8e8]" />
+            <input
+              value={search}
+              onChange={(event) => onSearchChange(event.target.value)}
+              placeholder="Search tournaments..."
+              className="h-full min-w-0 flex-1 bg-transparent text-sm font-bold text-white outline-none placeholder:text-[#789098]"
+            />
+          </label>
+          <div className="flex min-w-0 flex-wrap gap-2">
+            {sportOptions.map((option) => (
+              <button
+                key={option.value}
+                type="button"
+                onClick={() => onSportFilterChange(option.value)}
+                className={`flex h-11 min-w-0 items-center justify-center gap-2 rounded border px-4 text-xs font-black transition ${
+                  sportFilter === option.value
+                    ? "border-[#84d8e8] bg-[#143943] text-[#84d8e8]"
+                    : "border-[#3a4d54] bg-[#0d252d] text-[#dce8eb] hover:border-[#84d8e8] hover:text-[#84d8e8]"
+                }`}
+              >
+                {option.icon}
+                <span className="truncate">{option.label}</span>
+              </button>
+            ))}
+          </div>
+        </div>
+      </header>
+
+      <div className="space-y-3 p-4">
+        {tournaments.map((tournament) => (
+          <DashboardTournamentCard
+            key={tournament.id}
+            tournament={tournament}
+            matches={matches.filter(
+              (match) => match.tournamentId === tournament.id,
+            )}
+            isAdmin={isAdmin}
+            onSelectTournament={onSelectTournament}
+            onEditTournament={onEditTournament}
+            onDeleteTournament={onDeleteTournament}
+          />
+        ))}
+
+        {tournaments.length === 0 && (
+          <div className="rounded border border-dashed border-[#3a4d54] px-6 py-14 text-center">
+            <p className="font-black text-white">No tournaments match this view.</p>
+            <p className="mt-2 text-sm text-[#9fb2b8]">
+              Try another sport, status, or search keyword.
+            </p>
+          </div>
+        )}
+
+        {emptyGroups.length > 0 && (
+          <div className="grid overflow-hidden rounded border border-dashed border-[#3a4d54] md:grid-cols-2">
+            {emptyGroups.slice(0, 4).map((group) => (
+              <div
+                key={group.sportType}
+                className="flex min-h-[86px] items-center justify-center gap-3 border-b border-dashed border-[#243c43] px-4 py-5 text-center last:border-b-0 md:border-b-0 md:border-r md:last:border-r-0"
+              >
+                <span className="flex h-10 w-10 shrink-0 items-center justify-center rounded border border-[#3a4d54] bg-[#143942] text-[#84d8e8]">
+                  {getSportMeta(group.sportType).icon}
+                </span>
+                <p className="text-sm font-bold text-[#dce8eb]">
+                  No {getSportMeta(group.sportType).label} tournaments today
+                </p>
+              </div>
+            ))}
+          </div>
+        )}
+      </div>
+    </section>
+  );
+}
+
+function DashboardTournamentCard({
+  tournament,
+  matches,
+  isAdmin,
+  onSelectTournament,
+  onEditTournament,
+  onDeleteTournament,
+}: {
+  tournament: TournamentRow;
+  matches: MatchRow[];
+  isAdmin: boolean;
+  onSelectTournament: React.Dispatch<React.SetStateAction<number | null>>;
+  onEditTournament: (tournament: TournamentRow) => void;
+  onDeleteTournament: (tournament: TournamentRow) => void;
+}) {
+  const sportMeta = getSportMeta(getTournamentSportFilterValue(tournament));
+  const nextMatch = getNextTournamentMatch(matches);
+  const nextMatchLabel = nextMatch
+    ? `${nextMatch.homeName ?? "TBD"} vs ${nextMatch.awayName ?? "TBD"}`
+    : "Schedule TBD";
+  const nextMatchTime = nextMatch
+    ? formatDateTime(nextMatch.scheduledTime)
+    : "No upcoming match";
+
+  return (
+    <article className="grid gap-4 rounded border border-[#2c4750] bg-[#0b2027] p-4 shadow-[inset_0_1px_0_rgba(255,255,255,0.04)] xl:grid-cols-[112px_minmax(190px,1fr)_90px_110px_minmax(180px,1fr)_110px_112px] xl:items-center">
+      <div className="flex h-[96px] w-[96px] items-center justify-center rounded border border-[#3a4d54] bg-[#102d35] text-[#84d8e8]">
+        {sportMeta.largeIcon}
+      </div>
+
+      <div className="min-w-0">
+        <h4 title={tournament.name} className="truncate text-2xl font-black text-white">
+          {tournament.name}
+        </h4>
+        <div className="mt-3 flex flex-wrap items-center gap-2">
+          <span className={`inline-flex items-center gap-2 rounded px-2 py-1 text-xs font-black ${sportMeta.badgeClass}`}>
+            {sportMeta.icon}
+            {sportMeta.label}
+          </span>
+          <DashboardStatusBadge status={tournament.status} />
+        </div>
+      </div>
+
+      <MetricBlock label="Teams" value={tournament.teams} />
+      <MetricBlock label="Matches" value={tournament.matches} />
+
+      <div className="min-w-0 border-[#29444d] xl:border-l xl:pl-6">
+        <p className="text-xs font-bold uppercase tracking-[0.08em] text-[#9fb2b8]">
+          Next Match
+        </p>
+        <p title={nextMatchLabel} className="mt-2 truncate text-base font-black text-white">
+          {nextMatchLabel}
+        </p>
+        <p className="mt-2 truncate text-xs font-bold text-[#9fb2b8]">
+          {nextMatchTime}
+        </p>
+      </div>
+
+      <div className="min-w-0 border-[#29444d] xl:border-l xl:pl-6">
+        <p className="mb-2 text-xs font-bold uppercase tracking-[0.08em] text-[#9fb2b8]">
+          Source
+        </p>
+        <DashboardSourceBadge source={tournament.source} />
+      </div>
+
+      <div className="grid gap-2">
+        <button
+          type="button"
+          onClick={() => onSelectTournament(tournament.id)}
+          className="flex h-9 items-center justify-center gap-2 rounded border border-[#84d8e8] bg-[#102d35] px-3 text-xs font-black text-[#84d8e8] transition hover:bg-[#143943]"
+        >
+          <ExternalLink size={14} />
+          Open
+        </button>
+        {isAdmin && (
+          <>
+            <button
+              type="button"
+              onClick={() => onEditTournament(tournament)}
+              className="flex h-9 items-center justify-center gap-2 rounded border border-[#3a4d54] bg-[#102d35] px-3 text-xs font-black text-[#84d8e8] transition hover:border-[#84d8e8]"
+            >
+              <Pencil size={14} />
+              Edit
+            </button>
+            <button
+              type="button"
+              onClick={() => onDeleteTournament(tournament)}
+              className="flex h-9 items-center justify-center gap-2 rounded border border-[#5d3037] bg-[#2a1115] px-3 text-xs font-black text-[#ff8a8a] transition hover:border-[#ff8a8a]"
+            >
+              <Trash2 size={14} />
+              Delete
+            </button>
+          </>
+        )}
+      </div>
+    </article>
+  );
+}
+
+function MetricBlock({ label, value }: { label: string; value: number }) {
+  return (
+    <div className="min-w-0 border-[#29444d] xl:border-l xl:pl-6">
+      <p className="text-[28px] font-black leading-none text-white tabular-nums">
+        {value.toLocaleString()}
+      </p>
+      <p className="mt-2 text-xs font-bold text-[#9fb2b8]">{label}</p>
+    </div>
+  );
+}
+
+function getNextTournamentMatch(matches: MatchRow[]) {
+  const now = Date.now();
+  const sortedMatches = [...matches].sort(
+    (first, second) =>
+      new Date(first.scheduledTime).getTime() -
+      new Date(second.scheduledTime).getTime(),
+  );
+  const upcoming = sortedMatches.find((match) => {
+    const timestamp = new Date(match.scheduledTime).getTime();
+
+    return Number.isFinite(timestamp) && timestamp >= now;
+  });
+
+  return upcoming ?? sortedMatches[0] ?? null;
+}
+
+function getTournamentDashboardPriority(tournament: TournamentRow) {
+  const status = tournament.status.toUpperCase();
+
+  if (status === "ACTIVE") {
+    return 0;
+  }
+
+  if (status === "UPCOMING") {
+    return 1;
+  }
+
+  if (status === "COMPLETED") {
+    return 2;
+  }
+
+  return 3;
+}
+
+function getTournamentSportFilterValue(tournament: TournamentRow) {
+  if (
+    tournament.source?.toUpperCase() === "CITO_LOL" ||
+    normalizeSportType(tournament.sportType) === "LOL"
+  ) {
+    return "LOL";
+  }
+
+  const sportType = normalizeSportType(tournament.sportType);
+
+  if (sportType === "FOOTBALL" || sportType === "F1") {
+    return sportType;
+  }
+
+  return "OTHER";
+}
+
+function getSportMeta(sportType: string) {
+  const normalized = sportType.toUpperCase();
+
+  if (normalized === "LOL") {
+    return {
+      label: "League of Legends",
+      icon: <Gamepad2 size={14} />,
+      largeIcon: <Gamepad2 size={40} />,
+      badgeClass: "bg-[#2b2050] text-[#d8c7ff]",
+    };
+  }
+
+  if (normalized === "F1") {
+    return {
+      label: "F1",
+      icon: <FlagIcon />,
+      largeIcon: <FlagIcon size={42} />,
+      badgeClass: "bg-[#35171b] text-[#ff8a8a]",
+    };
+  }
+
+  if (normalized === "OTHER") {
+    return {
+      label: "Other Sports",
+      icon: <Users size={14} />,
+      largeIcon: <Users size={40} />,
+      badgeClass: "bg-[#203940] text-[#dce8eb]",
+    };
+  }
+
+  return {
+    label: "Football",
+    icon: <Trophy size={14} />,
+    largeIcon: <Trophy size={42} />,
+    badgeClass: "bg-[#143943] text-[#84d8e8]",
+  };
+}
+
+function FlagIcon({ size = 14 }: { size?: number }) {
+  return (
+    <span
+      aria-hidden="true"
+      className="inline-flex items-center justify-center font-black leading-none"
+      style={{ width: size, height: size, fontSize: Math.max(10, size - 4) }}
+    >
+      F1
+    </span>
   );
 }
 
