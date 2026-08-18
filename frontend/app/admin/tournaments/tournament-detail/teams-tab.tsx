@@ -1,7 +1,6 @@
 import { Minus, Plus, Search, Shield, TrendingDown, TrendingUp } from "lucide-react";
-import { useEffect, useMemo, useState } from "react";
+import { useMemo, useState } from "react";
 
-import { apiRequest } from "../../../api";
 import type { MatchRow, TournamentRow } from "../types";
 import { isFinishedStatus } from "../utils";
 
@@ -29,10 +28,8 @@ export function TeamsTab({
   const [searchValue, setSearchValue] = useState("");
   const [stageFilter, setStageFilter] = useState("ALL");
   const [page, setPage] = useState(1);
-  const [apiTeamRows, setApiTeamRows] = useState<TeamRow[] | null>(null);
   const pageSize = 4;
-  const fallbackTeamRows = useMemo(() => buildTeamRows(matches), [matches]);
-  const teamRows = apiTeamRows ?? fallbackTeamRows;
+  const teamRows = useMemo(() => buildTeamRows(matches), [matches]);
   const stageOptions = useMemo(
     () => [
       "ALL",
@@ -52,26 +49,6 @@ export function TeamsTab({
   const activePage = Math.min(page, totalPages);
   const start = (activePage - 1) * pageSize;
   const visibleRows = filteredRows.slice(start, start + pageSize);
-
-  useEffect(() => {
-    let isMounted = true;
-
-    apiRequest<TeamRow[]>(`/teams?tournamentId=${tournament.id}`)
-      .then((rows) => {
-        if (isMounted) {
-          setApiTeamRows(rows);
-        }
-      })
-      .catch(() => {
-        if (isMounted) {
-          setApiTeamRows(null);
-        }
-      });
-
-    return () => {
-      isMounted = false;
-    };
-  }, [tournament.id]);
 
   return (
     <section className="border-t border-[#314850] bg-[#06161b] p-4 sm:p-7 lg:p-8">
