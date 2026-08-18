@@ -13,6 +13,8 @@ describe('AuthController', () => {
           provide: AuthService,
           useValue: {
             login: jest.fn(),
+            getGoogleLoginUrl: jest.fn(),
+            handleGoogleCallback: jest.fn(),
             completeFirstLogin: jest.fn(),
             verifyForgotPasswordEmail: jest.fn(),
             resetPassword: jest.fn(),

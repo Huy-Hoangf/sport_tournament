@@ -11,7 +11,7 @@ import {
   UserCircle,
 } from "lucide-react";
 import type { FormEvent } from "react";
-import { useState } from "react";
+import { useEffect, useState } from "react";
 import { apiRequest, type CurrentUser } from "../api";
 import NoticeBanner, { type Notice } from "../notice-banner";
 
@@ -20,6 +20,10 @@ type LoginResponse = {
   user: CurrentUser;
   accessToken: string;
   requiresPasswordChange: boolean;
+};
+
+type GoogleLoginUrlResponse = {
+  url: string;
 };
 
 export default function LoginPage() {
@@ -32,6 +36,63 @@ export default function LoginPage() {
 
   function showNotice(message: string, tone: Notice["tone"] = "info") {
     setNotice({ message, tone });
+  }
+
+  useEffect(() => {
+    const hash = window.location.hash;
+    const prefix = "#google=";
+
+    if (!hash.startsWith(prefix)) {
+      return;
+    }
+
+    const params = new URLSearchParams(
+      decodeURIComponent(hash.slice(prefix.length)),
+    );
+    const error = params.get("error");
+    const accessToken = params.get("accessToken");
+    const rawUser = params.get("user");
+
+    window.history.replaceState(null, "", window.location.pathname);
+
+    if (error) {
+      queueMicrotask(() => showNotice(error, "error"));
+      return;
+    }
+
+    if (!accessToken || !rawUser) {
+      queueMicrotask(() => showNotice("Google login failed.", "error"));
+      return;
+    }
+
+    try {
+      const user = JSON.parse(rawUser) as CurrentUser;
+
+      sessionStorage.removeItem("pendingPasswordChangeUser");
+      sessionStorage.removeItem("pendingPasswordChangeToken");
+      localStorage.setItem("currentUser", JSON.stringify(user));
+      localStorage.setItem("accessToken", accessToken);
+      router.replace("/admin");
+    } catch {
+      queueMicrotask(() =>
+        showNotice("Cannot read Google login response.", "error"),
+      );
+    }
+  }, [router]);
+
+  async function handleGoogleLogin() {
+    setIsLoading(true);
+
+    try {
+      const data = await apiRequest<GoogleLoginUrlResponse>("/auth/google/url");
+      window.location.href = data.url;
+    } catch (error) {
+      showNotice(
+        error instanceof Error ? error.message : "Google login failed.",
+        "error",
+      );
+      setIsLoading(false);
+    }
   }
 
   async function handleLogin(event: FormEvent<HTMLFormElement>) {
@@ -114,7 +175,7 @@ export default function LoginPage() {
             type="email"
             value={username}
             onChange={(event) => setUsername(event.target.value)}
-            placeholder="YOUR COMPANY EMAIL"
+            placeholder="YOUR EMAIL"
             className="mb-8 h-[72px] w-full rounded border border-white/10 bg-[#080f0f] px-5 text-xl font-bold text-zinc-200 outline-none transition placeholder:text-zinc-600 focus:border-[#84d8e888]"
           />
 
@@ -156,7 +217,8 @@ export default function LoginPage() {
             </Link>
             <button
               type="button"
-              onClick={() => showNotice("this feature is not ready")}
+              onClick={() => void handleGoogleLogin()}
+              disabled={isLoading}
               className="flex h-9 items-center gap-2 rounded border border-white/10 bg-[#080f0f] px-3 text-xs font-black uppercase tracking-[0.08em] text-zinc-300 transition hover:border-[#84d8e888] hover:text-[#84d8e8]"
             >
               <GoogleLogo />

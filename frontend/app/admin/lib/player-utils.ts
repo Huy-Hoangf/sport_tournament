@@ -211,10 +211,10 @@ function buildImportEmail(
   let email = normalizedRawEmail;
 
   if (email) {
-    const [localPart] = email.split("@");
-    email = email.endsWith(COMPANY_EMAIL_DOMAIN)
-      ? email
-      : `${localPart || generatedLocalPart}${COMPANY_EMAIL_DOMAIN}`;
+    if (!isValidEmail(email)) {
+      const [localPart] = email.split("@");
+      email = `${localPart || generatedLocalPart}${COMPANY_EMAIL_DOMAIN}`;
+    }
 
     if (usedEmails.has(email)) {
       return null;
@@ -252,6 +252,10 @@ function slugifyName(name: string) {
     .filter(Boolean);
 
   return words.join(".");
+}
+
+function isValidEmail(email: string) {
+  return /^[^\s@]+@[^\s@]+\.[^\s@]+$/i.test(email);
 }
 
 function normalizeHeader(value: unknown) {

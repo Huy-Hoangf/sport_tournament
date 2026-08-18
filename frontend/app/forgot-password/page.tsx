@@ -25,7 +25,7 @@ export default function ForgotPasswordPage() {
     const normalizedEmail = email.trim().toLowerCase();
 
     if (!normalizedEmail) {
-      showNotice("Please enter your company email.", "error");
+      showNotice("Please enter your email.", "error");
       return;
     }
 
@@ -112,14 +112,14 @@ export default function ForgotPasswordPage() {
 
           <label className="mb-3 flex items-center gap-2 text-sm font-bold uppercase tracking-[0.18em] text-zinc-400">
             <Mail size={17} />
-            Company Email
+            Email
           </label>
 
           <input
             value={email}
             onChange={(event) => setEmail(event.target.value)}
             disabled={isVerified}
-            placeholder="YOUR COMPANY EMAIL"
+            placeholder="YOUR EMAIL"
             className="mb-6 h-[64px] w-full rounded border border-white/10 bg-[#080f0f] px-5 text-lg font-bold text-zinc-200 outline-none transition placeholder:text-zinc-600 focus:border-[#84d8e888] disabled:opacity-60"
           />
 

@@ -10,9 +10,8 @@ import type { UserRole } from '../users/user.entity';
 import { UsersService } from '../users/users.service';
 import {
   ADMIN_EMAIL,
-  COMPANY_EMAIL_DOMAIN,
   DEFAULT_PLAYER_PASSWORD,
-  isCompanyEmail,
+  isValidEmail,
   normalizeEmail,
 } from './auth.constants';
 
@@ -21,6 +20,20 @@ type AccessTokenPayload = {
   email: string;
   role: UserRole;
   purpose?: string;
+};
+
+type GoogleTokenResponse = {
+  access_token?: string;
+  error?: string;
+  error_description?: string;
+};
+
+type GoogleUserInfo = {
+  sub: string;
+  email: string;
+  email_verified?: boolean;
+  name?: string;
+  picture?: string;
 };
 
 @Injectable()
@@ -33,8 +46,8 @@ export class AuthService {
   async login(email: string, password: string) {
     const normalizedEmail = normalizeEmail(email);
 
-    if (!isCompanyEmail(normalizedEmail)) {
-      throw new BadRequestException(`Email must use ${COMPANY_EMAIL_DOMAIN}.`);
+    if (!isValidEmail(normalizedEmail)) {
+      throw new BadRequestException('Invalid email address.');
     }
 
     const user = await this.usersService.findByEmail(normalizedEmail);
@@ -73,6 +86,87 @@ export class AuthService {
           )
         : await this.signAccessToken(responseUser),
     };
+  }
+
+  getGoogleLoginUrl() {
+    const clientId = process.env.GOOGLE_CLIENT_ID?.trim();
+    const callbackUrl =
+      process.env.GOOGLE_CALLBACK_URL?.trim() ??
+      'http://localhost:3001/auth/google/callback';
+
+    if (!clientId) {
+      throw new BadRequestException('Google login is not configured.');
+    }
+
+    const params = new URLSearchParams({
+      client_id: clientId,
+      redirect_uri: callbackUrl,
+      response_type: 'code',
+      scope: 'openid email profile',
+      prompt: 'select_account',
+    });
+
+    return `https://accounts.google.com/o/oauth2/v2/auth?${params.toString()}`;
+  }
+
+  async handleGoogleCallback(code?: string, error?: string) {
+    const frontendUrl = this.getFrontendUrl();
+
+    if (error) {
+      return this.buildGoogleRedirect(frontendUrl, {
+        error: `Google login failed: ${error}`,
+      });
+    }
+
+    if (!code) {
+      return this.buildGoogleRedirect(frontendUrl, {
+        error: 'Google login failed: missing authorization code.',
+      });
+    }
+
+    try {
+      const googleUser = await this.fetchGoogleUser(code);
+
+      if (!googleUser.email_verified) {
+        return this.buildGoogleRedirect(frontendUrl, {
+          error: 'Google email is not verified.',
+        });
+      }
+
+      const normalizedEmail = normalizeEmail(googleUser.email);
+
+      if (!isValidEmail(normalizedEmail)) {
+        return this.buildGoogleRedirect(frontendUrl, {
+          error: 'Google account did not return a valid email.',
+        });
+      }
+
+      const user = await this.usersService.upsertGoogleUser({
+        email: normalizedEmail,
+        fullName: googleUser.name?.trim() || normalizedEmail.split('@')[0],
+        googleId: googleUser.sub,
+        avatarUrl: googleUser.picture ?? null,
+      });
+      const responseUser = {
+        id: user.id,
+        email: user.email,
+        fullName: user.fullName,
+        role: user.email === ADMIN_EMAIL ? 'SUPER_ADMIN' : user.role,
+      };
+      const accessToken = await this.signAccessToken(responseUser);
+
+      return this.buildGoogleRedirect(frontendUrl, {
+        accessToken,
+        user: JSON.stringify(responseUser),
+      });
+    } catch (caughtError) {
+      const message =
+        caughtError instanceof Error
+          ? caughtError.message
+          : 'Google login failed.';
+
+      return this.buildGoogleRedirect(frontendUrl, { error: message });
+    }
   }
 
   async completeFirstLogin(
@@ -208,8 +302,8 @@ export class AuthService {
   async verifyForgotPasswordEmail(email: string) {
     const normalizedEmail = normalizeEmail(email);
 
-    if (!isCompanyEmail(normalizedEmail)) {
-      throw new BadRequestException(`Email must use ${COMPANY_EMAIL_DOMAIN}.`);
+    if (!isValidEmail(normalizedEmail)) {
+      throw new BadRequestException('Invalid email address.');
     }
 
     const user = await this.usersService.findByEmail(normalizedEmail);
@@ -256,8 +350,8 @@ export class AuthService {
   ) {
     const normalizedEmail = normalizeEmail(email);
 
-    if (!isCompanyEmail(normalizedEmail)) {
-      throw new BadRequestException(`Email must use ${COMPANY_EMAIL_DOMAIN}.`);
+    if (!isValidEmail(normalizedEmail)) {
+      throw new BadRequestException('Invalid email address.');
     }
 
     if (!newPassword || newPassword.length < 6) {
@@ -294,5 +388,83 @@ export class AuthService {
       email: user.email,
       role: user.role,
     });
+  }
+
+  private async fetchGoogleUser(code: string) {
+    const clientId = process.env.GOOGLE_CLIENT_ID?.trim();
+    const clientSecret = process.env.GOOGLE_CLIENT_SECRET?.trim();
+    const callbackUrl =
+      process.env.GOOGLE_CALLBACK_URL?.trim() ??
+      'http://localhost:3001/auth/google/callback';
+
+    if (!clientId || !clientSecret) {
+      throw new BadRequestException('Google login is not configured.');
+    }
+
+    const tokenResponse = await fetch('https://oauth2.googleapis.com/token', {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/x-www-form-urlencoded',
+      },
+      body: new URLSearchParams({
+        code,
+        client_id: clientId,
+        client_secret: clientSecret,
+        redirect_uri: callbackUrl,
+        grant_type: 'authorization_code',
+      }),
+    });
+    const tokenData = (await tokenResponse.json()) as GoogleTokenResponse;
+
+    if (!tokenResponse.ok || !tokenData.access_token) {
+      throw new Error(
+        tokenData.error_description ??
+          tokenData.error ??
+          'Cannot exchange Google authorization code.',
+      );
+    }
+
+    const profileResponse = await fetch(
+      'https://www.googleapis.com/oauth2/v3/userinfo',
+      {
+        headers: {
+          Authorization: `Bearer ${tokenData.access_token}`,
+        },
+      },
+    );
+    const profileData = (await profileResponse.json()) as GoogleUserInfo;
+
+    if (!profileResponse.ok || !profileData.sub || !profileData.email) {
+      throw new Error('Cannot load Google account profile.');
+    }
+
+    return profileData;
+  }
+
+  private getFrontendUrl() {
+    return process.env.FRONTEND_URL?.trim() || 'http://localhost:3000';
+  }
+
+  private buildGoogleRedirect(
+    frontendUrl: string,
+    data: { accessToken?: string; user?: string; error?: string },
+  ) {
+    const params = new URLSearchParams();
+
+    if (data.accessToken) {
+      params.set('accessToken', data.accessToken);
+    }
+
+    if (data.user) {
+      params.set('user', data.user);
+    }
+
+    if (data.error) {
+      params.set('error', data.error);
+    }
+
+    return `${frontendUrl.replace(/\/$/, '')}/login#google=${encodeURIComponent(
+      params.toString(),
+    )}`;
   }
 }

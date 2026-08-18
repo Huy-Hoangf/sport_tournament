@@ -11,10 +11,9 @@ import * as bcrypt from 'bcrypt';
 import { Repository } from 'typeorm';
 import {
   ADMIN_EMAIL,
-  COMPANY_EMAIL_DOMAIN,
   DEFAULT_ADMIN_PASSWORD,
   DEFAULT_PLAYER_PASSWORD,
-  isCompanyEmail,
+  isValidEmail,
   normalizeEmail,
 } from '../auth/auth.constants';
 import { User, type UserRole, type UserStatus } from './user.entity';
@@ -30,7 +29,7 @@ export class UsersService implements OnModuleInit {
 
   async onModuleInit() {
     await this.ensureUserRoleConstraint();
-    await this.migrateCompanyEmailDomain();
+    await this.ensureGoogleAuthColumns();
     await this.seedDefaultAdmin();
     await this.backfillMemberCodes();
   }
@@ -77,6 +76,63 @@ export class UsersService implements OnModuleInit {
     });
   }
 
+  async findByGoogleId(googleId: string) {
+    return this.usersRepository.findOne({
+      where: {
+        googleId,
+      },
+    });
+  }
+
+  async upsertGoogleUser(data: {
+    email: string;
+    fullName: string;
+    googleId: string;
+    avatarUrl: string | null;
+  }) {
+    const email = normalizeEmail(data.email);
+
+    if (!isValidEmail(email)) {
+      throw new BadRequestException('Invalid email address.');
+    }
+
+    const existingGoogleUser = await this.findByGoogleId(data.googleId);
+
+    if (existingGoogleUser) {
+      existingGoogleUser.email = email;
+      existingGoogleUser.fullName =
+        existingGoogleUser.fullName || data.fullName;
+      existingGoogleUser.avatarUrl = data.avatarUrl;
+      existingGoogleUser.status = 'ACTIVE';
+
+      return this.usersRepository.save(existingGoogleUser);
+    }
+
+    const existingEmailUser = await this.findByEmail(email);
+
+    if (existingEmailUser) {
+      existingEmailUser.googleId = data.googleId;
+      existingEmailUser.avatarUrl = data.avatarUrl;
+      existingEmailUser.status = 'ACTIVE';
+
+      return this.usersRepository.save(existingEmailUser);
+    }
+
+    const memberCode = await this.generateMemberCode();
+    const user = this.usersRepository.create({
+      email,
+      memberCode,
+      fullName: data.fullName,
+      passwordHash: null,
+      googleId: data.googleId,
+      avatarUrl: data.avatarUrl,
+      role: email === ADMIN_EMAIL ? 'SUPER_ADMIN' : 'PLAYER',
+      status: 'ACTIVE',
+    });
+
+    return this.usersRepository.save(user);
+  }
+
   async createPlayerByAdmin(
     data: { email: string; fullName: string; role?: 'ADMIN' | 'PLAYER' },
     actorRole: UserRole,
@@ -93,8 +149,8 @@ export class UsersService implements OnModuleInit {
       throw new BadRequestException('Full name is required.');
     }
 
-    if (!isCompanyEmail(email)) {
-      throw new BadRequestException(`Email must use ${COMPANY_EMAIL_DOMAIN}.`);
+    if (!isValidEmail(email)) {
+      throw new BadRequestException('Invalid email address.');
     }
 
     if (email === ADMIN_EMAIL) {
@@ -159,8 +215,8 @@ export class UsersService implements OnModuleInit {
       throw new BadRequestException('Full name is required.');
     }
 
-    if (!isCompanyEmail(email)) {
-      throw new BadRequestException(`Email must use ${COMPANY_EMAIL_DOMAIN}.`);
+    if (!isValidEmail(email)) {
+      throw new BadRequestException('Invalid email address.');
     }
 
     const user = await this.usersRepository.findOne({
@@ -397,25 +453,15 @@ export class UsersService implements OnModuleInit {
     `);
   }
 
-  private async migrateCompanyEmailDomain() {
-    await this.usersRepository.query(
-      `
-        UPDATE users AS target_user
-        SET
-          email = LOWER(SPLIT_PART(target_user.email, '@', 1)) || $1,
-          updated_at = NOW()
-        WHERE POSITION('@' IN target_user.email) > 1
-          AND LOWER(target_user.email) NOT LIKE $2
-          AND NOT EXISTS (
-            SELECT 1
-            FROM users AS existing_user
-            WHERE existing_user.id <> target_user.id
-              AND LOWER(existing_user.email) =
-                LOWER(SPLIT_PART(target_user.email, '@', 1) || $1)
-          )
-      `,
-      [COMPANY_EMAIL_DOMAIN, `%${COMPANY_EMAIL_DOMAIN}`],
-    );
+  private async ensureGoogleAuthColumns() {
+    await this.usersRepository.query(`
+      ALTER TABLE users
+      ADD COLUMN IF NOT EXISTS google_id VARCHAR(255)
+    `);
+    await this.usersRepository.query(`
+      ALTER TABLE users
+      ADD COLUMN IF NOT EXISTS avatar_url VARCHAR(500)
+    `);
   }
 
   private async seedDefaultAdmin() {

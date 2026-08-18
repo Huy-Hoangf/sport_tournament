@@ -1,7 +1,6 @@
 import type React from "react";
 import { AdminSelect } from "../shared/admin-select";
 import { Modal, ModalActions } from "../admin-player-components";
-import { COMPANY_EMAIL_DOMAIN } from "../lib/constants";
 import type { ImportedPlayer, Player } from "../types/player";
 
 export type PlayerModalType =
@@ -108,7 +107,7 @@ export function PlayerModals({
           <input
             value={email}
             onChange={(event) => setEmail(event.target.value)}
-            placeholder={`name${COMPANY_EMAIL_DOMAIN}`}
+            placeholder="name@example.com"
             className="mb-4 h-[54px] w-full rounded border border-white/10 bg-[#070d0d] px-4 text-zinc-100 outline-none focus:border-[#8ed8ec]"
           />
 
@@ -146,8 +145,7 @@ export function PlayerModals({
           </label>
 
           <p className="mb-3 text-sm text-zinc-400">
-            If email is empty, it will be generated from player name
-            {COMPANY_EMAIL_DOMAIN}.
+            If email is empty, it will be generated from player name.
           </p>
 
           {importPlayers.length > 0 && (
@@ -236,7 +234,7 @@ export function PlayerModals({
           <input
             value={renameEmail}
             onChange={(event) => setRenameEmail(event.target.value)}
-            placeholder={`name${COMPANY_EMAIL_DOMAIN}`}
+            placeholder="name@example.com"
             className="mb-4 h-[54px] w-full rounded border border-white/10 bg-[#070d0d] px-4 text-zinc-100 outline-none focus:border-[#8ed8ec]"
           />
 
