@@ -90,7 +90,7 @@ export default function AdminPage() {
     const currentUser = readCurrentUser() as CurrentUser | null;
 
     if (!currentUser) {
-      router.push("/login");
+      router.replace("/login");
       return;
     }
 
@@ -106,7 +106,7 @@ export default function AdminPage() {
     function handleStorage(event: StorageEvent) {
       if (event.key === "logoutEvent" || event.key === "currentUser") {
         if (!localStorage.getItem("currentUser")) {
-          router.push("/login");
+          router.replace("/login");
         }
       }
     }
@@ -507,7 +507,7 @@ export default function AdminPage() {
     const currentUser = readCurrentUser() as CurrentUser | null;
 
     if (!currentUser) {
-      router.push("/login");
+      router.replace("/login");
       return;
     }
 
@@ -544,7 +544,7 @@ export default function AdminPage() {
 
   function logout() {
     logoutAll();
-    router.push("/login");
+    router.replace("/login");
   }
 
   function openAdminView(view: AdminView) {

@@ -1,6 +1,9 @@
 export function logoutAll() {
   localStorage.removeItem("currentUser");
   localStorage.removeItem("accessToken");
+  sessionStorage.removeItem("pendingPasswordChangeUser");
+  sessionStorage.removeItem("pendingPasswordChangeToken");
+  sessionStorage.removeItem("googleLoginState");
   localStorage.setItem("logoutEvent", Date.now().toString());
 }
 
