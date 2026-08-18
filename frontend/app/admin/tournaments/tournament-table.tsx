@@ -116,6 +116,7 @@ export function TournamentManagementTable({
           const matches = tournamentMatches.filter(
             (match) => match.tournamentId === tournament.id,
           );
+          const deleteAllowed = canDeleteTournament(tournament);
 
           return (
             <article key={tournament.id} className="bg-[#0d252d]">
@@ -187,7 +188,13 @@ export function TournamentManagementTable({
                   <button
                     type="button"
                     onClick={() => onDeleteTournament(tournament)}
-                    className="flex h-10 flex-1 items-center justify-center gap-2 rounded border border-[#ff6b6b99] bg-[#35171b] text-sm font-black text-[#ff8a8a] transition hover:border-[#ff6b6b] hover:text-[#ffb0b0]"
+                    disabled={!deleteAllowed}
+                    title={
+                      deleteAllowed
+                        ? "Delete tournament"
+                        : "Only completed tournaments can be deleted"
+                    }
+                    className="flex h-10 flex-1 items-center justify-center gap-2 rounded border border-[#ff6b6b99] bg-[#35171b] text-sm font-black text-[#ff8a8a] transition hover:border-[#ff6b6b] hover:text-[#ffb0b0] disabled:cursor-not-allowed disabled:border-[#3a4d54] disabled:bg-[#10242b] disabled:text-[#789098]"
                   >
                     <Trash2 size={16} />
                     Delete
@@ -222,6 +229,7 @@ export function TournamentManagementTable({
           <tbody>
             {visibleTournaments.map((tournament) => {
               const isSelected = selectedTournamentId === tournament.id;
+              const deleteAllowed = canDeleteTournament(tournament);
 
               return (
                 <Fragment key={tournament.id}>
@@ -271,8 +279,13 @@ export function TournamentManagementTable({
                           </button>
                           <button
                             onClick={() => onDeleteTournament(tournament)}
-                            className="text-[#ff6b6b] transition hover:text-[#ff9b9b]"
-                            title="Delete tournament"
+                            disabled={!deleteAllowed}
+                            className="text-[#ff6b6b] transition hover:text-[#ff9b9b] disabled:cursor-not-allowed disabled:text-[#789098]"
+                            title={
+                              deleteAllowed
+                                ? "Delete tournament"
+                                : "Only completed tournaments can be deleted"
+                            }
                           >
                             <Trash2 size={17} />
                           </button>
@@ -350,6 +363,10 @@ export function TournamentManagementTable({
       )}
     </section>
   );
+}
+
+function canDeleteTournament(tournament: TournamentRow) {
+  return tournament.status.toUpperCase() === "COMPLETED";
 }
 
 

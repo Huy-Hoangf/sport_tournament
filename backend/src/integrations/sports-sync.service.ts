@@ -359,27 +359,26 @@ export class SportsApiSyncService {
   }
 
   // Import options intentionally list competitions first; matches are fetched only after admin selection to protect quota.
-  async listFootballCompetitions() {
+  listFootballCompetitions() {
     return FOOTBALL_DATA_ORG_IMPORT_COMPETITIONS.map((competition) =>
       this.toFootballDataOrgCompetitionOption(competition),
-    )
-      .sort((first, second) => {
-        const firstPhasePriority = this.getCompetitionPhasePriority(first);
-        const secondPhasePriority = this.getCompetitionPhasePriority(second);
+    ).sort((first, second) => {
+      const firstPhasePriority = this.getCompetitionPhasePriority(first);
+      const secondPhasePriority = this.getCompetitionPhasePriority(second);
 
-        if (firstPhasePriority !== secondPhasePriority) {
-          return secondPhasePriority - firstPhasePriority;
-        }
+      if (firstPhasePriority !== secondPhasePriority) {
+        return secondPhasePriority - firstPhasePriority;
+      }
 
-        const firstPriority = this.getCompetitionPriority(first);
-        const secondPriority = this.getCompetitionPriority(second);
+      const firstPriority = this.getCompetitionPriority(first);
+      const secondPriority = this.getCompetitionPriority(second);
 
-        if (firstPriority !== secondPriority) {
-          return secondPriority - firstPriority;
-        }
+      if (firstPriority !== secondPriority) {
+        return secondPriority - firstPriority;
+      }
 
-        return first.name.localeCompare(second.name);
-      });
+      return first.name.localeCompare(second.name);
+    });
   }
 
   async syncSelectedFootballLeagues(
@@ -728,7 +727,7 @@ export class SportsApiSyncService {
     let competitionCount = 0;
     let matchCount = 0;
 
-    for (const competition of await this.listFootballCompetitions()) {
+    for (const competition of this.listFootballCompetitions()) {
       const tournamentStatus = this.resolveFootballTournamentStatus(
         competition.season,
         competition.start,

@@ -30,6 +30,7 @@ export function DashboardTournamentCard({
   const nextMatchTime = nextMatch
     ? formatDateTime(nextMatch.scheduledTime)
     : "No upcoming match";
+  const deleteAllowed = canDeleteTournament(tournament);
 
   return (
     <article
@@ -112,7 +113,13 @@ export function DashboardTournamentCard({
                 event.stopPropagation();
                 onDeleteTournament(tournament);
               }}
-              className="flex h-9 items-center justify-center gap-2 rounded border border-[#5d3037] bg-[#2a1115] px-3 text-xs font-black text-[#ff8a8a] transition hover:border-[#ff8a8a]"
+              disabled={!deleteAllowed}
+              title={
+                deleteAllowed
+                  ? "Delete tournament"
+                  : "Only completed tournaments can be deleted"
+              }
+              className="flex h-9 items-center justify-center gap-2 rounded border border-[#5d3037] bg-[#2a1115] px-3 text-xs font-black text-[#ff8a8a] transition hover:border-[#ff8a8a] disabled:cursor-not-allowed disabled:border-[#3a4d54] disabled:bg-[#10242b] disabled:text-[#789098]"
             >
               <Trash2 size={14} />
               Delete
@@ -122,6 +129,10 @@ export function DashboardTournamentCard({
       </div>
     </article>
   );
+}
+
+function canDeleteTournament(tournament: TournamentRow) {
+  return tournament.status.toUpperCase() === "COMPLETED";
 }
 
 function MetricBlock({ label, value }: { label: string; value: number }) {

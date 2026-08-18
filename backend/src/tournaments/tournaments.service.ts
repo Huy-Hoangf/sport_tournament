@@ -233,6 +233,25 @@ export class TournamentsService {
       throw new BadRequestException('Invalid tournament id.');
     }
 
+    const [current] = await this.usersRepository.query(
+      `
+        SELECT id, status
+        FROM tournaments
+        WHERE id = $1
+      `,
+      [id],
+    );
+
+    if (!current) {
+      throw new NotFoundException('Tournament not found.');
+    }
+
+    if (current.status !== 'COMPLETED') {
+      throw new BadRequestException(
+        'Only completed tournaments can be deleted.',
+      );
+    }
+
     const rows = await this.usersRepository.query(
       `
         DELETE FROM tournaments
@@ -293,8 +312,7 @@ export class TournamentsService {
       name,
       sportType: sportType ?? (requireName ? 'FOOTBALL' : undefined),
       format: (format ?? (requireName ? 'ROUND_ROBIN' : undefined)) as
-        | TournamentFormat
-        | undefined,
+        TournamentFormat | undefined,
       status: status ?? (requireName ? 'UPCOMING' : undefined),
       visibility: visibility ?? (requireName ? 'PUBLIC' : undefined),
     };
@@ -327,9 +345,10 @@ export class TournamentsService {
     format: TournamentFormat,
   ) {
     await this.assertFormatCanChange(tournamentId);
-    await this.usersRepository.query('DELETE FROM stages WHERE tournament_id = $1', [
-      tournamentId,
-    ]);
+    await this.usersRepository.query(
+      'DELETE FROM stages WHERE tournament_id = $1',
+      [tournamentId],
+    );
     await this.ensureStagesForFormat(tournamentId, format);
   }
 

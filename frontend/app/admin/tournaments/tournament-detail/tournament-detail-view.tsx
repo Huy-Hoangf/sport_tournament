@@ -12,6 +12,7 @@ import { useEffect } from "react";
 import { apiRequest } from "../../../api";
 import { ScoringRulesView } from "./scoring-rules-tab";
 import { StageStrip } from "./stage-strip";
+import { TeamsTab } from "./teams-tab";
 import {
   DashboardPanelTitle,
   DashboardSourceBadge,
@@ -197,24 +198,16 @@ export function TournamentDetailView({
         </div>
 
         <div className="mt-7 flex flex-wrap gap-5 border-b border-[#3a4d54]">
-          {['Overview', 'Predictions', 'Scoring Rules'].map(
+          {["Overview", "Teams", "Predictions", "Scoring Rules"].map(
             (tab) => (
               <button
                 key={tab}
                 type="button"
-                onClick={() => {
-                  if (tab === "Overview") {
-                    setActiveTab(tab);
-                  } else if (tab === "Predictions") {
-                    setActiveTab(tab);
-                  } else if (tab === "Scoring Rules") {
-                    setActiveTab(tab);
-                  }
-                }}
+                onClick={() => setActiveTab(tab)}
                 className={`pb-4 text-xs font-black uppercase tracking-[0.08em] ${
                   activeTab === tab
-                    ? 'border-b-2 border-[#84d8e8] text-[#84d8e8]'
-                    : 'text-[#9fb2b8] transition hover:text-[#84d8e8]'
+                    ? "border-b-2 border-[#84d8e8] text-[#84d8e8]"
+                    : "text-[#9fb2b8] transition hover:text-[#84d8e8]"
                 }`}
               >
                 {tab}
@@ -228,6 +221,13 @@ export function TournamentDetailView({
         <ScoringRulesView tournament={tournament} canManage={canManage} />
       ) : activeTab === "Predictions" ? (
         <PredictionAnalyticsView tournament={tournament} matches={matches} />
+      ) : activeTab === "Teams" ? (
+        <TeamsTab
+          tournament={tournament}
+          matches={matches}
+          canManage={canManage}
+          onUnavailableFeature={onUnavailableFeature}
+        />
       ) : (
       <>
       <div className="grid gap-5 p-4 sm:p-7 lg:grid-cols-[360px_minmax(0,1fr)] lg:p-8">

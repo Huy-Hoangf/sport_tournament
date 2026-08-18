@@ -27,6 +27,7 @@ import type {
   F1MeetingOption,
   FootballCompetitionOption,
   ImportSport,
+  MatchRow,
   LolCompetitionOption,
   SyncSport,
   TournamentForm,
@@ -564,6 +565,20 @@ export default function AdminDashboardContent({
     setOpenTournamentForm(true);
   }
 
+  function requestDeleteTournament(tournament: TournamentRow) {
+    if (!isAdmin) {
+      showNotice("Only admin can delete tournaments.", "error");
+      return;
+    }
+
+    if (!canDeleteTournament(tournament)) {
+      showNotice("Only completed tournaments can be deleted.", "error");
+      return;
+    }
+
+    setTournamentToDelete(tournament);
+  }
+
   const ongoingFootballCompetitions = footballCompetitions.filter(
     (competition) => getFootballCompetitionPhase(competition) === "ongoing",
   );
@@ -729,6 +744,11 @@ export default function AdminDashboardContent({
       return;
     }
 
+    if (!canDeleteTournament(tournament)) {
+      showNotice("Only completed tournaments can be deleted.", "error");
+      return;
+    }
+
     setIsMutating(true);
 
     try {
@@ -746,6 +766,15 @@ export default function AdminDashboardContent({
     } finally {
       setIsMutating(false);
     }
+  }
+
+  function exportTournamentData(tournament: TournamentRow) {
+    const matches = dashboard.tournamentMatches.filter(
+      (match) => match.tournamentId === tournament.id,
+    );
+
+    exportTournamentPdf(tournament, matches);
+    showNotice(`${tournament.name} exported successfully.`, "success");
   }
 
   return (
@@ -870,7 +899,7 @@ export default function AdminDashboardContent({
                 onSelectTournament={setSelectedTournamentId}
                 isAdmin={isAdmin}
                 onEditTournament={openEditTournament}
-                onDeleteTournament={setTournamentToDelete}
+                onDeleteTournament={requestDeleteTournament}
               />
             ))
           ) : (
@@ -886,7 +915,7 @@ export default function AdminDashboardContent({
               onSportFilterChange={setDashboardSportFilter}
               onSelectTournament={setSelectedTournamentId}
               onEditTournament={openEditTournament}
-              onDeleteTournament={setTournamentToDelete}
+              onDeleteTournament={requestDeleteTournament}
             />
           )}
         </div>
@@ -1250,16 +1279,36 @@ export default function AdminDashboardContent({
 
       {tournamentToDelete && (
         <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/70 px-4">
-          <div className="w-full max-w-[460px] rounded border border-[#ff6b6b99] bg-[#0d252d] p-7 shadow-2xl">
+          <div className="w-full max-w-[520px] rounded border border-[#ff6b6b99] bg-[#0d252d] p-7 shadow-2xl">
             <h3 className="text-2xl font-black text-[#ff6b6b]">
               Delete Tournament
             </h3>
             <p className="mt-4 text-base font-bold text-white">
-              Are you sure you want to delete <span className="text-[#ff8a8a]">{tournamentToDelete.name}</span>
+              Are you sure you want to delete{" "}
+              <span className="text-[#ff8a8a]">{tournamentToDelete.name}</span>?
             </p>
             <p className="mt-2 text-sm text-[#9fb2b8]">
-              This action cannot be undone. All matches, predictions and related data will be permanently deleted.
+              This action cannot be undone. All matches, predictions and related
+              data will be permanently deleted.
             </p>
+            <div className="mt-5 rounded border border-[#3a4d54] bg-[#07181d] p-4">
+              <p className="text-sm font-black text-white">
+                Do you want export this tournament data?
+              </p>
+              <p className="mt-2 text-xs font-bold text-[#9fb2b8]">
+                Export creates a PDF backup before you delete the completed
+                tournament.
+              </p>
+              <button
+                type="button"
+                onClick={() => exportTournamentData(tournamentToDelete)}
+                disabled={isMutating}
+                className="mt-4 inline-flex h-10 items-center gap-2 rounded border border-[#84d8e8] bg-[#102d35] px-4 text-xs font-black uppercase tracking-[0.08em] text-[#84d8e8] transition hover:bg-[#173742] disabled:opacity-60"
+              >
+                <FileDown size={15} />
+                Export PDF
+              </button>
+            </div>
             <div className="mt-7 flex justify-end gap-3">
               <button
                 onClick={() => setTournamentToDelete(null)}
@@ -1280,6 +1329,131 @@ export default function AdminDashboardContent({
         </div>
       )}
     </div>
+  );
+}
+
+function canDeleteTournament(tournament: TournamentRow) {
+  return tournament.status.toUpperCase() === "COMPLETED";
+}
+
+function exportTournamentPdf(tournament: TournamentRow, matches: MatchRow[]) {
+  const lines = [
+    "Tournament Export",
+    "",
+    `Name: ${tournament.name}`,
+    `Sport: ${tournament.sportType ?? "FOOTBALL"}`,
+    `Format: ${tournament.format ?? "ROUND_ROBIN"}`,
+    `Status: ${tournament.status}`,
+    `Visibility: ${tournament.visibility}`,
+    `Teams: ${tournament.teams}`,
+    `Matches: ${matches.length}`,
+    `Source: ${tournament.source}`,
+    `Exported At: ${new Date().toLocaleString()}`,
+    "",
+    "Matches",
+    ...matches.map((match, index) => {
+      const score =
+        match.actualHomeScore == null || match.actualAwayScore == null
+          ? "-"
+          : `${match.actualHomeScore}-${match.actualAwayScore}`;
+
+      return `${index + 1}. ${match.homeName ?? "TBD"} vs ${
+        match.awayName ?? "TBD"
+      } | ${new Date(match.scheduledTime).toLocaleString()} | ${
+        match.status
+      } | ${score}`;
+    }),
+  ];
+  const pdfContent = createSimplePdf(lines);
+  const blob = new Blob([pdfContent], { type: "application/pdf" });
+  const url = URL.createObjectURL(blob);
+  const link = document.createElement("a");
+
+  link.href = url;
+  link.download = `${slugifyFileName(tournament.name)}-export.pdf`;
+  document.body.appendChild(link);
+  link.click();
+  link.remove();
+  URL.revokeObjectURL(url);
+}
+
+function createSimplePdf(lines: string[]) {
+  const pageLines = chunkLines(lines, 42);
+  const objects: string[] = [
+    "<< /Type /Catalog /Pages 2 0 R >>",
+    "",
+    "<< /Type /Font /Subtype /Type1 /BaseFont /Helvetica >>",
+  ];
+  const pageObjectIds: number[] = [];
+  const fontObjectId = 3;
+
+  pageLines.forEach((page, index) => {
+    const pageObjectId = 4 + index * 2;
+    const contentObjectId = pageObjectId + 1;
+    const stream = [
+      "BT",
+      "/F1 11 Tf",
+      "50 790 Td",
+      ...page.flatMap((line, lineIndex) => [
+        lineIndex === 0 ? "" : "0 -17 Td",
+        `(${escapePdfText(line)}) Tj`,
+      ]),
+      "ET",
+    ]
+      .filter(Boolean)
+      .join("\n");
+
+    pageObjectIds.push(pageObjectId);
+    objects.push(
+      `<< /Type /Page /Parent 2 0 R /MediaBox [0 0 595 842] /Resources << /Font << /F1 ${fontObjectId} 0 R >> >> /Contents ${contentObjectId} 0 R >>`,
+      `<< /Length ${stream.length} >>\nstream\n${stream}\nendstream`,
+    );
+  });
+
+  objects[1] = `<< /Type /Pages /Kids [${pageObjectIds
+    .map((id) => `${id} 0 R`)
+    .join(" ")}] /Count ${pageObjectIds.length} >>`;
+
+  let pdf = "%PDF-1.4\n";
+  const offsets = [0];
+
+  objects.forEach((object, index) => {
+    offsets.push(pdf.length);
+    pdf += `${index + 1} 0 obj\n${object}\nendobj\n`;
+  });
+
+  const xrefOffset = pdf.length;
+  pdf += `xref\n0 ${objects.length + 1}\n`;
+  pdf += "0000000000 65535 f \n";
+  offsets.slice(1).forEach((offset) => {
+    pdf += `${String(offset).padStart(10, "0")} 00000 n \n`;
+  });
+  pdf += `trailer\n<< /Size ${objects.length + 1} /Root 1 0 R >>\nstartxref\n${xrefOffset}\n%%EOF`;
+
+  return pdf;
+}
+
+function chunkLines(lines: string[], size: number) {
+  const chunks: string[][] = [];
+
+  for (let index = 0; index < lines.length; index += size) {
+    chunks.push(lines.slice(index, index + size));
+  }
+
+  return chunks.length ? chunks : [["No tournament data."]];
+}
+
+function escapePdfText(value: string) {
+  return value.replace(/\\/g, "\\\\").replace(/\(/g, "\\(").replace(/\)/g, "\\)");
+}
+
+function slugifyFileName(value: string) {
+  return (
+    value
+      .trim()
+      .toLowerCase()
+      .replace(/[^a-z0-9]+/g, "-")
+      .replace(/^-+|-+$/g, "") || "tournament"
   );
 }
 
