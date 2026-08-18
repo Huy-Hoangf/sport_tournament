@@ -1,7 +1,7 @@
 "use client";
 
 import { apiRequest, type CurrentUser } from "../api";
-import { logoutAll, readCurrentUser } from "../auth-sync";
+import { logoutAll, readCurrentUser, redirectToLogin } from "../auth-sync";
 import NoticeBanner, { type Notice } from "../notice-banner";
 import DashboardView from "./dashboard/dashboard-view";
 import { AdminShell } from "./layout/admin-shell";
@@ -90,7 +90,7 @@ export default function AdminPage() {
     const currentUser = readCurrentUser() as CurrentUser | null;
 
     if (!currentUser) {
-      router.replace("/login");
+      redirectToLogin();
       return;
     }
 
@@ -106,7 +106,7 @@ export default function AdminPage() {
     function handleStorage(event: StorageEvent) {
       if (event.key === "logoutEvent" || event.key === "currentUser") {
         if (!localStorage.getItem("currentUser")) {
-          router.replace("/login");
+          redirectToLogin();
         }
       }
     }
@@ -507,7 +507,7 @@ export default function AdminPage() {
     const currentUser = readCurrentUser() as CurrentUser | null;
 
     if (!currentUser) {
-      router.replace("/login");
+      redirectToLogin();
       return;
     }
 
@@ -544,7 +544,7 @@ export default function AdminPage() {
 
   function logout() {
     logoutAll();
-    router.replace("/login");
+    redirectToLogin();
   }
 
   function openAdminView(view: AdminView) {
