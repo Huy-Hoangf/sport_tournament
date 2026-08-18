@@ -41,10 +41,6 @@ export function TournamentManagementTable({
       return true;
     }
 
-    if (statusFilter === "COMPLETED") {
-      return status === "COMPLETED" || status === "CANCELLED";
-    }
-
     return status === statusFilter;
   });
   const filteredTotal = filteredTournaments.length;
@@ -87,9 +83,9 @@ export function TournamentManagementTable({
             value={statusFilter}
             options={[
               { value: "ALL", label: "All statuses" },
-              { value: "ACTIVE", label: "Ongoing" },
+              { value: "ONGOING", label: "Ongoing" },
               { value: "UPCOMING", label: "Upcoming" },
-              { value: "COMPLETED", label: "Completed" },
+              { value: "COMPLETE", label: "Complete" },
             ]}
             onChange={(nextValue) =>
               changeStatusFilter(nextValue as TournamentStatusFilter)
@@ -366,7 +362,7 @@ export function TournamentManagementTable({
 }
 
 function canDeleteTournament(tournament: TournamentRow) {
-  return tournament.status.toUpperCase() === "COMPLETED";
+  return tournament.status.toUpperCase() === "COMPLETE";
 }
 
 

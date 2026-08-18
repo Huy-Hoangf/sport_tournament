@@ -114,7 +114,13 @@ type FootballMatch = {
       long?: string;
     };
   };
-  league?: { id?: number | string; name: string; season?: number | string };
+  league?: {
+    id?: number | string;
+    name: string;
+    season?: number | string;
+    startDate?: string | null;
+    endDate?: string | null;
+  };
   homeTeam?: { id?: number | string; name?: string; logo?: string };
   awayTeam?: { id?: number | string; name?: string; logo?: string };
   teams?: {
@@ -163,7 +169,7 @@ type FootballDataOrgMatch = {
   };
 };
 
-type TournamentStatus = 'UPCOMING' | 'ACTIVE' | 'COMPLETED' | 'CANCELLED';
+type TournamentStatus = 'UPCOMING' | 'ONGOING' | 'COMPLETE';
 
 type EspnSoccerEvent = {
   id?: string;
@@ -446,6 +452,8 @@ export class SportsApiSyncService {
             adminId,
             competitionName,
             tournamentStatus,
+            league.start,
+            league.end,
           );
           competitionCount += 1;
           continue;
@@ -631,7 +639,12 @@ export class SportsApiSyncService {
       const tournamentId = await this.upsertTournament({
         name: competition.name,
         sportType: 'LOL',
-        status: competition.current ? 'ACTIVE' : 'UPCOMING',
+        status: this.mapTournamentStatusFromDates(
+          competition.start,
+          tournamentMatches.at(-1)?.__scheduledTime ?? null,
+        ),
+        startDate: competition.start,
+        endDate: tournamentMatches.at(-1)?.__scheduledTime ?? null,
         adminId,
       });
       const stageId = await this.upsertStage(tournamentId, 'League Schedule');
@@ -787,6 +800,8 @@ export class SportsApiSyncService {
         status:
           tournamentStatusOverride ??
           this.mapTournamentStatus(match.fixture.status?.short ?? ''),
+        startDate: match.league.startDate,
+        endDate: match.league.endDate,
         adminId,
       });
       const stageId = await this.upsertStage(tournamentId, 'API Feed');
@@ -968,6 +983,8 @@ export class SportsApiSyncService {
         id: leagueId,
         name: match.competition.name,
         season: seasonYear,
+        startDate: match.season?.startDate ?? null,
+        endDate: match.season?.endDate ?? null,
       },
       teams: {
         home: {
@@ -1036,20 +1053,20 @@ export class SportsApiSyncService {
     }
 
     if (current) {
-      return 'ACTIVE';
+      return 'ONGOING';
     }
 
     const currentYear = new Date().getUTCFullYear();
 
     if (selectedSeason < currentYear) {
-      return 'COMPLETED';
+      return 'COMPLETE';
     }
 
     if (selectedSeason > currentYear) {
       return 'UPCOMING';
     }
 
-    return 'ACTIVE';
+    return 'ONGOING';
   }
 
   private getAseanTournamentStatus(season: number): TournamentStatus {
@@ -1068,14 +1085,14 @@ export class SportsApiSyncService {
     const endTime = endValue ? new Date(endValue).getTime() : NaN;
 
     if (Number.isFinite(endTime) && endTime < now) {
-      return 'COMPLETED';
+      return 'COMPLETE';
     }
 
     if (Number.isFinite(startTime) && startTime > now) {
       return 'UPCOMING';
     }
 
-    return 'ACTIVE';
+    return 'ONGOING';
   }
 
   private isFootballFixtureImportable(
@@ -1146,9 +1163,12 @@ export class SportsApiSyncService {
       name:
         meeting.meeting_name || meeting.meeting_official_name || 'Formula 1',
       sportType: 'F1',
-      status: this.isLiveWindow(meeting.date_start, meeting.date_end)
-        ? 'ACTIVE'
-        : 'UPCOMING',
+      status: this.mapTournamentStatusFromDates(
+        meeting.date_start,
+        meeting.date_end,
+      ),
+      startDate: meeting.date_start,
+      endDate: meeting.date_end,
       adminId,
     });
     const stageId = await this.upsertStage(tournamentId, 'Race Weekend');
@@ -1188,7 +1208,9 @@ export class SportsApiSyncService {
   private async upsertTournament(data: {
     name: string;
     sportType: 'FOOTBALL' | 'F1' | 'LOL' | 'OTHER';
-    status: 'UPCOMING' | 'ACTIVE' | 'COMPLETED' | 'CANCELLED';
+    status: TournamentStatus;
+    startDate?: string | null;
+    endDate?: string | null;
     adminId: number;
   }) {
     const [existing] = await this.usersRepository.query(
@@ -1206,10 +1228,14 @@ export class SportsApiSyncService {
       await this.usersRepository.query(
         `
           UPDATE tournaments
-          SET status = $1, updated_at = NOW()
-          WHERE id = $2
+          SET
+            status = $1,
+            start_date = COALESCE($2, start_date),
+            end_date = COALESCE($3, end_date),
+            updated_at = NOW()
+          WHERE id = $4
         `,
-        [data.status, existing.id],
+        [data.status, data.startDate ?? null, data.endDate ?? null, existing.id],
       );
       return Number(existing.id);
     }
@@ -1217,11 +1243,18 @@ export class SportsApiSyncService {
     const [created] = await this.usersRepository.query(
       `
         INSERT INTO tournaments
-          (name, sport_type, format, status, visibility, created_by)
-        VALUES ($1, $2, 'ROUND_ROBIN', $3, 'PUBLIC', $4)
+          (name, sport_type, format, status, visibility, start_date, end_date, created_by)
+        VALUES ($1, $2, 'ROUND_ROBIN', $3, 'PUBLIC', $4, $5, $6)
         RETURNING id
       `,
-      [data.name, data.sportType, data.status, data.adminId],
+      [
+        data.name,
+        data.sportType,
+        data.status,
+        data.startDate ?? null,
+        data.endDate ?? null,
+        data.adminId,
+      ],
     );
 
     return Number(created.id);
@@ -1230,12 +1263,16 @@ export class SportsApiSyncService {
   private async upsertEmptyFootballTournament(
     adminId: number,
     name: string,
-    status: 'UPCOMING' | 'ACTIVE' | 'COMPLETED' | 'CANCELLED',
+    status: TournamentStatus,
+    startDate?: string | null,
+    endDate?: string | null,
   ) {
     const tournamentId = await this.upsertTournament({
       name,
       sportType: 'FOOTBALL',
       status,
+      startDate,
+      endDate,
       adminId,
     });
 
@@ -2375,7 +2412,7 @@ export class SportsApiSyncService {
       season,
       start,
       end,
-      current: this.mapTournamentStatusFromDates(start, end) === 'ACTIVE',
+      current: this.mapTournamentStatusFromDates(start, end) === 'ONGOING',
       type: competition.type,
     };
   }
@@ -2529,11 +2566,11 @@ export class SportsApiSyncService {
 
   private mapTournamentStatus(status: string) {
     if (['1H', 'HT', '2H', 'ET', 'BT', 'P', 'LIVE', 'INT'].includes(status)) {
-      return 'ACTIVE' as const;
+      return 'ONGOING' as const;
     }
 
     if (['FT', 'AET', 'PEN', 'FINISHED'].includes(status)) {
-      return 'COMPLETED' as const;
+      return 'COMPLETE' as const;
     }
 
     if (
@@ -2549,10 +2586,10 @@ export class SportsApiSyncService {
         'SUSPENDED',
       ].includes(status)
     ) {
-      return 'CANCELLED' as const;
+      return 'COMPLETE' as const;
     }
 
-    return 'ACTIVE' as const;
+    return 'ONGOING' as const;
   }
 
   private isLiveWindow(startValue: string, endValue: string) {

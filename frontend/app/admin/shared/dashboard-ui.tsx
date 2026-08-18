@@ -175,13 +175,22 @@ export function TeamLogo({ name, src }: { name: string; src?: string | null }) {
   );
 }
 export function DashboardStatusBadge({ status }: { status: string }) {
-  const normalized = status.toUpperCase();
+  const rawStatus = status.toUpperCase();
+  const normalized =
+    rawStatus === "ACTIVE" || rawStatus === "LIVE"
+      ? "ONGOING"
+      : rawStatus === "COMPLETED" ||
+          rawStatus === "FINISHED" ||
+          rawStatus === "CANCELLED" ||
+          rawStatus === "CANCELED"
+        ? "COMPLETE"
+        : rawStatus;
   const className =
-    normalized === "ACTIVE" || normalized === "LIVE"
+    normalized === "ONGOING"
       ? "border-l-2 border-white bg-[#162b32] text-white"
       : normalized === "UPCOMING" || normalized === "PENDING"
         ? "border-l-2 border-[#f4c95d] bg-[#302713] text-[#ffe8a3]"
-        : normalized === "COMPLETED" || normalized === "FINISHED"
+        : normalized === "COMPLETE"
           ? "bg-[#183229] text-[#a7e8c0]"
           : "bg-[#35171b] text-[#ff8a8a]";
 

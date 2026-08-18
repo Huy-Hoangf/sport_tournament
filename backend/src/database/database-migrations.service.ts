@@ -12,6 +12,8 @@ export class DatabaseMigrationsService implements OnModuleInit {
 
   async onModuleInit() {
     await this.migrateSportTypes();
+    await this.ensureTournamentDateColumns();
+    await this.migrateTournamentStatuses();
     await this.ensureScoringRulesTable();
     await this.ensureStageNameConstraint();
     await this.cleanupLolUnknownTeams();
@@ -63,6 +65,83 @@ export class DatabaseMigrationsService implements OnModuleInit {
     await this.usersRepository.query(`
       CREATE UNIQUE INDEX IF NOT EXISTS uq_stages_tournament_name
       ON stages(tournament_id, LOWER(name))
+    `);
+  }
+
+  private async ensureTournamentDateColumns() {
+    await this.usersRepository.query(`
+      ALTER TABLE tournaments
+      ADD COLUMN IF NOT EXISTS start_date TIMESTAMPTZ NULL
+    `);
+    await this.usersRepository.query(`
+      ALTER TABLE tournaments
+      ADD COLUMN IF NOT EXISTS end_date TIMESTAMPTZ NULL
+    `);
+    await this.usersRepository.query(`
+      WITH match_ranges AS (
+        SELECT
+          tournament_id,
+          MIN(scheduled_time) AS start_date,
+          MAX(scheduled_time) AS end_date
+        FROM matches
+        GROUP BY tournament_id
+      )
+      UPDATE tournaments t
+      SET
+        start_date = COALESCE(t.start_date, match_ranges.start_date),
+        end_date = COALESCE(t.end_date, match_ranges.end_date)
+      FROM match_ranges
+      WHERE match_ranges.tournament_id = t.id
+        AND (t.start_date IS NULL OR t.end_date IS NULL)
+    `);
+  }
+
+  private async migrateTournamentStatuses() {
+    await this.usersRepository.query(`
+      ALTER TABLE tournaments
+      DROP CONSTRAINT IF EXISTS chk_tournaments_status
+    `);
+    await this.usersRepository.query(`
+      DO $$
+      DECLARE
+        constraint_name TEXT;
+      BEGIN
+        FOR constraint_name IN
+          SELECT con.conname
+          FROM pg_constraint con
+          JOIN pg_class rel ON rel.oid = con.conrelid
+          JOIN pg_namespace nsp ON nsp.oid = rel.relnamespace
+          WHERE rel.relname = 'tournaments'
+            AND con.contype = 'c'
+            AND pg_get_constraintdef(con.oid) ILIKE '%status%'
+        LOOP
+          EXECUTE format('ALTER TABLE tournaments DROP CONSTRAINT IF EXISTS %I', constraint_name);
+        END LOOP;
+      END $$;
+    `);
+    await this.usersRepository.query(`
+      UPDATE tournaments
+      SET status = CASE
+        WHEN status IN ('ACTIVE', 'LIVE', 'ONGOING') THEN 'ONGOING'
+        WHEN status IN ('COMPLETED', 'COMPLETE', 'FINISHED', 'CANCELLED', 'CANCELED') THEN 'COMPLETE'
+        ELSE 'UPCOMING'
+      END
+      WHERE status IS NULL
+         OR status NOT IN ('UPCOMING', 'ONGOING', 'COMPLETE')
+    `);
+    await this.usersRepository.query(`
+      UPDATE tournaments
+      SET status = CASE
+        WHEN end_date IS NOT NULL AND end_date < NOW() THEN 'COMPLETE'
+        WHEN start_date IS NOT NULL AND start_date > NOW() THEN 'UPCOMING'
+        WHEN start_date IS NOT NULL OR end_date IS NOT NULL THEN 'ONGOING'
+        ELSE status
+      END
+    `);
+    await this.usersRepository.query(`
+      ALTER TABLE tournaments
+      ADD CONSTRAINT chk_tournaments_status
+      CHECK (status IN ('UPCOMING', 'ONGOING', 'COMPLETE'))
     `);
   }
 

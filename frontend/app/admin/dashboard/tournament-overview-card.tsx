@@ -132,7 +132,7 @@ export function DashboardTournamentCard({
 }
 
 function canDeleteTournament(tournament: TournamentRow) {
-  return tournament.status.toUpperCase() === "COMPLETED";
+  return tournament.status.toUpperCase() === "COMPLETE";
 }
 
 function MetricBlock({ label, value }: { label: string; value: number }) {

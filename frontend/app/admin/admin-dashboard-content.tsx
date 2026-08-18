@@ -53,6 +53,8 @@ const emptyTournamentForm: TournamentForm = {
   format: "ROUND_ROBIN",
   status: "UPCOMING",
   visibility: "PUBLIC",
+  startDate: "",
+  endDate: "",
 };
 
 const sportTypeOptions = [
@@ -561,6 +563,8 @@ export default function AdminDashboardContent({
       format: tournament.format ?? "ROUND_ROBIN",
       status: normalizeStatus(tournament.status),
       visibility: tournament.visibility ?? "PUBLIC",
+      startDate: toDateInputValue(tournament.startDate),
+      endDate: toDateInputValue(tournament.endDate),
     });
     setOpenTournamentForm(true);
   }
@@ -674,7 +678,7 @@ export default function AdminDashboardContent({
           (tournament) => tournament.id === editingTournamentId,
         ) ?? null;
   const isActiveTournamentEdit =
-    Boolean(editingTournamentId) && tournamentForm.status === "ACTIVE";
+    Boolean(editingTournamentId) && tournamentForm.status === "ONGOING";
 
   async function saveTournament() {
     if (!isAdmin) {
@@ -1193,13 +1197,14 @@ export default function AdminDashboardContent({
               <TournamentSelect
                 label="Status"
                 value={tournamentForm.status}
-                options={["UPCOMING", "ACTIVE", "COMPLETED", "CANCELLED"]}
+                options={["UPCOMING", "ONGOING", "COMPLETE"]}
                 onChange={(value) =>
                   setTournamentForm((form) => ({
                     ...form,
                     status: value as TournamentForm["status"],
                   }))
                 }
+                disabled
               />
               <TournamentSelect
                 label="Visibility"
@@ -1212,6 +1217,38 @@ export default function AdminDashboardContent({
                   }))
                 }
                 disabled={isActiveTournamentEdit}
+              />
+            </div>
+            <div className="grid gap-4 sm:grid-cols-2">
+              <TournamentInput
+                label="Start Date"
+                type="date"
+                value={tournamentForm.startDate}
+                onChange={(value) =>
+                  setTournamentForm((form) => {
+                    const nextForm = { ...form, startDate: value };
+
+                    return {
+                      ...nextForm,
+                      status: calculateTournamentFormStatus(nextForm),
+                    };
+                  })
+                }
+              />
+              <TournamentInput
+                label="End Date"
+                type="date"
+                value={tournamentForm.endDate}
+                onChange={(value) =>
+                  setTournamentForm((form) => {
+                    const nextForm = { ...form, endDate: value };
+
+                    return {
+                      ...nextForm,
+                      status: calculateTournamentFormStatus(nextForm),
+                    };
+                  })
+                }
               />
             </div>
             <div className="grid gap-4 sm:grid-cols-2">
@@ -1254,8 +1291,8 @@ export default function AdminDashboardContent({
             </div>
             {isActiveTournamentEdit && (
               <p className="mt-1 text-xs font-bold text-[#84d8e8]">
-                Active tournaments lock name, visibility, sport type and format.
-                Change status first to edit those fields.
+                Ongoing tournaments lock name, visibility, sport type and
+                format. Status is calculated from start and end date.
               </p>
             )}
             <div className="mt-7 flex justify-end gap-3">
@@ -1333,7 +1370,43 @@ export default function AdminDashboardContent({
 }
 
 function canDeleteTournament(tournament: TournamentRow) {
-  return tournament.status.toUpperCase() === "COMPLETED";
+  return normalizeStatus(tournament.status) === "COMPLETE";
+}
+
+function toDateInputValue(value?: string | null) {
+  if (!value) {
+    return "";
+  }
+
+  const date = new Date(value);
+
+  if (Number.isNaN(date.getTime())) {
+    return "";
+  }
+
+  return date.toISOString().slice(0, 10);
+}
+
+function calculateTournamentFormStatus(
+  form: Pick<TournamentForm, "startDate" | "endDate" | "status">,
+): TournamentForm["status"] {
+  const now = new Date();
+  const start = form.startDate ? new Date(`${form.startDate}T00:00:00`) : null;
+  const end = form.endDate ? new Date(`${form.endDate}T23:59:59`) : null;
+
+  if (end && end < now) {
+    return "COMPLETE";
+  }
+
+  if (start && start > now) {
+    return "UPCOMING";
+  }
+
+  if (start || end) {
+    return "ONGOING";
+  }
+
+  return form.status;
 }
 
 function exportTournamentPdf(tournament: TournamentRow, matches: MatchRow[]) {

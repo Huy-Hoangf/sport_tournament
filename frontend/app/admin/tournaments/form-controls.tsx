@@ -5,11 +5,13 @@ export function TournamentInput({
   value,
   onChange,
   disabled = false,
+  type = "text",
 }: {
   label: string;
   value: string;
   onChange: (value: string) => void;
   disabled?: boolean;
+  type?: string;
 }) {
   return (
     <label className="mb-4 block">
@@ -17,6 +19,7 @@ export function TournamentInput({
         {label}
       </span>
       <input
+        type={type}
         value={value}
         onChange={(event) => onChange(event.target.value)}
         disabled={disabled}

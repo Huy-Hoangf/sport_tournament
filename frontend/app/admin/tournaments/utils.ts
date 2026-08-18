@@ -4,11 +4,23 @@ export function normalizeStatus(status: string): TournamentForm["status"] {
 
   if (
     normalized === "UPCOMING" ||
-    normalized === "ACTIVE" ||
-    normalized === "COMPLETED" ||
-    normalized === "CANCELLED"
+    normalized === "ONGOING" ||
+    normalized === "COMPLETE"
   ) {
     return normalized;
+  }
+
+  if (normalized === "ACTIVE" || normalized === "LIVE") {
+    return "ONGOING";
+  }
+
+  if (
+    normalized === "COMPLETED" ||
+    normalized === "FINISHED" ||
+    normalized === "CANCELLED" ||
+    normalized === "CANCELED"
+  ) {
+    return "COMPLETE";
   }
 
   return "UPCOMING";

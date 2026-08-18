@@ -29,6 +29,8 @@ export type TournamentRow = {
   format?: TournamentFormat;
   status: string;
   visibility: "PUBLIC" | "PRIVATE";
+  startDate?: string | null;
+  endDate?: string | null;
   teams: number;
   matches: number;
   source: string;
@@ -53,8 +55,10 @@ export type TournamentForm = {
   name: string;
   sportType: "FOOTBALL" | "F1" | "LOL" | "OTHER";
   format: TournamentFormat;
-  status: "UPCOMING" | "ACTIVE" | "COMPLETED" | "CANCELLED";
+  status: "UPCOMING" | "ONGOING" | "COMPLETE";
   visibility: "PUBLIC" | "PRIVATE";
+  startDate: string;
+  endDate: string;
 };
 
 export type FootballCompetitionOption = {
@@ -72,9 +76,9 @@ export type ImportSport = "FOOTBALL" | "F1" | "LOL";
 export type SyncSport = "FOOTBALL" | "F1";
 export type TournamentStatusFilter =
   | "ALL"
-  | "ACTIVE"
+  | "ONGOING"
   | "UPCOMING"
-  | "COMPLETED";
+  | "COMPLETE";
 
 export type F1MeetingOption = {
   id: number;

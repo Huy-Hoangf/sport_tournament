@@ -13,13 +13,16 @@ type TournamentInput = {
   format?: string;
   status?: string;
   visibility?: string;
+  startDate?: string | null;
+  endDate?: string | null;
 };
 
 type TournamentFormat = 'GROUP_AND_KNOCKOUT' | 'ROUND_ROBIN' | 'KNOCKOUT';
+type TournamentStatus = 'UPCOMING' | 'ONGOING' | 'COMPLETE';
 
 const SPORT_TYPES = ['FOOTBALL', 'F1', 'LOL', 'OTHER'];
 const FORMATS = ['GROUP_AND_KNOCKOUT', 'ROUND_ROBIN', 'KNOCKOUT'];
-const STATUSES = ['UPCOMING', 'ACTIVE', 'COMPLETED', 'CANCELLED'];
+const STATUSES: TournamentStatus[] = ['UPCOMING', 'ONGOING', 'COMPLETE'];
 const VISIBILITIES = ['PUBLIC', 'PRIVATE'];
 
 const STAGES_BY_FORMAT: Record<
@@ -66,8 +69,10 @@ export class TournamentsService {
         t.name,
         t.sport_type AS "sportType",
         t.format,
-        t.status,
+        ${this.statusExpression('t.start_date', 't.end_date', 't.status')} AS status,
         t.visibility,
+        t.start_date AS "startDate",
+        t.end_date AS "endDate",
         t.created_by AS "createdBy",
         t.created_at AS "createdAt",
         t.updated_at AS "updatedAt",
@@ -94,8 +99,8 @@ export class TournamentsService {
     const [row] = await this.usersRepository.query(
       `
         INSERT INTO tournaments
-          (name, sport_type, format, status, visibility, created_by)
-        VALUES ($1, $2, $3, $4, $5, $6)
+          (name, sport_type, format, status, visibility, start_date, end_date, created_by)
+        VALUES ($1, $2, $3, $4, $5, $6, $7, $8)
         RETURNING
           id,
           name,
@@ -103,6 +108,8 @@ export class TournamentsService {
           format,
           status,
           visibility,
+          start_date AS "startDate",
+          end_date AS "endDate",
           created_by AS "createdBy",
           created_at AS "createdAt",
           updated_at AS "updatedAt"
@@ -113,6 +120,8 @@ export class TournamentsService {
         data.format,
         data.status,
         data.visibility,
+        data.startDate,
+        data.endDate,
         adminId,
       ],
     );
@@ -138,7 +147,9 @@ export class TournamentsService {
           sport_type AS "sportType",
           format,
           status,
-          visibility
+          visibility,
+          start_date AS "startDate",
+          end_date AS "endDate"
         FROM tournaments
         WHERE id = $1
       `,
@@ -150,6 +161,13 @@ export class TournamentsService {
     }
 
     const data = this.normalizeInput(input, false);
+    if (data.startDate !== undefined || data.endDate !== undefined) {
+      data.status = this.calculateStatus(
+        data.startDate === undefined ? current.startDate : data.startDate,
+        data.endDate === undefined ? current.endDate : data.endDate,
+        data.status ?? this.normalizeStatus(current.status) ?? 'UPCOMING',
+      );
+    }
     const lockedFields = [
       ['name', data.name, current.name],
       ['sportType', data.sportType, current.sportType],
@@ -157,7 +175,7 @@ export class TournamentsService {
       ['visibility', data.visibility, current.visibility],
     ] as const;
     const locksCoreFields =
-      current.status === 'ACTIVE' || data.status === 'ACTIVE';
+      current.status === 'ONGOING' || data.status === 'ONGOING';
 
     if (locksCoreFields) {
       const changedLockedField = lockedFields.find(
@@ -185,6 +203,8 @@ export class TournamentsService {
       ['format', data.format],
       ['status', data.status],
       ['visibility', data.visibility],
+      ['start_date', data.startDate],
+      ['end_date', data.endDate],
     ] as const) {
       if (value === undefined) {
         continue;
@@ -211,6 +231,8 @@ export class TournamentsService {
           format,
           status,
           visibility,
+          start_date AS "startDate",
+          end_date AS "endDate",
           created_by AS "createdBy",
           created_at AS "createdAt",
           updated_at AS "updatedAt"
@@ -246,7 +268,7 @@ export class TournamentsService {
       throw new NotFoundException('Tournament not found.');
     }
 
-    if (current.status !== 'COMPLETED') {
+    if (current.status !== 'COMPLETE') {
       throw new BadRequestException(
         'Only completed tournaments can be deleted.',
       );
@@ -275,8 +297,10 @@ export class TournamentsService {
     const name = input.name?.trim();
     const sportType = input.sportType?.trim().toUpperCase();
     const format = input.format?.trim().toUpperCase();
-    const status = input.status?.trim().toUpperCase();
+    const status = this.normalizeStatus(input.status);
     const visibility = input.visibility?.trim().toUpperCase();
+    const startDate = this.normalizeDateInput(input.startDate);
+    const endDate = this.normalizeDateInput(input.endDate);
 
     if (requireName && !name) {
       throw new BadRequestException('Tournament name is required.');
@@ -297,9 +321,19 @@ export class TournamentsService {
       throw new BadRequestException('Invalid tournament format.');
     }
 
-    if (input.status !== undefined && (!status || !STATUSES.includes(status))) {
+    if (input.status !== undefined && !status) {
       throw new BadRequestException('Invalid tournament status.');
     }
+
+    if (startDate && endDate && new Date(startDate) > new Date(endDate)) {
+      throw new BadRequestException('Tournament start date must be before end date.');
+    }
+
+    const resolvedStatus = this.resolveStatusFromDates(
+      startDate,
+      endDate,
+      status ?? (requireName ? 'UPCOMING' : undefined),
+    );
 
     if (
       input.visibility !== undefined &&
@@ -313,9 +347,103 @@ export class TournamentsService {
       sportType: sportType ?? (requireName ? 'FOOTBALL' : undefined),
       format: (format ?? (requireName ? 'ROUND_ROBIN' : undefined)) as
         TournamentFormat | undefined,
-      status: status ?? (requireName ? 'UPCOMING' : undefined),
+      status: resolvedStatus,
       visibility: visibility ?? (requireName ? 'PUBLIC' : undefined),
+      startDate,
+      endDate,
     };
+  }
+
+  private normalizeStatus(status?: string): TournamentStatus | undefined {
+    const normalized = status?.trim().toUpperCase();
+
+    if (!normalized) {
+      return undefined;
+    }
+
+    if (normalized === 'ACTIVE' || normalized === 'LIVE') {
+      return 'ONGOING';
+    }
+
+    if (
+      normalized === 'COMPLETED' ||
+      normalized === 'FINISHED' ||
+      normalized === 'CANCELLED' ||
+      normalized === 'CANCELED'
+    ) {
+      return 'COMPLETE';
+    }
+
+    return STATUSES.includes(normalized as TournamentStatus)
+      ? (normalized as TournamentStatus)
+      : undefined;
+  }
+
+  private normalizeDateInput(value?: string | null) {
+    if (value === undefined) {
+      return undefined;
+    }
+
+    if (value === null || value.trim() === '') {
+      return null;
+    }
+
+    const parsed = new Date(value);
+
+    if (Number.isNaN(parsed.getTime())) {
+      throw new BadRequestException('Invalid tournament date.');
+    }
+
+    return parsed.toISOString();
+  }
+
+  private resolveStatusFromDates(
+    startDate: string | null | undefined,
+    endDate: string | null | undefined,
+    fallbackStatus: TournamentStatus | undefined,
+  ): TournamentStatus | undefined {
+    if (startDate === undefined && endDate === undefined) {
+      return fallbackStatus;
+    }
+
+    return this.calculateStatus(startDate, endDate, fallbackStatus);
+  }
+
+  private calculateStatus(
+    startDate: string | null | undefined,
+    endDate: string | null | undefined,
+    fallbackStatus: TournamentStatus = 'UPCOMING',
+  ): TournamentStatus {
+    const now = Date.now();
+    const startTime = startDate ? new Date(startDate).getTime() : NaN;
+    const endTime = endDate ? new Date(endDate).getTime() : NaN;
+
+    if (Number.isFinite(endTime) && endTime < now) {
+      return 'COMPLETE';
+    }
+
+    if (Number.isFinite(startTime) && startTime > now) {
+      return 'UPCOMING';
+    }
+
+    if (Number.isFinite(startTime) || Number.isFinite(endTime)) {
+      return 'ONGOING';
+    }
+
+    return fallbackStatus;
+  }
+
+  private statusExpression(startColumn: string, endColumn: string, fallbackColumn: string) {
+    return `
+      CASE
+        WHEN ${endColumn} IS NOT NULL AND ${endColumn} < NOW() THEN 'COMPLETE'
+        WHEN ${startColumn} IS NOT NULL AND ${startColumn} > NOW() THEN 'UPCOMING'
+        WHEN ${startColumn} IS NOT NULL OR ${endColumn} IS NOT NULL THEN 'ONGOING'
+        WHEN ${fallbackColumn} IN ('ACTIVE', 'LIVE', 'ONGOING') THEN 'ONGOING'
+        WHEN ${fallbackColumn} IN ('COMPLETED', 'COMPLETE', 'FINISHED', 'CANCELLED', 'CANCELED') THEN 'COMPLETE'
+        ELSE 'UPCOMING'
+      END
+    `;
   }
 
   private async ensureStagesForFormat(

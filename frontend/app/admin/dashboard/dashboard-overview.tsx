@@ -163,7 +163,7 @@ export function getNextTournamentMatch(matches: MatchRow[]) {
 export function getTournamentDashboardPriority(tournament: TournamentRow) {
   const status = tournament.status.toUpperCase();
 
-  if (status === "ACTIVE") {
+  if (status === "ONGOING" || status === "ACTIVE") {
     return 0;
   }
 
@@ -171,7 +171,7 @@ export function getTournamentDashboardPriority(tournament: TournamentRow) {
     return 1;
   }
 
-  if (status === "COMPLETED") {
+  if (status === "COMPLETE" || status === "COMPLETED") {
     return 2;
   }
 

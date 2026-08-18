@@ -229,7 +229,7 @@ export class DashboardService {
         (
           SELECT COUNT(*)
           FROM tournaments t
-          WHERE t.status = 'ACTIVE'
+          WHERE ${this.tournamentStatusExpression('t.start_date', 't.end_date', 't.status')} = 'ONGOING'
             ${tournamentVisibilityCondition}
         ) AS "activeTournaments",
         (SELECT COUNT(*) FROM users WHERE role = 'PLAYER') AS "totalPlayers",
@@ -285,8 +285,10 @@ export class DashboardService {
         t.name,
         t.sport_type AS "sportType",
         t.format,
-        t.status,
+        ${this.tournamentStatusExpression('t.start_date', 't.end_date', 't.status')} AS status,
         t.visibility,
+        t.start_date AS "startDate",
+        t.end_date AS "endDate",
         CASE
           WHEN COUNT(DISTINCT team.id) > 0 THEN COUNT(DISTINCT team.id)
           ELSE COUNT(DISTINCT effective_team.name)
@@ -313,12 +315,12 @@ export class DashboardService {
         AND LOWER(TRIM(effective_team.name)) NOT IN ('tbd', 'team 1', 'team 2', 'home team', 'away team')
       LEFT JOIN stages s ON s.tournament_id = t.id
       ${whereClause}
-      GROUP BY t.id, t.name, t.sport_type, t.format, t.status, t.visibility, t.updated_at, t.created_at
+      GROUP BY t.id, t.name, t.sport_type, t.format, t.status, t.visibility, t.start_date, t.end_date, t.updated_at, t.created_at
       ORDER BY
-        CASE t.status
-          WHEN 'ACTIVE' THEN 0
+        CASE ${this.tournamentStatusExpression('t.start_date', 't.end_date', 't.status')}
+          WHEN 'ONGOING' THEN 0
           WHEN 'UPCOMING' THEN 1
-          WHEN 'COMPLETED' THEN 2
+          WHEN 'COMPLETE' THEN 2
           ELSE 3
         END,
         t.updated_at DESC,
@@ -549,7 +551,7 @@ export class DashboardService {
 
     if (scope === 'today') {
       conditions.push(`(
-        t.status = 'ACTIVE'
+        ${this.tournamentStatusExpression('t.start_date', 't.end_date', 't.status')} = 'ONGOING'
         OR EXISTS (
           SELECT 1
           FROM matches today_match
@@ -560,6 +562,23 @@ export class DashboardService {
     }
 
     return conditions.length > 0 ? `WHERE ${conditions.join(' AND ')}` : '';
+  }
+
+  private tournamentStatusExpression(
+    startColumn: string,
+    endColumn: string,
+    fallbackColumn: string,
+  ) {
+    return `
+      CASE
+        WHEN ${endColumn} IS NOT NULL AND ${endColumn} < NOW() THEN 'COMPLETE'
+        WHEN ${startColumn} IS NOT NULL AND ${startColumn} > NOW() THEN 'UPCOMING'
+        WHEN ${startColumn} IS NOT NULL OR ${endColumn} IS NOT NULL THEN 'ONGOING'
+        WHEN ${fallbackColumn} IN ('ACTIVE', 'LIVE', 'ONGOING') THEN 'ONGOING'
+        WHEN ${fallbackColumn} IN ('COMPLETED', 'COMPLETE', 'FINISHED', 'CANCELLED', 'CANCELED') THEN 'COMPLETE'
+        ELSE 'UPCOMING'
+      END
+    `;
   }
 
   private todayDateCondition(column: string) {
