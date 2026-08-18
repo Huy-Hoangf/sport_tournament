@@ -39,7 +39,7 @@ describe('UsersService', () => {
     expect(service).toBeDefined();
   });
 
-  it('migrates stored user emails to @tech.com on startup', async () => {
+  it('ensures Google auth columns on startup', async () => {
     usersRepository.query.mockResolvedValue([]);
     usersRepository.findOne.mockResolvedValue({
       email: 'son.vu@tech.com',
@@ -50,8 +50,10 @@ describe('UsersService', () => {
     await service.onModuleInit();
 
     expect(usersRepository.query).toHaveBeenCalledWith(
-      expect.stringContaining('UPDATE users AS target_user'),
-      ['@tech.com', '%@tech.com'],
+      expect.stringContaining('ADD COLUMN IF NOT EXISTS google_id'),
+    );
+    expect(usersRepository.query).toHaveBeenCalledWith(
+      expect.stringContaining('ADD COLUMN IF NOT EXISTS avatar_url'),
     );
   });
 });

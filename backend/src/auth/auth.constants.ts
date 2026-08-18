@@ -7,6 +7,6 @@ export function normalizeEmail(email: string): string {
   return email.trim().toLowerCase();
 }
 
-export function isCompanyEmail(email: string): boolean {
-  return /^[^\s@]+@tech\.com$/i.test(email);
+export function isValidEmail(email: string): boolean {
+  return /^[^\s@]+@[^\s@]+\.[^\s@]+$/i.test(email);
 }

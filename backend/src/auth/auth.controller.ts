@@ -1,4 +1,5 @@
-import { Body, Controller, Headers, Post } from '@nestjs/common';
+import { Body, Controller, Get, Headers, Post, Query, Res } from '@nestjs/common';
+import type { Response } from 'express';
 import { AuthService } from './auth.service';
 
 @Controller('auth')
@@ -20,6 +21,27 @@ export class AuthController {
       accessToken: user.accessToken,
       requiresPasswordChange: user.requiresPasswordChange,
     };
+  }
+
+  @Get('google/url')
+  getGoogleLoginUrl() {
+    return {
+      url: this.authService.getGoogleLoginUrl(),
+    };
+  }
+
+  @Get('google/callback')
+  async googleCallback(
+    @Query('code') code: string | undefined,
+    @Query('error') error: string | undefined,
+    @Res() response: Response,
+  ) {
+    const redirectUrl = await this.authService.handleGoogleCallback(
+      code,
+      error,
+    );
+
+    return response.redirect(redirectUrl);
   }
 
   @Post('complete-first-login')
