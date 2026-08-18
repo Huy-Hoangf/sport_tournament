@@ -868,28 +868,28 @@ export default function AdminDashboardContent({
         />
       ) : (
         <>
-      {!isTournamentView && (
-        <>
-          <ApiStatusBanner
-            apiStatus={dashboard.apiStatus}
-            isLoading={isLoading}
-            onRefresh={() => void loadDashboard()}
-          />
-
-          <DashboardStatGrid
-            stats={dashboard.stats}
-            isAdmin={isAdmin}
-            onOpenAttentionDetails={() => setOpenAttentionDetails(true)}
-          />
-        </>
-      )}
-
       <div
-        className={`grid min-w-0 gap-5 ${
+        className={`grid min-w-0 items-start gap-5 ${
           isTournamentView ? "xl:grid-cols-1" : "xl:grid-cols-[minmax(0,1fr)_390px]"
         }`}
       >
         <div className="space-y-5">
+          {!isTournamentView && (
+            <>
+              <ApiStatusBanner
+                apiStatus={dashboard.apiStatus}
+                isLoading={isLoading}
+                onRefresh={() => void loadDashboard()}
+              />
+
+              <DashboardStatGrid
+                stats={dashboard.stats}
+                isAdmin={isAdmin}
+                onOpenAttentionDetails={() => setOpenAttentionDetails(true)}
+              />
+            </>
+          )}
+
           {isTournamentView ? (
             tournamentGroups.map((group) => (
               <TournamentManagementTable

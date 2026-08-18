@@ -43,6 +43,9 @@ export default function LoginPage() {
     const prefix = "#google=";
 
     if (!hash.startsWith(prefix)) {
+      if (localStorage.getItem("currentUser") && localStorage.getItem("accessToken")) {
+        router.replace("/admin");
+      }
       return;
     }
 
@@ -132,7 +135,7 @@ export default function LoginPage() {
       sessionStorage.removeItem("pendingPasswordChangeToken");
       localStorage.setItem("currentUser", JSON.stringify(data.user));
       localStorage.setItem("accessToken", data.accessToken);
-      router.push("/admin");
+      router.replace("/admin");
     } catch (error) {
       showNotice(
         error instanceof Error ? error.message : "Login failed.",

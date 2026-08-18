@@ -30,6 +30,42 @@ type RecentActivityResponse = {
   recentActivity?: ActivityRow[];
 };
 
+const ADMIN_VIEW_HASHES: Record<AdminView, string> = {
+  dashboard: "#dashboard",
+  tournaments: "#tournaments",
+  matches: "#matches",
+  players: "#players",
+};
+
+const ADMIN_VIEWS = new Set<AdminView>([
+  "dashboard",
+  "tournaments",
+  "matches",
+  "players",
+]);
+
+function getViewFromHash(): AdminView {
+  if (typeof window === "undefined") {
+    return "dashboard";
+  }
+
+  const view = window.location.hash.replace("#", "") as AdminView;
+
+  return ADMIN_VIEWS.has(view) ? view : "dashboard";
+}
+
+function pushAdminViewHistory(view: AdminView) {
+  if (typeof window === "undefined") {
+    return;
+  }
+
+  const nextHash = ADMIN_VIEW_HASHES[view];
+
+  if (window.location.hash !== nextHash) {
+    window.history.pushState(null, "", nextHash);
+  }
+}
+
 export default function AdminPage() {
   const router = useRouter();
   const [players, setPlayers] = useState<Player[]>([]);
@@ -96,7 +132,7 @@ export default function AdminPage() {
 
     queueMicrotask(() => {
       setCurrentUser(currentUser);
-      setActiveView("dashboard");
+      setActiveView(getViewFromHash());
 
       if (currentUser.role !== "PLAYER") {
         void fetchPlayers();
@@ -117,6 +153,29 @@ export default function AdminPage() {
       window.removeEventListener("storage", handleStorage);
     };
   }, [fetchPlayers, router]);
+
+  useEffect(() => {
+    function handleHistoryChange() {
+      const nextView = getViewFromHash();
+      setActiveView(nextView);
+
+      if (nextView === "matches") {
+        setMatchesInitialFilter({});
+      }
+    }
+
+    window.addEventListener("hashchange", handleHistoryChange);
+    window.addEventListener("popstate", handleHistoryChange);
+
+    if (!window.location.hash) {
+      window.history.replaceState(null, "", ADMIN_VIEW_HASHES.dashboard);
+    }
+
+    return () => {
+      window.removeEventListener("hashchange", handleHistoryChange);
+      window.removeEventListener("popstate", handleHistoryChange);
+    };
+  }, []);
 
   const activeCount = useMemo(
     () => players.filter((player) => player.status === "ACTIVE").length,
@@ -552,6 +611,7 @@ export default function AdminPage() {
       setMatchesInitialFilter({});
     }
     setActiveView(view);
+    pushAdminViewHistory(view);
     setIsMobileMenuOpen(false);
     setOpenPlayerActionId(null);
   }
@@ -599,10 +659,11 @@ export default function AdminPage() {
           <DashboardView
             isAdmin={isAdmin}
             refreshKey={dashboardRefreshKey}
-            onOpenTournamentManagement={() => setActiveView("tournaments")}
+            onOpenTournamentManagement={() => openAdminView("tournaments")}
             onOpenMatches={(filters) => {
               setMatchesInitialFilter(filters);
               setActiveView("matches");
+              pushAdminViewHistory("matches");
             }}
           />
         ) : activeView === "tournaments" ? (
@@ -612,6 +673,7 @@ export default function AdminPage() {
             onOpenMatches={(filters) => {
               setMatchesInitialFilter(filters);
               setActiveView("matches");
+              pushAdminViewHistory("matches");
             }}
           />
         ) : activeView === "matches" ? (
