@@ -7,6 +7,10 @@ export function logoutAll() {
   localStorage.setItem("logoutEvent", Date.now().toString());
 }
 
+export function redirectToLogin() {
+  window.location.replace("/login");
+}
+
 export function readCurrentUser() {
   const rawUser = localStorage.getItem("currentUser");
 
@@ -14,7 +18,12 @@ export function readCurrentUser() {
     return null;
   }
 
-  return JSON.parse(rawUser);
+  try {
+    return JSON.parse(rawUser);
+  } catch {
+    logoutAll();
+    return null;
+  }
 }
 
 export function readAccessToken() {
