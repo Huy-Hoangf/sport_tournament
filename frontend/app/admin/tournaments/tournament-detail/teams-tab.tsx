@@ -1,6 +1,7 @@
 import { Minus, Plus, Search, Shield, TrendingDown, TrendingUp } from "lucide-react";
-import { useMemo, useState } from "react";
+import { useEffect, useMemo, useState } from "react";
 
+import { apiRequest } from "../../../api";
 import type { MatchRow, TournamentRow } from "../types";
 import { isFinishedStatus } from "../utils";
 
@@ -11,6 +12,7 @@ type TeamRow = {
   losses: number;
   draws: number;
   score: number;
+  points: number;
   matches: number;
 };
 
@@ -28,8 +30,10 @@ export function TeamsTab({
   const [searchValue, setSearchValue] = useState("");
   const [stageFilter, setStageFilter] = useState("ALL");
   const [page, setPage] = useState(1);
+  const [apiTeamRows, setApiTeamRows] = useState<TeamRow[] | null>(null);
   const pageSize = 4;
-  const teamRows = useMemo(() => buildTeamRows(matches), [matches]);
+  const fallbackTeamRows = useMemo(() => buildTeamRows(matches), [matches]);
+  const teamRows = apiTeamRows ?? fallbackTeamRows;
   const stageOptions = useMemo(
     () => [
       "ALL",
@@ -49,6 +53,26 @@ export function TeamsTab({
   const activePage = Math.min(page, totalPages);
   const start = (activePage - 1) * pageSize;
   const visibleRows = filteredRows.slice(start, start + pageSize);
+
+  useEffect(() => {
+    let isMounted = true;
+
+    apiRequest<TeamRow[]>(`/teams?tournamentId=${tournament.id}`)
+      .then((rows) => {
+        if (isMounted) {
+          setApiTeamRows(rows.map(normalizeTeamRow));
+        }
+      })
+      .catch(() => {
+        if (isMounted) {
+          setApiTeamRows(null);
+        }
+      });
+
+    return () => {
+      isMounted = false;
+    };
+  }, [tournament.id]);
 
   return (
     <section className="border-t border-[#314850] bg-[#06161b] p-4 sm:p-7 lg:p-8">
@@ -115,10 +139,11 @@ export function TeamsTab({
 
       <div className="overflow-hidden border border-[#243c43] bg-[#0d252d]">
         <div className="overflow-x-auto">
-          <div className="min-w-[840px]">
-            <div className="grid grid-cols-[72px_minmax(260px,1fr)_90px_90px_90px_100px_92px_90px] gap-x-5 border-b border-[#243c43] bg-[#10242b] px-5 py-4 text-[10px] font-black uppercase tracking-[0.1em] text-[#9fb2b8]">
+          <div className="min-w-[940px]">
+            <div className="grid grid-cols-[72px_minmax(250px,1fr)_80px_80px_80px_80px_90px_92px_90px] gap-x-5 border-b border-[#243c43] bg-[#10242b] px-5 py-4 text-[10px] font-black uppercase tracking-[0.1em] text-[#9fb2b8]">
               <span>Rank</span>
               <span>Team Identity</span>
+              <span>Pts</span>
               <span>Wins</span>
               <span>Loss</span>
               <span>Draw</span>
@@ -195,7 +220,7 @@ function TeamTableRow({
 
   return (
     <div
-      className={`grid grid-cols-[72px_minmax(260px,1fr)_90px_90px_90px_100px_92px_90px] items-center gap-x-5 px-5 py-4 text-sm ${
+      className={`grid grid-cols-[72px_minmax(250px,1fr)_80px_80px_80px_80px_90px_92px_90px] items-center gap-x-5 px-5 py-4 text-sm ${
         highlighted ? "bg-[#18343d]" : "bg-[#0d252d]"
       }`}
     >
@@ -221,10 +246,11 @@ function TeamTableRow({
           </p>
         </div>
       </div>
+      <TeamNumber value={team.points} accent />
       <TeamNumber value={team.wins} />
       <TeamNumber value={team.losses} />
       <TeamNumber value={team.draws} />
-      <TeamNumber value={team.score} accent />
+      <TeamNumber value={team.score} />
       <span
         className={`inline-flex h-8 w-8 items-center justify-center ${
           trend === "up"
@@ -292,24 +318,44 @@ function buildTeamRows(matches: MatchRow[]): TeamRow[] {
 
     if (match.actualHomeScore > match.actualAwayScore) {
       home.wins += 1;
+      home.points += 3;
       away.losses += 1;
     } else if (match.actualHomeScore < match.actualAwayScore) {
       away.wins += 1;
+      away.points += 3;
       home.losses += 1;
     } else {
       home.draws += 1;
+      home.points += 1;
       away.draws += 1;
+      away.points += 1;
     }
   });
 
   return [...teams.values()].sort(
     (first, second) =>
+      second.points - first.points ||
       second.wins - first.wins ||
       first.losses - second.losses ||
       second.draws - first.draws ||
       second.score - first.score ||
       first.name.localeCompare(second.name),
   );
+}
+
+function normalizeTeamRow(row: TeamRow): TeamRow {
+  const wins = Number(row.wins ?? 0);
+  const draws = Number(row.draws ?? 0);
+
+  return {
+    ...row,
+    wins,
+    losses: Number(row.losses ?? 0),
+    draws,
+    score: Number(row.score ?? 0),
+    points: Number(row.points ?? wins * 3 + draws),
+    matches: Number(row.matches ?? 0),
+  };
 }
 
 function ensureTeam(teams: Map<string, TeamRow>, name: string, stage: string) {
@@ -326,6 +372,7 @@ function ensureTeam(teams: Map<string, TeamRow>, name: string, stage: string) {
     losses: 0,
     draws: 0,
     score: 0,
+    points: 0,
     matches: 0,
   };
 

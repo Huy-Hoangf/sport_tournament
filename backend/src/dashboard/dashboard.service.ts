@@ -358,7 +358,6 @@ export class DashboardService {
       scope === 'today'
         ? `AND ${this.todayDateCondition('m.scheduled_time')}`
         : '';
-
     const scheduleTimeCondition =
       scope === 'today' ? '' : 'AND m.scheduled_time >= NOW()';
 
@@ -406,12 +405,16 @@ export class DashboardService {
       scope === 'today'
         ? `AND ${this.todayDateCondition('m.scheduled_time')}`
         : '';
+    const rowLimitCondition =
+      scope === 'today' ? 'WHERE ranked.row_number <= 20' : '';
 
     return `
       SELECT
         ranked.id,
         ranked."tournamentId",
         ranked."tournamentName",
+        ranked."stageId",
+        ranked."stageName",
         ranked."homeTeam",
         ranked."awayTeam",
         ranked."homeLogoUrl",
@@ -455,7 +458,7 @@ export class DashboardService {
           ${visibilityCondition}
           ${scopeCondition}
       ) ranked
-      WHERE ranked.row_number <= 20
+      ${rowLimitCondition}
       ORDER BY ranked."tournamentId", ranked."scheduledTime" ASC
     `;
   }

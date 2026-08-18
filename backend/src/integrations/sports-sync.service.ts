@@ -432,16 +432,9 @@ export class SportsApiSyncService {
           league.current,
           isAseanChampionship,
         );
-        const includeFinishedFixtures = tournamentStatus !== 'UPCOMING';
         const fixtures = isAseanChampionship
-          ? await this.fetchAseanChampionshipFixtures(
-              league.season,
-              includeFinishedFixtures,
-            )
-          : await this.fetchFootballDataOrgFixturesForLeague(
-              league.id,
-              includeFinishedFixtures,
-            );
+          ? await this.fetchAseanChampionshipFixtures(league.season, true)
+          : await this.fetchFootballDataOrgFixturesForLeague(league.id, true);
         const competitionName = fixtures[0]?.league?.name || league.name;
 
         if (!competitionName) {
@@ -737,7 +730,7 @@ export class SportsApiSyncService {
       );
       const fixtures = await this.fetchFootballDataOrgFixturesForLeague(
         competition.id,
-        tournamentStatus !== 'UPCOMING',
+        true,
       );
 
       if (fixtures.length === 0) {
@@ -943,7 +936,7 @@ export class SportsApiSyncService {
           : new Date(first.fixture.date).getTime() -
             new Date(second.fixture.date).getTime(),
       )
-      .slice(0, 50);
+      .slice(0, 200);
   }
 
   private toFootballDataOrgMatch(

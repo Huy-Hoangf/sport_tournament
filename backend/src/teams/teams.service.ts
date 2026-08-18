@@ -221,9 +221,10 @@ export class TeamsService {
           wins,
           losses,
           draws,
-          score
+          score,
+          (wins * 3 + draws) AS points
         FROM combined_teams
-        ORDER BY wins DESC, losses ASC, draws DESC, score DESC, name ASC
+        ORDER BY points DESC, wins DESC, losses ASC, draws DESC, score DESC, name ASC
         LIMIT 500
       `,
       values,
@@ -239,6 +240,7 @@ export class TeamsService {
       losses: Number(row.losses ?? 0),
       draws: Number(row.draws ?? 0),
       score: Number(row.score ?? 0),
+      points: Number(row.points ?? 0),
     }));
   }
 }
