@@ -11,8 +11,12 @@ export function DashboardStatGrid({
   isAdmin: boolean;
   onOpenAttentionDetails: () => void;
 }) {
+  const gridClassName = isAdmin
+    ? "mb-5 grid grid-cols-1 gap-3 sm:grid-cols-2 xl:grid-cols-4 xl:gap-5 2xl:gap-6"
+    : "mb-5 grid grid-cols-1 gap-3 sm:grid-cols-3 xl:gap-5 2xl:gap-6";
+
   return (
-    <section className="mb-5 grid grid-cols-2 gap-3 md:gap-4 2xl:grid-cols-4 2xl:gap-6">
+    <section className={gridClassName}>
       <DashboardStatCard
         title="Active Tournaments"
         value={stats.activeTournaments}

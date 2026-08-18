@@ -40,14 +40,14 @@ export function DashboardStatCard({
       <div className="min-w-0">
         <h3
           title={title}
-          className={`truncate whitespace-nowrap text-[13px] font-black uppercase leading-5 tracking-[0.08em] ${
+          className={`truncate whitespace-nowrap text-[12px] font-black uppercase leading-5 tracking-[0.08em] min-[1500px]:text-[13px] ${
             tone === "warning" ? "text-[#f4c95d]" : "text-[#c8d6db]"
           }`}
         >
           {title}
         </h3>
         <p
-          className={`mt-4 whitespace-nowrap text-[36px] font-black leading-none tabular-nums ${
+          className={`mt-4 whitespace-nowrap text-[34px] font-black leading-none tabular-nums min-[1500px]:text-[36px] ${
             tone === "warning" ? "text-[#f4c95d]" : "text-white"
           }`}
         >
@@ -66,7 +66,7 @@ export function DashboardStatCard({
     </div>
   );
 
-  const className = `h-[144px] min-w-0 overflow-hidden rounded border bg-[#0d252d] px-6 py-6 text-left shadow-[0_2px_0_rgba(255,255,255,0.08)] ${
+  const className = `h-[144px] min-w-0 overflow-hidden rounded border bg-[#0d252d] px-5 py-6 text-left shadow-[0_2px_0_rgba(255,255,255,0.08)] min-[1500px]:px-6 ${
     tone === "warning" ? "border-[#8b7133]" : "border-[#3a4d54]"
   }`;
 
