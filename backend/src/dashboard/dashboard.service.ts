@@ -301,6 +301,7 @@ export class DashboardService {
         ) AS source
       FROM tournaments t
       LEFT JOIN teams team ON team.tournament_id = t.id
+        AND LOWER(TRIM(team.name)) NOT IN ('tbd', 'team 1', 'team 2', 'home team', 'away team')
       LEFT JOIN matches m ON ${matchJoinCondition}
       LEFT JOIN teams home_team ON home_team.id = m.home_team_id
       LEFT JOIN teams away_team ON away_team.id = m.away_team_id
@@ -309,7 +310,7 @@ export class DashboardService {
         UNION
         SELECT COALESCE(away_team.name, m.away_placeholder) AS name
       ) effective_team ON effective_team.name IS NOT NULL
-        AND UPPER(effective_team.name) <> 'TBD'
+        AND LOWER(TRIM(effective_team.name)) NOT IN ('tbd', 'team 1', 'team 2', 'home team', 'away team')
       LEFT JOIN stages s ON s.tournament_id = t.id
       ${whereClause}
       GROUP BY t.id, t.name, t.sport_type, t.format, t.status, t.visibility, t.updated_at, t.created_at

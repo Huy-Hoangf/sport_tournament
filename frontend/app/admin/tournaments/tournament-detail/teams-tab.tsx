@@ -32,7 +32,10 @@ export function TeamsTab({
   const [page, setPage] = useState(1);
   const [apiTeamRows, setApiTeamRows] = useState<TeamRow[] | null>(null);
   const pageSize = 4;
-  const fallbackTeamRows = useMemo(() => buildTeamRows(matches), [matches]);
+  const fallbackTeamRows = useMemo(
+    () => buildTeamRows(matches, tournament.sportType),
+    [matches, tournament.sportType],
+  );
   const teamRows = apiTeamRows ?? fallbackTeamRows;
   const stageOptions = useMemo(
     () => [
@@ -60,7 +63,11 @@ export function TeamsTab({
     apiRequest<TeamRow[]>(`/teams?tournamentId=${tournament.id}`)
       .then((rows) => {
         if (isMounted) {
-          setApiTeamRows(rows.map(normalizeTeamRow));
+          setApiTeamRows(
+            rows
+              .filter((row) => isKnownTeamName(row.name))
+              .map((row) => normalizeTeamRow(row, tournament.sportType)),
+          );
         }
       })
       .catch(() => {
@@ -72,7 +79,7 @@ export function TeamsTab({
     return () => {
       isMounted = false;
     };
-  }, [tournament.id]);
+  }, [tournament.id, tournament.sportType]);
 
   return (
     <section className="border-t border-[#314850] bg-[#06161b] p-4 sm:p-7 lg:p-8">
@@ -285,8 +292,10 @@ function TeamNumber({ value, accent = false }: { value: number; accent?: boolean
   );
 }
 
-function buildTeamRows(matches: MatchRow[]): TeamRow[] {
+function buildTeamRows(matches: MatchRow[], sportType?: string): TeamRow[] {
   const teams = new Map<string, TeamRow>();
+  const winPoints = sportType === "LOL" ? 1 : 3;
+  const drawPoints = sportType === "LOL" ? 0 : 1;
 
   matches.forEach((match) => {
     const homeName = normalizeTeamName(match.homeName);
@@ -318,17 +327,17 @@ function buildTeamRows(matches: MatchRow[]): TeamRow[] {
 
     if (match.actualHomeScore > match.actualAwayScore) {
       home.wins += 1;
-      home.points += 3;
+      home.points += winPoints;
       away.losses += 1;
     } else if (match.actualHomeScore < match.actualAwayScore) {
       away.wins += 1;
-      away.points += 3;
+      away.points += winPoints;
       home.losses += 1;
     } else {
       home.draws += 1;
-      home.points += 1;
+      home.points += drawPoints;
       away.draws += 1;
-      away.points += 1;
+      away.points += drawPoints;
     }
   });
 
@@ -343,9 +352,10 @@ function buildTeamRows(matches: MatchRow[]): TeamRow[] {
   );
 }
 
-function normalizeTeamRow(row: TeamRow): TeamRow {
+function normalizeTeamRow(row: TeamRow, sportType?: string): TeamRow {
   const wins = Number(row.wins ?? 0);
   const draws = Number(row.draws ?? 0);
+  const fallbackPoints = sportType === "LOL" ? wins : wins * 3 + draws;
 
   return {
     ...row,
@@ -353,7 +363,7 @@ function normalizeTeamRow(row: TeamRow): TeamRow {
     losses: Number(row.losses ?? 0),
     draws,
     score: Number(row.score ?? 0),
-    points: Number(row.points ?? wins * 3 + draws),
+    points: Number(row.points ?? fallbackPoints),
     matches: Number(row.matches ?? 0),
   };
 }
@@ -383,11 +393,22 @@ function ensureTeam(teams: Map<string, TeamRow>, name: string, stage: string) {
 function normalizeTeamName(name?: string | null) {
   const normalized = name?.trim();
 
-  if (!normalized || normalized.toUpperCase() === "TBD") {
+  if (!isKnownTeamName(normalized)) {
     return null;
   }
 
   return normalized;
+}
+
+function isKnownTeamName(name?: string | null) {
+  const normalized = name?.trim().toLowerCase();
+
+  return (
+    !!normalized &&
+    !["tbd", "team 1", "team 2", "home team", "away team"].includes(
+      normalized,
+    )
+  );
 }
 
 function getInitials(name: string) {

@@ -14,6 +14,7 @@ export class DatabaseMigrationsService implements OnModuleInit {
     await this.migrateSportTypes();
     await this.ensureScoringRulesTable();
     await this.ensureStageNameConstraint();
+    await this.cleanupLolUnknownTeams();
   }
 
   private async migrateSportTypes() {
@@ -63,5 +64,35 @@ export class DatabaseMigrationsService implements OnModuleInit {
       CREATE UNIQUE INDEX IF NOT EXISTS uq_stages_tournament_name
       ON stages(tournament_id, LOWER(name))
     `);
+  }
+
+  private async cleanupLolUnknownTeams() {
+    const unknownNames = ['tbd', 'team 1', 'team 2', 'home team', 'away team'];
+
+    await this.usersRepository.query(
+      `
+        DELETE FROM matches m
+        USING tournaments t
+        WHERE t.id = m.tournament_id
+          AND t.sport_type = 'LOL'
+          AND COALESCE(m.external_source, 'MANUAL') = 'CITO_LOL'
+          AND (
+            LOWER(TRIM(COALESCE((SELECT home.name FROM teams home WHERE home.id = m.home_team_id), m.home_placeholder, ''))) = ANY($1)
+            OR LOWER(TRIM(COALESCE((SELECT away.name FROM teams away WHERE away.id = m.away_team_id), m.away_placeholder, ''))) = ANY($1)
+          )
+      `,
+      [unknownNames],
+    );
+
+    await this.usersRepository.query(
+      `
+        DELETE FROM teams team
+        USING tournaments t
+        WHERE t.id = team.tournament_id
+          AND t.sport_type = 'LOL'
+          AND LOWER(TRIM(team.name)) = ANY($1)
+      `,
+      [unknownNames],
+    );
   }
 }

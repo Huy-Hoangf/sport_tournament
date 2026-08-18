@@ -637,6 +637,13 @@ export class SportsApiSyncService {
       const stageId = await this.upsertStage(tournamentId, 'League Schedule');
 
       for (const match of tournamentMatches) {
+        if (
+          !this.isKnownTeamName(match.__homeName) ||
+          !this.isKnownTeamName(match.__awayName)
+        ) {
+          continue;
+        }
+
         const homeTeamId = await this.upsertTeam(
           tournamentId,
           match.__homeName,
@@ -1278,6 +1285,10 @@ export class SportsApiSyncService {
     name: string,
     logoUrl: string | null = null,
   ) {
+    if (!this.isKnownTeamName(name)) {
+      return null;
+    }
+
     const [existing] = await this.usersRepository.query(
       `
         SELECT id, logo_url AS "logoUrl"
@@ -1315,6 +1326,18 @@ export class SportsApiSyncService {
 
     return Number(created.id);
   }
+
+  private isKnownTeamName(name: string | null | undefined) {
+    const normalized = name?.trim().toLowerCase();
+
+    return (
+      !!normalized &&
+      !['tbd', 'team 1', 'team 2', 'home team', 'away team'].includes(
+        normalized,
+      )
+    );
+  }
+
   private async upsertMatch(data: {
     tournamentId: number;
     stageId: number;
@@ -1662,6 +1685,11 @@ export class SportsApiSyncService {
           ['match', 'teams', 1, 'name'],
           ['participants', 1, 'name'],
         ]) || 'Team 2';
+
+      if (!this.isKnownTeamName(homeName) || !this.isKnownTeamName(awayName)) {
+        continue;
+      }
+
       const awayLogoUrl = this.pickString(rawMatch, [
         ['awayTeam', 'logo'],
         ['awayTeam', 'image'],

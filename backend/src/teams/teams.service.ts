@@ -39,22 +39,25 @@ export class TeamsService {
     const rows = await this.usersRepository.query(
       `
         WITH visible_tournaments AS (
-          SELECT t.id
+          SELECT t.id, t.sport_type
           FROM tournaments t
           ${where.length ? `WHERE ${where.join(' AND ')}` : ''}
         ),
         base_teams AS (
           SELECT
             team.tournament_id,
+            vt.sport_type,
             team.id AS team_id,
             team.name,
             team.logo_url AS "logoUrl"
           FROM teams team
           JOIN visible_tournaments vt ON vt.id = team.tournament_id
+          WHERE LOWER(TRIM(team.name)) NOT IN ('tbd', 'team 1', 'team 2', 'home team', 'away team')
         ),
         match_rows AS (
           SELECT
             t.id AS tournament_id,
+            vt.sport_type,
             home.id AS team_id,
             COALESCE(home.name, m.home_placeholder, 'TBD') AS team_name,
             s.name AS stage_name,
@@ -71,6 +74,7 @@ export class TeamsService {
 
           SELECT
             t.id AS tournament_id,
+            vt.sport_type,
             away.id AS team_id,
             COALESCE(away.name, m.away_placeholder, 'TBD') AS team_name,
             s.name AS stage_name,
@@ -86,102 +90,62 @@ export class TeamsService {
         team_id_stats AS (
           SELECT
             tournament_id,
+            sport_type,
             team_id,
             MIN(stage_name) AS stage,
             COUNT(*) AS matches,
-            SUM(
-              CASE
-                WHEN status IN ('FINISHED', 'COMPLETED') AND own_score > opponent_score THEN 1
-                ELSE 0
-              END
-            ) AS wins,
-            SUM(
-              CASE
-                WHEN status IN ('FINISHED', 'COMPLETED') AND own_score < opponent_score THEN 1
-                ELSE 0
-              END
-            ) AS losses,
-            SUM(
-              CASE
-                WHEN status IN ('FINISHED', 'COMPLETED') AND own_score = opponent_score THEN 1
-                ELSE 0
-              END
-            ) AS draws,
+            SUM(CASE WHEN status IN ('FINISHED', 'COMPLETED') AND own_score > opponent_score THEN 1 ELSE 0 END) AS wins,
+            SUM(CASE WHEN status IN ('FINISHED', 'COMPLETED') AND own_score < opponent_score THEN 1 ELSE 0 END) AS losses,
+            SUM(CASE WHEN status IN ('FINISHED', 'COMPLETED') AND own_score = opponent_score THEN 1 ELSE 0 END) AS draws,
             SUM(CASE WHEN status IN ('FINISHED', 'COMPLETED') THEN COALESCE(own_score, 0) ELSE 0 END) AS score
           FROM match_rows
           WHERE team_id IS NOT NULL
-          GROUP BY tournament_id, team_id
+            AND LOWER(TRIM(team_name)) NOT IN ('tbd', 'team 1', 'team 2', 'home team', 'away team')
+          GROUP BY tournament_id, sport_type, team_id
         ),
         team_name_stats AS (
           SELECT
             tournament_id,
+            sport_type,
             LOWER(team_name) AS team_name_key,
             MIN(stage_name) AS stage,
             COUNT(*) AS matches,
-            SUM(
-              CASE
-                WHEN status IN ('FINISHED', 'COMPLETED') AND own_score > opponent_score THEN 1
-                ELSE 0
-              END
-            ) AS wins,
-            SUM(
-              CASE
-                WHEN status IN ('FINISHED', 'COMPLETED') AND own_score < opponent_score THEN 1
-                ELSE 0
-              END
-            ) AS losses,
-            SUM(
-              CASE
-                WHEN status IN ('FINISHED', 'COMPLETED') AND own_score = opponent_score THEN 1
-                ELSE 0
-              END
-            ) AS draws,
+            SUM(CASE WHEN status IN ('FINISHED', 'COMPLETED') AND own_score > opponent_score THEN 1 ELSE 0 END) AS wins,
+            SUM(CASE WHEN status IN ('FINISHED', 'COMPLETED') AND own_score < opponent_score THEN 1 ELSE 0 END) AS losses,
+            SUM(CASE WHEN status IN ('FINISHED', 'COMPLETED') AND own_score = opponent_score THEN 1 ELSE 0 END) AS draws,
             SUM(CASE WHEN status IN ('FINISHED', 'COMPLETED') THEN COALESCE(own_score, 0) ELSE 0 END) AS score
           FROM match_rows
           WHERE team_id IS NULL
             AND team_name IS NOT NULL
-            AND UPPER(team_name) <> 'TBD'
-          GROUP BY tournament_id, LOWER(team_name)
+            AND LOWER(TRIM(team_name)) NOT IN ('tbd', 'team 1', 'team 2', 'home team', 'away team')
+          GROUP BY tournament_id, sport_type, LOWER(team_name)
         ),
         placeholder_stats AS (
           SELECT
             tournament_id,
+            sport_type,
             team_name AS name,
             MIN(stage_name) AS stage,
             COUNT(*) AS matches,
-            SUM(
-              CASE
-                WHEN status IN ('FINISHED', 'COMPLETED') AND own_score > opponent_score THEN 1
-                ELSE 0
-              END
-            ) AS wins,
-            SUM(
-              CASE
-                WHEN status IN ('FINISHED', 'COMPLETED') AND own_score < opponent_score THEN 1
-                ELSE 0
-              END
-            ) AS losses,
-            SUM(
-              CASE
-                WHEN status IN ('FINISHED', 'COMPLETED') AND own_score = opponent_score THEN 1
-                ELSE 0
-              END
-            ) AS draws,
+            SUM(CASE WHEN status IN ('FINISHED', 'COMPLETED') AND own_score > opponent_score THEN 1 ELSE 0 END) AS wins,
+            SUM(CASE WHEN status IN ('FINISHED', 'COMPLETED') AND own_score < opponent_score THEN 1 ELSE 0 END) AS losses,
+            SUM(CASE WHEN status IN ('FINISHED', 'COMPLETED') AND own_score = opponent_score THEN 1 ELSE 0 END) AS draws,
             SUM(CASE WHEN status IN ('FINISHED', 'COMPLETED') THEN COALESCE(own_score, 0) ELSE 0 END) AS score
           FROM match_rows
           WHERE team_id IS NULL
             AND team_name IS NOT NULL
-            AND UPPER(team_name) <> 'TBD'
+            AND LOWER(TRIM(team_name)) NOT IN ('tbd', 'team 1', 'team 2', 'home team', 'away team')
             AND NOT EXISTS (
               SELECT 1
               FROM base_teams bt
               WHERE bt.tournament_id = match_rows.tournament_id
             )
-          GROUP BY tournament_id, team_name
+          GROUP BY tournament_id, sport_type, team_name
         ),
         combined_teams AS (
           SELECT
             bt.tournament_id AS "tournamentId",
+            bt.sport_type,
             bt.name,
             bt."logoUrl",
             COALESCE(id_stats.stage, name_stats.stage, 'Roster') AS stage,
@@ -202,6 +166,7 @@ export class TeamsService {
 
           SELECT
             tournament_id AS "tournamentId",
+            sport_type,
             name,
             NULL AS "logoUrl",
             COALESCE(stage, 'Main Stage') AS stage,
@@ -222,7 +187,7 @@ export class TeamsService {
           losses,
           draws,
           score,
-          (wins * 3 + draws) AS points
+          CASE WHEN sport_type = 'LOL' THEN wins ELSE wins * 3 + draws END AS points
         FROM combined_teams
         ORDER BY points DESC, wins DESC, losses ASC, draws DESC, score DESC, name ASC
         LIMIT 500
