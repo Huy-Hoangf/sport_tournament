@@ -879,6 +879,7 @@ export default function AdminDashboardContent({
               <DashboardStatGrid
                 stats={dashboard.stats}
                 isAdmin={isAdmin}
+                alignWithActivityRail
                 onOpenAttentionDetails={() => setOpenAttentionDetails(true)}
               />
             </div>
