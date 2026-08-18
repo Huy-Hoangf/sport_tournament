@@ -287,7 +287,10 @@ export class DashboardService {
         t.format,
         t.status,
         t.visibility,
-        COUNT(DISTINCT team.id) AS teams,
+        CASE
+          WHEN COUNT(DISTINCT team.id) > 0 THEN COUNT(DISTINCT team.id)
+          ELSE COUNT(DISTINCT effective_team.name)
+        END AS teams,
         COUNT(DISTINCT m.id) AS matches,
         COALESCE(
           MAX(m.external_source),
@@ -299,6 +302,14 @@ export class DashboardService {
       FROM tournaments t
       LEFT JOIN teams team ON team.tournament_id = t.id
       LEFT JOIN matches m ON ${matchJoinCondition}
+      LEFT JOIN teams home_team ON home_team.id = m.home_team_id
+      LEFT JOIN teams away_team ON away_team.id = m.away_team_id
+      LEFT JOIN LATERAL (
+        SELECT COALESCE(home_team.name, m.home_placeholder) AS name
+        UNION
+        SELECT COALESCE(away_team.name, m.away_placeholder) AS name
+      ) effective_team ON effective_team.name IS NOT NULL
+        AND UPPER(effective_team.name) <> 'TBD'
       LEFT JOIN stages s ON s.tournament_id = t.id
       ${whereClause}
       GROUP BY t.id, t.name, t.sport_type, t.format, t.status, t.visibility, t.updated_at, t.created_at
