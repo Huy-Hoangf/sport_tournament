@@ -868,14 +868,8 @@ export default function AdminDashboardContent({
         />
       ) : (
         <>
-      <div
-        className={`grid min-w-0 items-start gap-5 ${
-          isTournamentView ? "xl:grid-cols-1" : "xl:grid-cols-[minmax(0,1fr)_390px]"
-        }`}
-      >
-        <div className="space-y-5">
           {!isTournamentView && (
-            <>
+            <div className="space-y-5">
               <ApiStatusBanner
                 apiStatus={dashboard.apiStatus}
                 isLoading={isLoading}
@@ -887,47 +881,55 @@ export default function AdminDashboardContent({
                 isAdmin={isAdmin}
                 onOpenAttentionDetails={() => setOpenAttentionDetails(true)}
               />
-            </>
+            </div>
           )}
 
-          {isTournamentView ? (
-            tournamentGroups.map((group) => (
-              <TournamentManagementTable
-                key={group.sportType}
-                title={group.title}
-                total={group.total}
-                tournaments={group.tournaments}
-                emptyMessage={group.emptyMessage}
-                tournamentMatches={dashboard.tournamentMatches}
-                selectedTournamentId={selectedTournamentId}
-                onSelectTournament={setSelectedTournamentId}
-                isAdmin={isAdmin}
-                onEditTournament={openEditTournament}
-                onDeleteTournament={requestDeleteTournament}
-              />
-            ))
-          ) : (
-            <DashboardTournamentOverview
-              tournaments={dashboardOverviewTournaments}
-              allTournamentsCount={searchedTournaments.length}
-              matches={dashboard.tournamentMatches}
-              emptyGroups={dashboardEmptyGroups}
-              search={tournamentSearch}
-              sportFilter={dashboardSportFilter}
-              isAdmin={isAdmin}
-              onSearchChange={setTournamentSearch}
-              onSportFilterChange={setDashboardSportFilter}
-              onSelectTournament={setSelectedTournamentId}
-              onEditTournament={openEditTournament}
-              onDeleteTournament={requestDeleteTournament}
-            />
-          )}
-        </div>
+          <div
+            className={`mt-5 grid min-w-0 items-start gap-5 ${
+              isTournamentView
+                ? "xl:grid-cols-1"
+                : "xl:grid-cols-[minmax(0,1fr)_390px]"
+            }`}
+          >
+            <div className="space-y-5">
+              {isTournamentView ? (
+                tournamentGroups.map((group) => (
+                  <TournamentManagementTable
+                    key={group.sportType}
+                    title={group.title}
+                    total={group.total}
+                    tournaments={group.tournaments}
+                    emptyMessage={group.emptyMessage}
+                    tournamentMatches={dashboard.tournamentMatches}
+                    selectedTournamentId={selectedTournamentId}
+                    onSelectTournament={setSelectedTournamentId}
+                    isAdmin={isAdmin}
+                    onEditTournament={openEditTournament}
+                    onDeleteTournament={requestDeleteTournament}
+                  />
+                ))
+              ) : (
+                <DashboardTournamentOverview
+                  tournaments={dashboardOverviewTournaments}
+                  allTournamentsCount={searchedTournaments.length}
+                  matches={dashboard.tournamentMatches}
+                  emptyGroups={dashboardEmptyGroups}
+                  search={tournamentSearch}
+                  sportFilter={dashboardSportFilter}
+                  isAdmin={isAdmin}
+                  onSearchChange={setTournamentSearch}
+                  onSportFilterChange={setDashboardSportFilter}
+                  onSelectTournament={setSelectedTournamentId}
+                  onEditTournament={openEditTournament}
+                  onDeleteTournament={requestDeleteTournament}
+                />
+              )}
+            </div>
 
-        {!isTournamentView && (
-          <RecentActivityPanel activities={dashboard.recentActivity} />
-        )}
-      </div>
+            {!isTournamentView && (
+              <RecentActivityPanel activities={dashboard.recentActivity} />
+            )}
+          </div>
         </>
       )}
 
