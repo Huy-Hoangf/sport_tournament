@@ -1,7 +1,17 @@
-import { BadRequestException, Injectable } from '@nestjs/common';
+import {
+  BadRequestException,
+  Injectable,
+  NotFoundException,
+} from '@nestjs/common';
 import { InjectRepository } from '@nestjs/typeorm';
 import { Repository } from 'typeorm';
 import { User } from '../users/user.entity';
+
+type RegisterTeamInput = {
+  tournamentId: number;
+  teamName: string;
+  players: Array<{ name?: string }>;
+};
 
 @Injectable()
 export class TeamsService {
@@ -142,6 +152,13 @@ export class TeamsService {
             )
           GROUP BY tournament_id, sport_type, team_name
         ),
+        roster_counts AS (
+          SELECT
+            team_id,
+            COUNT(*) AS members
+          FROM team_players
+          GROUP BY team_id
+        ),
         combined_teams AS (
           SELECT
             bt.tournament_id AS "tournamentId",
@@ -153,7 +170,8 @@ export class TeamsService {
             COALESCE(id_stats.wins, name_stats.wins, 0) AS wins,
             COALESCE(id_stats.losses, name_stats.losses, 0) AS losses,
             COALESCE(id_stats.draws, name_stats.draws, 0) AS draws,
-            COALESCE(id_stats.score, name_stats.score, 0) AS score
+            COALESCE(id_stats.score, name_stats.score, 0) AS score,
+            COALESCE(roster_counts.members, 0) AS members
           FROM base_teams bt
           LEFT JOIN team_id_stats id_stats
             ON id_stats.tournament_id = bt.tournament_id
@@ -161,6 +179,8 @@ export class TeamsService {
           LEFT JOIN team_name_stats name_stats
             ON name_stats.tournament_id = bt.tournament_id
            AND name_stats.team_name_key = LOWER(bt.name)
+          LEFT JOIN roster_counts
+            ON roster_counts.team_id = bt.team_id
 
           UNION ALL
 
@@ -174,7 +194,8 @@ export class TeamsService {
             wins,
             losses,
             draws,
-            score
+            score,
+            0 AS members
           FROM placeholder_stats
         )
         SELECT
@@ -187,6 +208,7 @@ export class TeamsService {
           losses,
           draws,
           score,
+          members,
           CASE WHEN sport_type = 'LOL' THEN wins ELSE wins * 3 + draws END AS points
         FROM combined_teams
         ORDER BY points DESC, wins DESC, losses ASC, draws DESC, score DESC, name ASC
@@ -206,6 +228,120 @@ export class TeamsService {
       draws: Number(row.draws ?? 0),
       score: Number(row.score ?? 0),
       points: Number(row.points ?? 0),
+      members: Number(row.members ?? 0),
     }));
+  }
+
+  async registerTeam(input: RegisterTeamInput) {
+    const tournamentId = input.tournamentId;
+    const teamName = input.teamName.trim();
+    const playerNames = input.players
+      .map((player) => player.name?.trim() ?? '')
+      .filter(Boolean);
+
+    if (!Number.isInteger(tournamentId) || tournamentId <= 0) {
+      throw new BadRequestException('Invalid tournament id.');
+    }
+
+    if (!this.isKnownTeamName(teamName)) {
+      throw new BadRequestException('Team name is required.');
+    }
+
+    if (playerNames.length === 0) {
+      throw new BadRequestException('At least one player is required.');
+    }
+
+    const uniquePlayerNames = Array.from(
+      new Map(
+        playerNames.map((playerName) => [playerName.toLowerCase(), playerName]),
+      ).values(),
+    );
+
+    if (uniquePlayerNames.length !== playerNames.length) {
+      throw new BadRequestException('Player names must be unique.');
+    }
+
+    const [tournament] = await this.usersRepository.query(
+      `
+        SELECT
+          id,
+          CASE
+            WHEN end_date IS NOT NULL AND end_date < NOW() THEN 'COMPLETE'
+            WHEN start_date IS NOT NULL AND start_date > NOW() THEN 'UPCOMING'
+            WHEN start_date IS NOT NULL OR end_date IS NOT NULL THEN 'ONGOING'
+            WHEN status IN ('ACTIVE', 'LIVE', 'ONGOING') THEN 'ONGOING'
+            WHEN status IN ('COMPLETED', 'COMPLETE', 'FINISHED', 'CANCELLED', 'CANCELED') THEN 'COMPLETE'
+            ELSE 'UPCOMING'
+          END AS status
+        FROM tournaments
+        WHERE id = $1
+        LIMIT 1
+      `,
+      [tournamentId],
+    );
+
+    if (!tournament) {
+      throw new NotFoundException('Tournament not found.');
+    }
+
+    if (tournament.status === 'COMPLETE') {
+      throw new BadRequestException(
+        'Completed tournaments cannot register teams.',
+      );
+    }
+
+    const [existingTeam] = await this.usersRepository.query(
+      `
+        SELECT id
+        FROM teams
+        WHERE tournament_id = $1
+          AND LOWER(name) = LOWER($2)
+        LIMIT 1
+      `,
+      [tournamentId, teamName],
+    );
+
+    if (existingTeam) {
+      throw new BadRequestException('Team already exists in this tournament.');
+    }
+
+    const [team] = await this.usersRepository.query(
+      `
+        INSERT INTO teams (tournament_id, name)
+        VALUES ($1, $2)
+        RETURNING id, name
+      `,
+      [tournamentId, teamName],
+    );
+
+    for (const playerName of uniquePlayerNames) {
+      await this.usersRepository.query(
+        `
+          INSERT INTO team_players (team_id, name)
+          VALUES ($1, $2)
+        `,
+        [Number(team.id), playerName],
+      );
+    }
+
+    return {
+      message: 'Team registered successfully.',
+      team: {
+        id: Number(team.id),
+        name: team.name,
+        members: uniquePlayerNames.length,
+      },
+    };
+  }
+
+  private isKnownTeamName(name: string | null | undefined) {
+    const normalized = name?.trim().toLowerCase();
+
+    return (
+      !!normalized &&
+      !['tbd', 'team 1', 'team 2', 'home team', 'away team'].includes(
+        normalized,
+      )
+    );
   }
 }

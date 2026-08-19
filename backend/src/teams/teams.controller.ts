@@ -1,4 +1,4 @@
-import { Controller, Get, Headers, Query } from '@nestjs/common';
+import { Body, Controller, Get, Headers, Post, Query } from '@nestjs/common';
 import { AuthService } from '../auth/auth.service';
 import { TeamsService } from './teams.service';
 
@@ -22,6 +22,25 @@ export class TeamsController {
     return this.teamsService.findAll({
       includePrivateTournaments,
       tournamentId: tournamentId ? Number(tournamentId) : undefined,
+    });
+  }
+
+  @Post('register')
+  async registerTeam(
+    @Headers('authorization') authorization: string | undefined,
+    @Body()
+    body: {
+      tournamentId?: number;
+      teamName?: string;
+      players?: Array<{ name?: string }>;
+    },
+  ) {
+    await this.authService.verifyAdminToken(authorization);
+
+    return this.teamsService.registerTeam({
+      tournamentId: Number(body.tournamentId),
+      teamName: body.teamName ?? '',
+      players: body.players ?? [],
     });
   }
 }

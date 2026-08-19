@@ -1,5 +1,14 @@
-import { Minus, Plus, Search, Shield, TrendingDown, TrendingUp } from "lucide-react";
-import { useEffect, useMemo, useState } from "react";
+import {
+  Minus,
+  Plus,
+  Search,
+  Shield,
+  Trash2,
+  TrendingDown,
+  TrendingUp,
+  X,
+} from "lucide-react";
+import { useCallback, useEffect, useMemo, useState } from "react";
 
 import { apiRequest } from "../../../api";
 import type { MatchRow, TournamentRow } from "../types";
@@ -14,6 +23,7 @@ type TeamRow = {
   score: number;
   points: number;
   matches: number;
+  members: number;
 };
 
 export function TeamsTab({
@@ -31,7 +41,16 @@ export function TeamsTab({
   const [stageFilter, setStageFilter] = useState("ALL");
   const [page, setPage] = useState(1);
   const [apiTeamRows, setApiTeamRows] = useState<TeamRow[] | null>(null);
+  const [isRegisterTeamOpen, setIsRegisterTeamOpen] = useState(false);
+  const [teamName, setTeamName] = useState("");
+  const [playerNames, setPlayerNames] = useState([""]);
+  const [registerTeamError, setRegisterTeamError] = useState<string | null>(
+    null,
+  );
+  const [isRegisteringTeam, setIsRegisteringTeam] = useState(false);
   const pageSize = 4;
+  const canRegisterTeam =
+    canManage && tournament.status.toUpperCase() !== "COMPLETE";
   const fallbackTeamRows = useMemo(
     () => buildTeamRows(matches, tournament.sportType),
     [matches, tournament.sportType],
@@ -40,7 +59,9 @@ export function TeamsTab({
   const stageOptions = useMemo(
     () => [
       "ALL",
-      ...Array.from(new Set(teamRows.map((team) => team.stage))).filter(Boolean),
+      ...Array.from(new Set(teamRows.map((team) => team.stage))).filter(
+        Boolean,
+      ),
     ],
     [teamRows],
   );
@@ -56,6 +77,18 @@ export function TeamsTab({
   const activePage = Math.min(page, totalPages);
   const start = (activePage - 1) * pageSize;
   const visibleRows = filteredRows.slice(start, start + pageSize);
+
+  const loadTeams = useCallback(async () => {
+    const rows = await apiRequest<TeamRow[]>(
+      `/teams?tournamentId=${tournament.id}`,
+    );
+
+    setApiTeamRows(
+      rows
+        .filter((row) => isKnownTeamName(row.name))
+        .map((row) => normalizeTeamRow(row, tournament.sportType)),
+    );
+  }, [tournament.id, tournament.sportType]);
 
   useEffect(() => {
     let isMounted = true;
@@ -81,6 +114,81 @@ export function TeamsTab({
     };
   }, [tournament.id, tournament.sportType]);
 
+  function closeRegisterTeamModal() {
+    setIsRegisterTeamOpen(false);
+    setTeamName("");
+    setPlayerNames([""]);
+    setRegisterTeamError(null);
+  }
+
+  function addPlayerField() {
+    setPlayerNames((current) => [...current, ""]);
+  }
+
+  function updatePlayerName(index: number, value: string) {
+    setPlayerNames((current) =>
+      current.map((name, currentIndex) =>
+        currentIndex === index ? value : name,
+      ),
+    );
+  }
+
+  function removePlayerField(index: number) {
+    setPlayerNames((current) =>
+      current.length === 1
+        ? [""]
+        : current.filter((_, currentIndex) => currentIndex !== index),
+    );
+  }
+
+  async function registerTeam() {
+    const normalizedTeamName = teamName.trim();
+    const normalizedPlayers = playerNames
+      .map((name) => name.trim())
+      .filter(Boolean);
+    const uniquePlayers = new Set(
+      normalizedPlayers.map((name) => name.toLowerCase()),
+    );
+
+    if (!normalizedTeamName) {
+      setRegisterTeamError("Team name is required.");
+      return;
+    }
+
+    if (normalizedPlayers.length === 0) {
+      setRegisterTeamError("Add at least one player.");
+      return;
+    }
+
+    if (uniquePlayers.size !== normalizedPlayers.length) {
+      setRegisterTeamError("Player names must be unique.");
+      return;
+    }
+
+    setIsRegisteringTeam(true);
+    setRegisterTeamError(null);
+
+    try {
+      await apiRequest("/teams/register", {
+        method: "POST",
+        body: JSON.stringify({
+          tournamentId: tournament.id,
+          teamName: normalizedTeamName,
+          players: normalizedPlayers.map((name) => ({ name })),
+        }),
+      });
+      closeRegisterTeamModal();
+      setPage(1);
+      await loadTeams();
+    } catch (error) {
+      setRegisterTeamError(
+        error instanceof Error ? error.message : "Cannot register team.",
+      );
+    } finally {
+      setIsRegisteringTeam(false);
+    }
+  }
+
   return (
     <section className="border-t border-[#314850] bg-[#06161b] p-4 sm:p-7 lg:p-8">
       <div className="mb-6 flex flex-wrap items-start justify-between gap-4">
@@ -94,8 +202,16 @@ export function TeamsTab({
         {canManage && (
           <button
             type="button"
-            onClick={onUnavailableFeature}
-            className="inline-flex h-11 items-center gap-2 border border-[#84d8e8] bg-[#84d8e8] px-5 text-xs font-black uppercase tracking-[0.12em] text-[#06161b] transition hover:bg-[#a1e8f2]"
+            onClick={() => {
+              if (!canRegisterTeam) {
+                onUnavailableFeature();
+                return;
+              }
+
+              setIsRegisterTeamOpen(true);
+            }}
+            disabled={!canRegisterTeam}
+            className="inline-flex h-11 items-center gap-2 border border-[#84d8e8] bg-[#84d8e8] px-5 text-xs font-black uppercase tracking-[0.12em] text-[#06161b] transition hover:bg-[#a1e8f2] disabled:cursor-not-allowed disabled:border-[#314850] disabled:bg-[#10242b] disabled:text-[#789098]"
           >
             <Plus size={15} />
             Register New Team
@@ -146,8 +262,8 @@ export function TeamsTab({
 
       <div className="overflow-hidden border border-[#243c43] bg-[#0d252d]">
         <div className="overflow-x-auto">
-          <div className="min-w-[940px]">
-            <div className="grid grid-cols-[72px_minmax(250px,1fr)_80px_80px_80px_80px_90px_92px_90px] gap-x-5 border-b border-[#243c43] bg-[#10242b] px-5 py-4 text-[10px] font-black uppercase tracking-[0.1em] text-[#9fb2b8]">
+          <div className="min-w-[1030px]">
+            <div className="grid grid-cols-[72px_minmax(250px,1fr)_80px_80px_80px_80px_90px_92px_90px_90px] gap-x-5 border-b border-[#243c43] bg-[#10242b] px-5 py-4 text-[10px] font-black uppercase tracking-[0.1em] text-[#9fb2b8]">
               <span>Rank</span>
               <span>Team Identity</span>
               <span>Pts</span>
@@ -156,6 +272,7 @@ export function TeamsTab({
               <span>Draw</span>
               <span>Score</span>
               <span>Trend</span>
+              <span>Members</span>
               <span>Matches</span>
             </div>
             <div className="divide-y divide-[#243c43]">
@@ -205,6 +322,107 @@ export function TeamsTab({
           </div>
         </div>
       </div>
+
+      {isRegisterTeamOpen && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/70 px-4">
+          <form
+            onSubmit={(event) => {
+              event.preventDefault();
+              void registerTeam();
+            }}
+            className="w-full max-w-xl border border-[#31515a] bg-[#102b33] p-6 shadow-2xl shadow-black/50"
+          >
+            <div className="flex items-start justify-between gap-4">
+              <div>
+                <h3 className="text-2xl font-black text-[#84d8e8]">
+                  Register New Team
+                </h3>
+                <p className="mt-1 text-sm font-bold text-[#9fb2b8]">
+                  {tournament.name}
+                </p>
+              </div>
+              <button
+                type="button"
+                onClick={closeRegisterTeamModal}
+                className="grid h-10 w-10 place-items-center border border-[#314850] text-[#9fb2b8] transition hover:border-[#84d8e8] hover:text-[#84d8e8]"
+                aria-label="Close register team modal"
+              >
+                <X size={18} />
+              </button>
+            </div>
+
+            <label className="mt-5 block text-xs font-black uppercase tracking-[0.14em] text-[#9fb2b8]">
+              Team name
+            </label>
+            <input
+              value={teamName}
+              onChange={(event) => setTeamName(event.target.value)}
+              className="mt-2 h-12 w-full border border-[#31515a] bg-[#071516] px-4 text-sm font-bold text-white outline-none placeholder:text-[#789098] focus:border-[#84d8e8]"
+              placeholder="Enter team name..."
+            />
+
+            <div className="mt-5 flex items-center justify-between gap-3">
+              <label className="text-xs font-black uppercase tracking-[0.14em] text-[#9fb2b8]">
+                Players
+              </label>
+              <button
+                type="button"
+                onClick={addPlayerField}
+                className="inline-flex h-9 items-center gap-2 border border-[#31515a] px-3 text-[10px] font-black uppercase tracking-[0.1em] text-[#84d8e8] transition hover:border-[#84d8e8]"
+              >
+                <Plus size={14} />
+                Add player
+              </button>
+            </div>
+
+            <div className="mt-3 max-h-64 space-y-3 overflow-y-auto pr-1">
+              {playerNames.map((name, index) => (
+                <div key={index} className="flex gap-2">
+                  <input
+                    value={name}
+                    onChange={(event) =>
+                      updatePlayerName(index, event.target.value)
+                    }
+                    placeholder={`Player ${index + 1}`}
+                    className="h-11 flex-1 border border-[#31515a] bg-[#071516] px-4 text-sm font-bold text-white outline-none placeholder:text-[#789098] focus:border-[#84d8e8]"
+                  />
+                  <button
+                    type="button"
+                    onClick={() => removePlayerField(index)}
+                    className="grid h-11 w-11 place-items-center border border-[#31515a] text-[#ff9d9d] transition hover:border-[#ff9d9d]"
+                    aria-label={`Remove player ${index + 1}`}
+                  >
+                    <Trash2 size={16} />
+                  </button>
+                </div>
+              ))}
+            </div>
+
+            {registerTeamError && (
+              <p className="mt-4 border border-[#8a3d3d] bg-[#2a1114] px-4 py-3 text-sm font-bold text-[#ffb4b4]">
+                {registerTeamError}
+              </p>
+            )}
+
+            <div className="mt-6 flex justify-end gap-3">
+              <button
+                type="button"
+                onClick={closeRegisterTeamModal}
+                className="h-11 border border-[#31515a] px-5 text-sm font-black text-[#dce8eb] transition hover:border-[#84d8e8] hover:text-[#84d8e8]"
+              >
+                Cancel
+              </button>
+              <button
+                type="submit"
+                disabled={isRegisteringTeam}
+                className="h-11 border border-[#84d8e8] bg-[#84d8e8] px-5 text-sm font-black text-[#06161b] transition hover:bg-[#a1e8f2] disabled:cursor-wait disabled:opacity-60"
+              >
+                {isRegisteringTeam ? "Registering..." : "Register Team"}
+              </button>
+            </div>
+          </form>
+        </div>
+      )}
     </section>
   );
 }
@@ -227,7 +445,7 @@ function TeamTableRow({
 
   return (
     <div
-      className={`grid grid-cols-[72px_minmax(250px,1fr)_80px_80px_80px_80px_90px_92px_90px] items-center gap-x-5 px-5 py-4 text-sm ${
+      className={`grid grid-cols-[72px_minmax(250px,1fr)_80px_80px_80px_80px_90px_92px_90px_90px] items-center gap-x-5 px-5 py-4 text-sm ${
         highlighted ? "bg-[#18343d]" : "bg-[#0d252d]"
       }`}
     >
@@ -275,12 +493,19 @@ function TeamTableRow({
           <Minus size={18} />
         )}
       </span>
+      <TeamNumber value={team.members} />
       <TeamNumber value={team.matches} />
     </div>
   );
 }
 
-function TeamNumber({ value, accent = false }: { value: number; accent?: boolean }) {
+function TeamNumber({
+  value,
+  accent = false,
+}: {
+  value: number;
+  accent?: boolean;
+}) {
   return (
     <span
       className={`whitespace-nowrap text-sm font-black tabular-nums ${
@@ -365,6 +590,7 @@ function normalizeTeamRow(row: TeamRow, sportType?: string): TeamRow {
     score: Number(row.score ?? 0),
     points: Number(row.points ?? fallbackPoints),
     matches: Number(row.matches ?? 0),
+    members: Number(row.members ?? 0),
   };
 }
 
@@ -384,6 +610,7 @@ function ensureTeam(teams: Map<string, TeamRow>, name: string, stage: string) {
     score: 0,
     points: 0,
     matches: 0,
+    members: 0,
   };
 
   teams.set(name, team);
@@ -405,9 +632,7 @@ function isKnownTeamName(name?: string | null) {
 
   return (
     !!normalized &&
-    !["tbd", "team 1", "team 2", "home team", "away team"].includes(
-      normalized,
-    )
+    !["tbd", "team 1", "team 2", "home team", "away team"].includes(normalized)
   );
 }
 
