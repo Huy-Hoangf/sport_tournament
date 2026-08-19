@@ -9,6 +9,8 @@ import {
   Zap,
 } from "lucide-react";
 import { useEffect } from "react";
+import { useRef } from "react";
+import type { ChangeEvent } from "react";
 import { apiRequest } from "../../../api";
 import { ScoringRulesView } from "./scoring-rules-tab";
 import { StageStrip } from "./stage-strip";
@@ -30,10 +32,7 @@ import {
   isFinishedStatus,
 } from "../utils";
 
-const stagesByFormat: Record<
-  NonNullable<TournamentRow["format"]>,
-  string[]
-> = {
+const stagesByFormat: Record<NonNullable<TournamentRow["format"]>, string[]> = {
   ROUND_ROBIN: ["League Schedule", "Final Table"],
   KNOCKOUT: ["Round of 16", "Quarter Finals", "Semi Finals", "Final"],
   GROUP_AND_KNOCKOUT: [
@@ -86,21 +85,28 @@ export function TournamentDetailView({
   const dateRange = getTournamentDateRange(sortedMatches);
   const firstUpcoming = upcomingMatches[0];
   const schedulePageSize = 8;
+  const matchImportInputRef = useRef<HTMLInputElement>(null);
   const [schedulePage, setSchedulePage] = useState(1);
   const [activeTab, setActiveTab] = useState("Overview");
+  const [matchImportMessage, setMatchImportMessage] = useState("");
   const [stages, setStages] = useState<TournamentStage[]>([]);
   const tournamentFormat = tournament.format ?? "ROUND_ROBIN";
-  const fallbackStages = stagesByFormat[tournamentFormat].map((name, index) => ({
-    id: -(index + 1),
-    tournamentId: tournament.id,
-    name,
-    sortOrder: index + 1,
-    correctPoints: 1,
-    exactScoreBonus: 0,
-    isKnockout: name !== "Group Stage" && name !== "League Schedule",
-  }));
+  const fallbackStages = stagesByFormat[tournamentFormat].map(
+    (name, index) => ({
+      id: -(index + 1),
+      tournamentId: tournament.id,
+      name,
+      sortOrder: index + 1,
+      correctPoints: 1,
+      exactScoreBonus: 0,
+      isKnockout: name !== "Group Stage" && name !== "League Schedule",
+    }),
+  );
   const stageItems = stages.length ? stages : fallbackStages;
-  const scheduleTotalPages = Math.max(1, Math.ceil(sortedMatches.length / schedulePageSize));
+  const scheduleTotalPages = Math.max(
+    1,
+    Math.ceil(sortedMatches.length / schedulePageSize),
+  );
   const activeSchedulePage = Math.min(schedulePage, scheduleTotalPages);
   const scheduleStart = (activeSchedulePage - 1) * schedulePageSize;
   const visibleScheduleMatches = sortedMatches.slice(
@@ -109,7 +115,25 @@ export function TournamentDetailView({
   );
   const emptyScheduleMessage = isTodayScope
     ? `${tournament.name} has no matches scheduled today.`
-    : 'No schedule has been imported for this tournament.';
+    : "No schedule has been imported for this tournament.";
+
+  function importMatchFile(event: ChangeEvent<HTMLInputElement>) {
+    const file = event.target.files?.[0];
+
+    if (!file) {
+      return;
+    }
+
+    if (!isExcelFile(file)) {
+      setMatchImportMessage("Only Excel files are allowed for match import.");
+      event.target.value = "";
+      return;
+    }
+
+    setMatchImportMessage(`${file.name} selected.`);
+    event.target.value = "";
+    onUnavailableFeature();
+  }
 
   useEffect(() => {
     let isMounted = true;
@@ -167,7 +191,8 @@ export function TournamentDetailView({
                 <Trophy size={15} /> {matches.length.toLocaleString()} Matches
               </span>
               <span className="inline-flex items-center gap-2">
-                <Zap size={15} /> {Math.max(matches.length * 3, 0).toLocaleString()} Predictions
+                <Zap size={15} />{" "}
+                {Math.max(matches.length * 3, 0).toLocaleString()} Predictions
               </span>
               <span className="inline-flex items-center gap-2">
                 <CalendarDays size={15} /> {dateRange}
@@ -182,14 +207,28 @@ export function TournamentDetailView({
           />
 
           {canManage ? (
-            <button
-              type="button"
-              onClick={onUnavailableFeature}
-              className="inline-flex min-h-[54px] items-center justify-center gap-4 border border-[#3a4d54] bg-[#162b32] px-5 py-3 text-center text-xs font-black uppercase tracking-[0.08em] text-[#84d8e8] transition hover:border-[#84d8e8] hover:bg-[#1b343d]"
-            >
-              <FileDown size={20} />
-              Import Match
-            </button>
+            <div>
+              <button
+                type="button"
+                onClick={() => matchImportInputRef.current?.click()}
+                className="inline-flex min-h-[54px] items-center justify-center gap-4 border border-[#3a4d54] bg-[#162b32] px-5 py-3 text-center text-xs font-black uppercase tracking-[0.08em] text-[#84d8e8] transition hover:border-[#84d8e8] hover:bg-[#1b343d]"
+              >
+                <FileDown size={20} />
+                Import Match
+              </button>
+              <input
+                ref={matchImportInputRef}
+                type="file"
+                accept=".xlsx,.xls,application/vnd.openxmlformats-officedocument.spreadsheetml.sheet,application/vnd.ms-excel"
+                onChange={importMatchFile}
+                className="hidden"
+              />
+              {matchImportMessage && (
+                <p className="mt-2 max-w-[230px] text-xs font-bold text-[#84d8e8]">
+                  {matchImportMessage}
+                </p>
+              )}
+            </div>
           ) : (
             <div className="inline-flex min-h-[54px] items-center justify-center border border-[#3a4d54] bg-[#0d252d] px-5 py-3 text-center text-xs font-black uppercase tracking-[0.08em] text-[#789098]">
               View Only
@@ -198,22 +237,20 @@ export function TournamentDetailView({
         </div>
 
         <div className="mt-7 flex flex-wrap gap-5 border-b border-[#3a4d54]">
-          {["Overview", "Teams", "Predictions", "Scoring Rules"].map(
-            (tab) => (
-              <button
-                key={tab}
-                type="button"
-                onClick={() => setActiveTab(tab)}
-                className={`pb-4 text-xs font-black uppercase tracking-[0.08em] ${
-                  activeTab === tab
-                    ? "border-b-2 border-[#84d8e8] text-[#84d8e8]"
-                    : "text-[#9fb2b8] transition hover:text-[#84d8e8]"
-                }`}
-              >
-                {tab}
-              </button>
-            ),
-          )}
+          {["Overview", "Teams", "Predictions", "Scoring Rules"].map((tab) => (
+            <button
+              key={tab}
+              type="button"
+              onClick={() => setActiveTab(tab)}
+              className={`pb-4 text-xs font-black uppercase tracking-[0.08em] ${
+                activeTab === tab
+                  ? "border-b-2 border-[#84d8e8] text-[#84d8e8]"
+                  : "text-[#9fb2b8] transition hover:text-[#84d8e8]"
+              }`}
+            >
+              {tab}
+            </button>
+          ))}
         </div>
       </div>
 
@@ -229,156 +266,164 @@ export function TournamentDetailView({
           onUnavailableFeature={onUnavailableFeature}
         />
       ) : (
-      <>
-      <div className="grid gap-5 p-4 sm:p-7 lg:grid-cols-[360px_minmax(0,1fr)] lg:p-8">
-        <section className="relative overflow-hidden border border-[#3a4d54] bg-[#0d252d] p-6 text-center">
-          <Trophy
-            aria-hidden="true"
-            className="absolute right-5 top-5 text-[#27414a]"
-            size={64}
-          />
-          <div
-            className="mx-auto grid h-48 w-48 place-items-center rounded-full"
-            style={{
-              background: `conic-gradient(#84d8e8 ${progress * 3.6}deg, #203841 0deg)`,
-            }}
-          >
-            <div className="grid h-36 w-36 place-items-center rounded-full bg-[#0d252d]">
-              <div>
-                <p className="text-3xl font-black text-white">{progress}%</p>
-                <p className="text-xs font-bold uppercase text-[#dce8eb]">
-                  Progress
-                </p>
-              </div>
-            </div>
-          </div>
-          <p className="mt-6 text-xl font-black text-white">
-            {completedCount} of {matches.length} Matches Completed
-          </p>
-          <p className="mt-3 text-lg leading-relaxed text-[#c8d6db]">
-            {firstUpcoming
-              ? `Next match starts ${formatDateTime(firstUpcoming.scheduledTime)}.`
-              : matches.length > 0
-                ? 'All imported matches are completed.'
-                : emptyScheduleMessage}
-          </p>
-        </section>
-
-        <section className="overflow-hidden border border-[#3a4d54] bg-[#0d252d]">
-          <DashboardPanelTitle
-            title="Upcoming Matches"
-            right={`${upcomingMatches.length} total`}
-          />
-          <div className="divide-y divide-[#243c43]">
-            {upcomingMatches.slice(0, 3).map((match) => (
-              <CompactMatchRow key={match.id} match={match} />
-            ))}
-            {upcomingMatches.length === 0 && (
-              <p className="px-6 py-16 text-center text-[#9fb2b8]">
-                {emptyScheduleMessage}
-              </p>
-            )}
-          </div>
-        </section>
-
-        <section className="overflow-hidden border border-[#3a4d54] bg-[#0d252d]">
-          <DashboardPanelTitle
-            title="Recent Results"
-            right={finishedMatches.length ? 'Auto-synced' : undefined}
-          />
-          <div className="space-y-4 p-5">
-            {finishedMatches.slice(0, 3).map((match) => (
-              <ResultMatchRow key={match.id} match={match} />
-            ))}
-            {finishedMatches.length === 0 && (
-              <p className="py-12 text-center text-[#9fb2b8]">
-                No completed results found.
-              </p>
-            )}
-          </div>
-        </section>
-
-        <section className="overflow-hidden border border-[#3a4d54] bg-[#0d252d]">
-          <DashboardPanelTitle title="Leaderboard Top 3" right="View Full" />
-          <div className="space-y-4 p-5">
-            {['Rank 01', 'Rank 02', 'Rank 03'].map((rank, index) => (
+        <>
+          <div className="grid gap-5 p-4 sm:p-7 lg:grid-cols-[360px_minmax(0,1fr)] lg:p-8">
+            <section className="relative overflow-hidden border border-[#3a4d54] bg-[#0d252d] p-6 text-center">
+              <Trophy
+                aria-hidden="true"
+                className="absolute right-5 top-5 text-[#27414a]"
+                size={64}
+              />
               <div
-                key={rank}
-                className={`flex items-center justify-between border border-[#243c43] bg-[#10242b] p-4 ${
-                  index === 0 ? 'border-l-4 border-l-[#84d8e8]' : ''
-                }`}
+                className="mx-auto grid h-48 w-48 place-items-center rounded-full"
+                style={{
+                  background: `conic-gradient(#84d8e8 ${progress * 3.6}deg, #203841 0deg)`,
+                }}
               >
-                <div>
-                  <p className="text-xs font-black uppercase text-[#84d8e8]">
-                    {rank}
-                  </p>
-                  <p className="mt-1 font-black text-white">No player data</p>
+                <div className="grid h-36 w-36 place-items-center rounded-full bg-[#0d252d]">
+                  <div>
+                    <p className="text-3xl font-black text-white">
+                      {progress}%
+                    </p>
+                    <p className="text-xs font-bold uppercase text-[#dce8eb]">
+                      Progress
+                    </p>
+                  </div>
                 </div>
-                <span className="text-lg font-black text-[#dce8eb]">0</span>
               </div>
-            ))}
-          </div>
-        </section>
-      </div>
+              <p className="mt-6 text-xl font-black text-white">
+                {completedCount} of {matches.length} Matches Completed
+              </p>
+              <p className="mt-3 text-lg leading-relaxed text-[#c8d6db]">
+                {firstUpcoming
+                  ? `Next match starts ${formatDateTime(firstUpcoming.scheduledTime)}.`
+                  : matches.length > 0
+                    ? "All imported matches are completed."
+                    : emptyScheduleMessage}
+              </p>
+            </section>
 
-      <section className="border-t border-[#314850] p-4 sm:p-7 lg:p-8">
-        <DashboardPanelTitle
-          title="Full Match Schedule"
-          right={
-            sortedMatches.length > 0
-              ? `Showing ${scheduleStart + 1}-${Math.min(
-                  scheduleStart + schedulePageSize,
-                  sortedMatches.length,
-                )} of ${sortedMatches.length}`
-              : undefined
-          }
-        />
-        <div className="overflow-hidden border-x border-b border-[#3a4d54] bg-[#0d252d]">
-          <div className="hidden grid-cols-[minmax(220px,1.4fr)_180px_180px_120px_120px] border-b border-[#3a4d54] bg-[#14272e] px-5 py-4 text-xs font-black uppercase tracking-[0.08em] text-[#dce8eb] lg:grid">
-            <span>Teams</span>
-            <span>Match Time</span>
-            <span>Prediction Lock</span>
-            <span>Score</span>
-            <span>Status</span>
-          </div>
-          <div className="divide-y divide-[#243c43]">
-            {visibleScheduleMatches.map((match) => (
-              <ScheduleMatchRow key={match.id} match={match} />
-            ))}
-            {visibleScheduleMatches.length === 0 && (
-              <p className="px-6 py-14 text-center text-[#9fb2b8]">
-                {emptyScheduleMessage}
-              </p>
-            )}
-          </div>
-          {sortedMatches.length > schedulePageSize && (
-            <div className="flex flex-wrap items-center justify-between gap-3 border-t border-[#243c43] px-4 py-4">
-              <p className="text-xs font-black uppercase text-[#9fb2b8]">
-                Page {activeSchedulePage} of {scheduleTotalPages}
-              </p>
-              <div className="flex flex-wrap gap-2">
-                {Array.from({ length: scheduleTotalPages }, (_, index) => index + 1).map(
-                  (page) => (
-                    <button
-                      key={page}
-                      type="button"
-                      onClick={() => setSchedulePage(page)}
-                      className={`h-9 min-w-9 border px-3 text-xs font-black transition ${
-                        page === activeSchedulePage
-                          ? "border-[#84d8e8] bg-[#84d8e8] text-[#06161b]"
-                          : "border-[#3a4d54] text-white hover:border-[#84d8e8] hover:text-[#84d8e8]"
-                      }`}
-                    >
-                      {page}
-                    </button>
-                  ),
+            <section className="overflow-hidden border border-[#3a4d54] bg-[#0d252d]">
+              <DashboardPanelTitle
+                title="Upcoming Matches"
+                right={`${upcomingMatches.length} total`}
+              />
+              <div className="divide-y divide-[#243c43]">
+                {upcomingMatches.slice(0, 3).map((match) => (
+                  <CompactMatchRow key={match.id} match={match} />
+                ))}
+                {upcomingMatches.length === 0 && (
+                  <p className="px-6 py-16 text-center text-[#9fb2b8]">
+                    {emptyScheduleMessage}
+                  </p>
                 )}
               </div>
+            </section>
+
+            <section className="overflow-hidden border border-[#3a4d54] bg-[#0d252d]">
+              <DashboardPanelTitle
+                title="Recent Results"
+                right={finishedMatches.length ? "Auto-synced" : undefined}
+              />
+              <div className="space-y-4 p-5">
+                {finishedMatches.slice(0, 3).map((match) => (
+                  <ResultMatchRow key={match.id} match={match} />
+                ))}
+                {finishedMatches.length === 0 && (
+                  <p className="py-12 text-center text-[#9fb2b8]">
+                    No completed results found.
+                  </p>
+                )}
+              </div>
+            </section>
+
+            <section className="overflow-hidden border border-[#3a4d54] bg-[#0d252d]">
+              <DashboardPanelTitle
+                title="Leaderboard Top 3"
+                right="View Full"
+              />
+              <div className="space-y-4 p-5">
+                {["Rank 01", "Rank 02", "Rank 03"].map((rank, index) => (
+                  <div
+                    key={rank}
+                    className={`flex items-center justify-between border border-[#243c43] bg-[#10242b] p-4 ${
+                      index === 0 ? "border-l-4 border-l-[#84d8e8]" : ""
+                    }`}
+                  >
+                    <div>
+                      <p className="text-xs font-black uppercase text-[#84d8e8]">
+                        {rank}
+                      </p>
+                      <p className="mt-1 font-black text-white">
+                        No player data
+                      </p>
+                    </div>
+                    <span className="text-lg font-black text-[#dce8eb]">0</span>
+                  </div>
+                ))}
+              </div>
+            </section>
+          </div>
+
+          <section className="border-t border-[#314850] p-4 sm:p-7 lg:p-8">
+            <DashboardPanelTitle
+              title="Full Match Schedule"
+              right={
+                sortedMatches.length > 0
+                  ? `Showing ${scheduleStart + 1}-${Math.min(
+                      scheduleStart + schedulePageSize,
+                      sortedMatches.length,
+                    )} of ${sortedMatches.length}`
+                  : undefined
+              }
+            />
+            <div className="overflow-hidden border-x border-b border-[#3a4d54] bg-[#0d252d]">
+              <div className="hidden grid-cols-[minmax(220px,1.4fr)_180px_180px_120px_120px] border-b border-[#3a4d54] bg-[#14272e] px-5 py-4 text-xs font-black uppercase tracking-[0.08em] text-[#dce8eb] lg:grid">
+                <span>Teams</span>
+                <span>Match Time</span>
+                <span>Prediction Lock</span>
+                <span>Score</span>
+                <span>Status</span>
+              </div>
+              <div className="divide-y divide-[#243c43]">
+                {visibleScheduleMatches.map((match) => (
+                  <ScheduleMatchRow key={match.id} match={match} />
+                ))}
+                {visibleScheduleMatches.length === 0 && (
+                  <p className="px-6 py-14 text-center text-[#9fb2b8]">
+                    {emptyScheduleMessage}
+                  </p>
+                )}
+              </div>
+              {sortedMatches.length > schedulePageSize && (
+                <div className="flex flex-wrap items-center justify-between gap-3 border-t border-[#243c43] px-4 py-4">
+                  <p className="text-xs font-black uppercase text-[#9fb2b8]">
+                    Page {activeSchedulePage} of {scheduleTotalPages}
+                  </p>
+                  <div className="flex flex-wrap gap-2">
+                    {Array.from(
+                      { length: scheduleTotalPages },
+                      (_, index) => index + 1,
+                    ).map((page) => (
+                      <button
+                        key={page}
+                        type="button"
+                        onClick={() => setSchedulePage(page)}
+                        className={`h-9 min-w-9 border px-3 text-xs font-black transition ${
+                          page === activeSchedulePage
+                            ? "border-[#84d8e8] bg-[#84d8e8] text-[#06161b]"
+                            : "border-[#3a4d54] text-white hover:border-[#84d8e8] hover:text-[#84d8e8]"
+                        }`}
+                      >
+                        {page}
+                      </button>
+                    ))}
+                  </div>
+                </div>
+              )}
             </div>
-          )}
-        </div>
-      </section>
-      </>
+          </section>
+        </>
       )}
     </section>
   );
@@ -675,7 +720,11 @@ function PredictionMetricCard({
   );
 }
 
-function PredictionStatusBadge({ status }: { status: PredictionRow["status"] }) {
+function PredictionStatusBadge({
+  status,
+}: {
+  status: PredictionRow["status"];
+}) {
   const className =
     status === "CORRECT"
       ? "bg-[#183229] text-[#a7e8c0]"
@@ -790,13 +839,17 @@ function ScheduleMatchRow({ match }: { match: MatchRow }) {
         <p className="text-[11px] font-black uppercase tracking-[0.08em] text-[#789098] lg:hidden">
           Match Time
         </p>
-        <p className="font-bold text-white">{formatDateTime(match.scheduledTime)}</p>
+        <p className="font-bold text-white">
+          {formatDateTime(match.scheduledTime)}
+        </p>
       </div>
       <div>
         <p className="text-[11px] font-black uppercase tracking-[0.08em] text-[#789098] lg:hidden">
           Prediction Lock
         </p>
-        <p className="font-bold text-[#dce8eb]">{formatDateTime(match.deadline)}</p>
+        <p className="font-bold text-[#dce8eb]">
+          {formatDateTime(match.deadline)}
+        </p>
       </div>
       <div>
         <p className="text-[11px] font-black uppercase tracking-[0.08em] text-[#789098] lg:hidden">
@@ -826,6 +879,14 @@ function ResultMatchRow({ match }: { match: MatchRow }) {
   );
 }
 
+function isExcelFile(file: File) {
+  const fileName = file.name.toLowerCase();
 
-
-
+  return (
+    fileName.endsWith(".xlsx") ||
+    fileName.endsWith(".xls") ||
+    file.type ===
+      "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet" ||
+    file.type === "application/vnd.ms-excel"
+  );
+}
