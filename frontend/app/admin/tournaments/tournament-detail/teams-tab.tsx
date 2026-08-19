@@ -15,6 +15,7 @@ import type { MatchRow, TournamentRow } from "../types";
 import { isFinishedStatus } from "../utils";
 
 type TeamRow = {
+  id?: number | null;
   name: string;
   logoUrl?: string | null;
   stage: string;
@@ -25,6 +26,21 @@ type TeamRow = {
   points: number;
   matches: number;
   members: number;
+};
+
+type TeamPlayerRow = {
+  id?: number;
+  name: string;
+};
+
+type TeamDetail = {
+  id: number;
+  tournamentId: number;
+  name: string;
+  logoUrl?: string | null;
+  tournamentStatus: string;
+  locked: boolean;
+  players: TeamPlayerRow[];
 };
 
 export function TeamsTab({
@@ -43,6 +59,13 @@ export function TeamsTab({
   const [page, setPage] = useState(1);
   const [apiTeamRows, setApiTeamRows] = useState<TeamRow[] | null>(null);
   const [isRegisterTeamOpen, setIsRegisterTeamOpen] = useState(false);
+  const [selectedTeamDetail, setSelectedTeamDetail] =
+    useState<TeamDetail | null>(null);
+  const [teamDetailName, setTeamDetailName] = useState("");
+  const [teamDetailPlayers, setTeamDetailPlayers] = useState<string[]>([]);
+  const [teamDetailError, setTeamDetailError] = useState<string | null>(null);
+  const [isLoadingTeamDetail, setIsLoadingTeamDetail] = useState(false);
+  const [isSavingTeamDetail, setIsSavingTeamDetail] = useState(false);
   const [teamName, setTeamName] = useState("");
   const [playerNames, setPlayerNames] = useState([""]);
   const [registerTeamError, setRegisterTeamError] = useState<string | null>(
@@ -52,6 +75,11 @@ export function TeamsTab({
   const pageSize = 4;
   const canRegisterTeam =
     canManage && tournament.status.toUpperCase() !== "COMPLETE";
+  const canEditSelectedTeam =
+    canManage &&
+    !!selectedTeamDetail &&
+    !selectedTeamDetail.locked &&
+    !isTournamentTeamLocked(tournament.status);
   const fallbackTeamRows = useMemo(
     () => buildTeamRows(matches, tournament.sportType),
     [matches, tournament.sportType],
@@ -120,6 +148,104 @@ export function TeamsTab({
     setTeamName("");
     setPlayerNames([""]);
     setRegisterTeamError(null);
+  }
+
+  function closeTeamDetailModal() {
+    setSelectedTeamDetail(null);
+    setTeamDetailName("");
+    setTeamDetailPlayers([]);
+    setTeamDetailError(null);
+  }
+
+  async function openTeamDetail(team: TeamRow) {
+    if (!team.id) {
+      return;
+    }
+
+    setIsLoadingTeamDetail(true);
+    setTeamDetailError(null);
+
+    try {
+      const detail = await apiRequest<TeamDetail>(`/teams/${team.id}`);
+      setSelectedTeamDetail(detail);
+      setTeamDetailName(detail.name);
+      setTeamDetailPlayers(
+        detail.players.length > 0
+          ? detail.players.map((player) => player.name)
+          : [""],
+      );
+    } catch (error) {
+      setTeamDetailError(
+        error instanceof Error ? error.message : "Cannot load team.",
+      );
+    } finally {
+      setIsLoadingTeamDetail(false);
+    }
+  }
+
+  function addTeamDetailPlayer() {
+    setTeamDetailPlayers((current) => [...current, ""]);
+  }
+
+  function updateTeamDetailPlayer(index: number, value: string) {
+    setTeamDetailPlayers((current) =>
+      current.map((name, currentIndex) =>
+        currentIndex === index ? value : name,
+      ),
+    );
+  }
+
+  function removeTeamDetailPlayer(index: number) {
+    setTeamDetailPlayers((current) =>
+      current.length === 1
+        ? [""]
+        : current.filter((_, currentIndex) => currentIndex !== index),
+    );
+  }
+
+  async function saveTeamDetail() {
+    if (!selectedTeamDetail || !canEditSelectedTeam) {
+      return;
+    }
+
+    const normalizedTeamName = teamDetailName.trim();
+    const normalizedPlayers = teamDetailPlayers
+      .map((name) => name.trim())
+      .filter(Boolean);
+    const uniquePlayers = new Set(
+      normalizedPlayers.map((name) => name.toLowerCase()),
+    );
+
+    if (!normalizedTeamName) {
+      setTeamDetailError("Team name is required.");
+      return;
+    }
+
+    if (uniquePlayers.size !== normalizedPlayers.length) {
+      setTeamDetailError("Member names must be unique.");
+      return;
+    }
+
+    setIsSavingTeamDetail(true);
+    setTeamDetailError(null);
+
+    try {
+      await apiRequest(`/teams/${selectedTeamDetail.id}`, {
+        method: "PUT",
+        body: JSON.stringify({
+          teamName: normalizedTeamName,
+          players: normalizedPlayers.map((name) => ({ name })),
+        }),
+      });
+      closeTeamDetailModal();
+      await loadTeams();
+    } catch (error) {
+      setTeamDetailError(
+        error instanceof Error ? error.message : "Cannot save team.",
+      );
+    } finally {
+      setIsSavingTeamDetail(false);
+    }
   }
 
   function addPlayerField() {
@@ -283,6 +409,7 @@ export function TeamsTab({
                   team={team}
                   rank={start + index + 1}
                   highlighted={index === 0}
+                  onOpen={() => void openTeamDetail(team)}
                 />
               ))}
               {visibleRows.length === 0 && (
@@ -424,6 +551,127 @@ export function TeamsTab({
           </form>
         </div>
       )}
+
+      {(selectedTeamDetail || isLoadingTeamDetail || teamDetailError) && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/70 px-4">
+          <form
+            onSubmit={(event) => {
+              event.preventDefault();
+              void saveTeamDetail();
+            }}
+            className="w-full max-w-xl border border-[#31515a] bg-[#102b33] p-6 shadow-2xl shadow-black/50"
+          >
+            <div className="flex items-start justify-between gap-4">
+              <div>
+                <h3 className="text-2xl font-black text-[#84d8e8]">
+                  Team Detail
+                </h3>
+                <p className="mt-1 text-sm font-bold text-[#9fb2b8]">
+                  {isTournamentTeamLocked(tournament.status)
+                    ? "This tournament is active. Team data is view-only."
+                    : canManage
+                      ? "Review or update this team roster."
+                      : "View-only roster detail."}
+                </p>
+              </div>
+              <button
+                type="button"
+                onClick={closeTeamDetailModal}
+                className="grid h-10 w-10 place-items-center border border-[#314850] text-[#9fb2b8] transition hover:border-[#84d8e8] hover:text-[#84d8e8]"
+                aria-label="Close team detail modal"
+              >
+                <X size={18} />
+              </button>
+            </div>
+
+            {isLoadingTeamDetail ? (
+              <div className="mt-6 border border-[#31515a] bg-[#071516] px-4 py-8 text-center text-sm font-bold text-[#9fb2b8]">
+                Loading team...
+              </div>
+            ) : (
+              <>
+                <label className="mt-5 block text-xs font-black uppercase tracking-[0.14em] text-[#9fb2b8]">
+                  Team name
+                </label>
+                <input
+                  value={teamDetailName}
+                  onChange={(event) => setTeamDetailName(event.target.value)}
+                  disabled={!canEditSelectedTeam}
+                  className="mt-2 h-12 w-full border border-[#31515a] bg-[#071516] px-4 text-sm font-bold text-white outline-none placeholder:text-[#789098] focus:border-[#84d8e8] disabled:cursor-not-allowed disabled:text-[#9fb2b8]"
+                  placeholder="Team name..."
+                />
+
+                <div className="mt-5 flex items-center justify-between gap-3">
+                  <label className="text-xs font-black uppercase tracking-[0.14em] text-[#9fb2b8]">
+                    Members
+                  </label>
+                  {canEditSelectedTeam && (
+                    <button
+                      type="button"
+                      onClick={addTeamDetailPlayer}
+                      className="inline-flex h-9 items-center gap-2 border border-[#31515a] px-3 text-[10px] font-black uppercase tracking-[0.1em] text-[#84d8e8] transition hover:border-[#84d8e8]"
+                    >
+                      <Plus size={14} />
+                      Add member
+                    </button>
+                  )}
+                </div>
+
+                <div className="mt-3 max-h-64 space-y-3 overflow-y-auto pr-1">
+                  {teamDetailPlayers.map((name, index) => (
+                    <div key={index} className="flex gap-2">
+                      <input
+                        value={name}
+                        onChange={(event) =>
+                          updateTeamDetailPlayer(index, event.target.value)
+                        }
+                        disabled={!canEditSelectedTeam}
+                        placeholder={`Member ${index + 1}`}
+                        className="h-11 flex-1 border border-[#31515a] bg-[#071516] px-4 text-sm font-bold text-white outline-none placeholder:text-[#789098] focus:border-[#84d8e8] disabled:cursor-not-allowed disabled:text-[#9fb2b8]"
+                      />
+                      {canEditSelectedTeam && (
+                        <button
+                          type="button"
+                          onClick={() => removeTeamDetailPlayer(index)}
+                          className="grid h-11 w-11 place-items-center border border-[#31515a] text-[#ff9d9d] transition hover:border-[#ff9d9d]"
+                          aria-label={`Remove member ${index + 1}`}
+                        >
+                          <Trash2 size={16} />
+                        </button>
+                      )}
+                    </div>
+                  ))}
+                </div>
+              </>
+            )}
+
+            {teamDetailError && (
+              <p className="mt-4 border border-[#8a3d3d] bg-[#2a1114] px-4 py-3 text-sm font-bold text-[#ffb4b4]">
+                {teamDetailError}
+              </p>
+            )}
+
+            <div className="mt-6 flex justify-end gap-3">
+              <button
+                type="button"
+                onClick={closeTeamDetailModal}
+                className="h-11 border border-[#31515a] px-5 text-sm font-black text-[#dce8eb] transition hover:border-[#84d8e8] hover:text-[#84d8e8]"
+              >
+                Close
+              </button>
+              {canEditSelectedTeam && !isLoadingTeamDetail && (
+                <button
+                  type="submit"
+                  disabled={isSavingTeamDetail}
+                  className="h-11 border border-[#84d8e8] bg-[#84d8e8] px-5 text-sm font-black text-[#06161b] transition hover:bg-[#a1e8f2] disabled:cursor-wait disabled:opacity-60"
+                >
+                  {isSavingTeamDetail ? "Saving..." : "Save Team"}
+                </button>
+              )}
+            </div>
+          </form>
+        </div>
+      )}
     </section>
   );
 }
@@ -432,10 +680,12 @@ function TeamTableRow({
   team,
   rank,
   highlighted,
+  onOpen,
 }: {
   team: TeamRow;
   rank: number;
   highlighted: boolean;
+  onOpen: () => void;
 }) {
   const trend =
     team.wins > 0 && team.wins >= team.losses
@@ -445,10 +695,13 @@ function TeamTableRow({
         : "flat";
 
   return (
-    <div
-      className={`grid grid-cols-[72px_minmax(250px,1fr)_80px_80px_80px_80px_90px_92px_90px_90px] items-center gap-x-5 px-5 py-4 text-sm ${
+    <button
+      type="button"
+      onClick={onOpen}
+      disabled={!team.id}
+      className={`grid w-full grid-cols-[72px_minmax(250px,1fr)_80px_80px_80px_80px_90px_92px_90px_90px] items-center gap-x-5 px-5 py-4 text-left text-sm ${
         highlighted ? "bg-[#18343d]" : "bg-[#0d252d]"
-      }`}
+      } transition enabled:hover:bg-[#1b3b45] disabled:cursor-default`}
     >
       <span
         className={`grid h-9 w-9 place-items-center rounded-full text-xs font-black ${
@@ -494,7 +747,7 @@ function TeamTableRow({
       </span>
       <TeamNumber value={team.members} />
       <TeamNumber value={team.matches} />
-    </div>
+    </button>
   );
 }
 
@@ -606,6 +859,7 @@ function normalizeTeamRow(row: TeamRow, sportType?: string): TeamRow {
 
   return {
     ...row,
+    id: row.id ?? null,
     wins,
     losses: Number(row.losses ?? 0),
     draws,
@@ -625,6 +879,7 @@ function ensureTeam(teams: Map<string, TeamRow>, name: string, stage: string) {
   }
 
   const team: TeamRow = {
+    id: null,
     name,
     logoUrl: null,
     stage,
@@ -671,4 +926,8 @@ function getInitials(name: string) {
 
 function toCssUrl(value: string) {
   return `url("${value.replace(/"/g, '\\"')}")`;
+}
+
+function isTournamentTeamLocked(status: string) {
+  return ["ACTIVE", "ONGOING"].includes(status.toUpperCase());
 }

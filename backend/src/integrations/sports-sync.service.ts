@@ -292,6 +292,8 @@ export class SportsApiSyncService {
             (SELECT COUNT(*) FROM matches m WHERE m.tournament_id = t.id) AS match_count
           FROM tournaments t
           WHERE
+            ${this.tournamentStatusExpression('t.start_date', 't.end_date', 't.status')} != 'ONGOING'
+            AND (
             EXISTS (
               SELECT 1
               FROM matches m
@@ -320,6 +322,7 @@ export class SportsApiSyncService {
                 FROM tournament_participants participant
                 WHERE participant.tournament_id = t.id
               )
+            )
             )
         ),
         deleted AS (
@@ -2963,6 +2966,23 @@ export class SportsApiSyncService {
   private isLiveWindow(startValue: string, endValue: string) {
     const now = new Date();
     return new Date(startValue) <= now && new Date(endValue) >= now;
+  }
+
+  private tournamentStatusExpression(
+    startColumn: string,
+    endColumn: string,
+    fallbackColumn: string,
+  ) {
+    return `
+      CASE
+        WHEN ${endColumn} IS NOT NULL AND ${endColumn} < NOW() THEN 'COMPLETE'
+        WHEN ${startColumn} IS NOT NULL AND ${startColumn} > NOW() THEN 'UPCOMING'
+        WHEN ${startColumn} IS NOT NULL OR ${endColumn} IS NOT NULL THEN 'ONGOING'
+        WHEN ${fallbackColumn} IN ('ACTIVE', 'LIVE', 'ONGOING') THEN 'ONGOING'
+        WHEN ${fallbackColumn} IN ('COMPLETED', 'COMPLETE', 'FINISHED', 'CANCELLED', 'CANCELED') THEN 'COMPLETE'
+        ELSE 'UPCOMING'
+      END
+    `;
   }
 
   private async ensureTeamLogoColumn() {

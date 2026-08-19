@@ -42,7 +42,7 @@ import {
   getTournamentGroups,
   normalizeStatus,
 } from "./tournaments/utils";
-import { FileDown, Plus, RefreshCw, Search } from "lucide-react";
+import { FileDown, Plus, RefreshCw, Search, Trash2 } from "lucide-react";
 
 // Dashboard auto-refresh matches the earlier API budget rule: one refresh every 14.4 minutes.
 const DASHBOARD_REFRESH_MS = 14.4 * 60 * 1000;
@@ -251,7 +251,7 @@ export default function AdminDashboardContent({
 
   async function resetImportedApiData() {
     if (!isAdmin) {
-      showNotice("Only admin can reset API data.", "error");
+      showNotice("Only admin can delete imported API data.", "error");
       return;
     }
 
@@ -271,7 +271,9 @@ export default function AdminDashboardContent({
       await loadDashboard();
     } catch (error) {
       showNotice(
-        error instanceof Error ? error.message : "Cannot reset API data.",
+        error instanceof Error
+          ? error.message
+          : "Cannot delete imported API data.",
         "error",
       );
     } finally {
@@ -654,9 +656,9 @@ export default function AdminDashboardContent({
 
           return first.name.localeCompare(second.name);
         });
-  const dashboardEmptyGroups = getTournamentGroups(dashboard.tournaments).filter(
-    (group) => group.total === 0,
-  );
+  const dashboardEmptyGroups = getTournamentGroups(
+    dashboard.tournaments,
+  ).filter((group) => group.total === 0);
   const selectedTournament =
     dashboard.tournaments.find(
       (tournament) => tournament.id === selectedTournamentId,
@@ -674,9 +676,9 @@ export default function AdminDashboardContent({
   const editingTournament =
     editingTournamentId == null
       ? null
-      : dashboard.tournaments.find(
+      : (dashboard.tournaments.find(
           (tournament) => tournament.id === editingTournamentId,
-        ) ?? null;
+        ) ?? null);
   const isActiveTournamentEdit =
     Boolean(editingTournamentId) && tournamentForm.status === "ONGOING";
 
@@ -799,6 +801,15 @@ export default function AdminDashboardContent({
                 label={isMutating ? "Syncing..." : "Reset API"}
                 onClick={() => setOpenSyncApiModal(true)}
               />
+              <button
+                type="button"
+                onClick={() => setConfirmResetApiData(true)}
+                disabled={isMutating}
+                className="flex h-[56px] items-center justify-center gap-3 rounded border border-[#ff6b6b99] bg-[#35171b] px-5 text-base font-black text-[#ff9d9d] transition hover:border-[#ff6b6b] hover:text-[#ffd0d0] disabled:cursor-not-allowed disabled:opacity-60 sm:h-[62px] sm:px-7 sm:text-lg"
+              >
+                <Trash2 size={18} />
+                Delete Imported API
+              </button>
               <DashboardActionButton
                 icon={<FileDown size={18} />}
                 label={isMutating ? "Importing..." : "Import API"}
@@ -973,21 +984,6 @@ export default function AdminDashboardContent({
                 </span>
               </button>
             </div>
-            <button
-              onClick={() => {
-                setOpenSyncApiModal(false);
-                setConfirmResetApiData(true);
-              }}
-              disabled={isMutating}
-              className="mt-4 w-full rounded border border-[#ff6b6b99] bg-[#35171b] px-5 py-4 text-left transition hover:border-[#ff6b6b] disabled:opacity-60"
-            >
-              <span className="block font-black text-[#ff8a8a]">
-                Delete all imported API data
-              </span>
-              <span className="mt-2 block text-xs text-[#f0b4b4]">
-                Clears old API tournaments and matches without calling any API.
-              </span>
-            </button>
             <div className="mt-6 flex justify-end">
               <button
                 onClick={() => setOpenSyncApiModal(false)}
@@ -1010,7 +1006,8 @@ export default function AdminDashboardContent({
             <p className="mt-4 text-sm leading-6 text-[#d7e2e5]">
               This deletes all API matches, their tournaments, teams, stages and
               predictions. Empty tournaments left by the old importer are also
-              removed. Players and populated manual tournaments are kept.
+              removed. Active/ongoing tournaments, players and populated manual
+              tournaments are kept.
             </p>
             <p className="mt-3 text-sm font-bold text-[#ff8a8a]">
               This action cannot be undone.
@@ -1520,7 +1517,10 @@ function chunkLines(lines: string[], size: number) {
 }
 
 function escapePdfText(value: string) {
-  return value.replace(/\\/g, "\\\\").replace(/\(/g, "\\(").replace(/\)/g, "\\)");
+  return value
+    .replace(/\\/g, "\\\\")
+    .replace(/\(/g, "\\(")
+    .replace(/\)/g, "\\)");
 }
 
 function slugifyFileName(value: string) {
@@ -1532,5 +1532,3 @@ function slugifyFileName(value: string) {
       .replace(/^-+|-+$/g, "") || "tournament"
   );
 }
-
-

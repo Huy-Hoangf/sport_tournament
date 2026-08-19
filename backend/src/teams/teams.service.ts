@@ -13,6 +13,12 @@ type RegisterTeamInput = {
   players: Array<{ name?: string }>;
 };
 
+type UpdateTeamInput = {
+  teamId: number;
+  teamName: string;
+  players: Array<{ name?: string }>;
+};
+
 @Injectable()
 export class TeamsService {
   constructor(
@@ -162,6 +168,7 @@ export class TeamsService {
         combined_teams AS (
           SELECT
             bt.tournament_id AS "tournamentId",
+            bt.team_id AS id,
             bt.sport_type,
             bt.name,
             bt."logoUrl",
@@ -186,6 +193,7 @@ export class TeamsService {
 
           SELECT
             tournament_id AS "tournamentId",
+            NULL AS id,
             sport_type,
             name,
             NULL AS "logoUrl",
@@ -200,6 +208,7 @@ export class TeamsService {
         )
         SELECT
           "tournamentId",
+          id,
           name,
           "logoUrl",
           stage,
@@ -219,6 +228,7 @@ export class TeamsService {
 
     return rows.map((row) => ({
       tournamentId: Number(row.tournamentId),
+      id: row.id === null || row.id === undefined ? null : Number(row.id),
       name: row.name,
       logoUrl: row.logoUrl ?? null,
       stage: row.stage ?? 'Main Stage',
@@ -230,6 +240,66 @@ export class TeamsService {
       points: Number(row.points ?? 0),
       members: Number(row.members ?? 0),
     }));
+  }
+
+  async findOne({
+    includePrivateTournaments,
+    teamId,
+  }: {
+    includePrivateTournaments: boolean;
+    teamId: number;
+  }) {
+    if (!Number.isInteger(teamId) || teamId <= 0) {
+      throw new BadRequestException('Invalid team id.');
+    }
+
+    const values: unknown[] = [teamId];
+    const visibilityCondition = includePrivateTournaments
+      ? ''
+      : "AND t.visibility = 'PUBLIC'";
+    const [team] = await this.usersRepository.query(
+      `
+        SELECT
+          team.id,
+          team.tournament_id AS "tournamentId",
+          team.name,
+          team.logo_url AS "logoUrl",
+          ${this.tournamentStatusExpression('t.start_date', 't.end_date', 't.status')} AS "tournamentStatus"
+        FROM teams team
+        JOIN tournaments t ON t.id = team.tournament_id
+        WHERE team.id = $1
+          ${visibilityCondition}
+        LIMIT 1
+      `,
+      values,
+    );
+
+    if (!team) {
+      throw new NotFoundException('Team not found.');
+    }
+
+    const players = await this.usersRepository.query(
+      `
+        SELECT id, name
+        FROM team_players
+        WHERE team_id = $1
+        ORDER BY name ASC
+      `,
+      [teamId],
+    );
+
+    return {
+      id: Number(team.id),
+      tournamentId: Number(team.tournamentId),
+      name: team.name,
+      logoUrl: team.logoUrl ?? null,
+      tournamentStatus: team.tournamentStatus,
+      locked: team.tournamentStatus === 'ONGOING',
+      players: players.map((player) => ({
+        id: Number(player.id),
+        name: player.name,
+      })),
+    };
   }
 
   async registerTeam(input: RegisterTeamInput) {
@@ -265,14 +335,7 @@ export class TeamsService {
       `
         SELECT
           id,
-          CASE
-            WHEN end_date IS NOT NULL AND end_date < NOW() THEN 'COMPLETE'
-            WHEN start_date IS NOT NULL AND start_date > NOW() THEN 'UPCOMING'
-            WHEN start_date IS NOT NULL OR end_date IS NOT NULL THEN 'ONGOING'
-            WHEN status IN ('ACTIVE', 'LIVE', 'ONGOING') THEN 'ONGOING'
-            WHEN status IN ('COMPLETED', 'COMPLETE', 'FINISHED', 'CANCELLED', 'CANCELED') THEN 'COMPLETE'
-            ELSE 'UPCOMING'
-          END AS status
+          ${this.tournamentStatusExpression('start_date', 'end_date', 'status')} AS status
         FROM tournaments
         WHERE id = $1
         LIMIT 1
@@ -332,6 +395,120 @@ export class TeamsService {
         members: uniquePlayerNames.length,
       },
     };
+  }
+
+  async updateTeam(input: UpdateTeamInput) {
+    const teamId = input.teamId;
+    const teamName = input.teamName.trim();
+    const playerNames = input.players
+      .map((player) => player.name?.trim() ?? '')
+      .filter(Boolean);
+
+    if (!Number.isInteger(teamId) || teamId <= 0) {
+      throw new BadRequestException('Invalid team id.');
+    }
+
+    if (!this.isKnownTeamName(teamName)) {
+      throw new BadRequestException('Team name is required.');
+    }
+
+    const uniquePlayerNames = Array.from(
+      new Map(
+        playerNames.map((playerName) => [playerName.toLowerCase(), playerName]),
+      ).values(),
+    );
+
+    if (uniquePlayerNames.length !== playerNames.length) {
+      throw new BadRequestException('Player names must be unique.');
+    }
+
+    const [team] = await this.usersRepository.query(
+      `
+        SELECT
+          team.id,
+          team.tournament_id AS "tournamentId",
+          ${this.tournamentStatusExpression('t.start_date', 't.end_date', 't.status')} AS "tournamentStatus"
+        FROM teams team
+        JOIN tournaments t ON t.id = team.tournament_id
+        WHERE team.id = $1
+        LIMIT 1
+      `,
+      [teamId],
+    );
+
+    if (!team) {
+      throw new NotFoundException('Team not found.');
+    }
+
+    if (team.tournamentStatus === 'ONGOING') {
+      throw new BadRequestException('Ongoing tournaments cannot edit teams.');
+    }
+
+    const [duplicateTeam] = await this.usersRepository.query(
+      `
+        SELECT id
+        FROM teams
+        WHERE tournament_id = $1
+          AND id != $2
+          AND LOWER(name) = LOWER($3)
+        LIMIT 1
+      `,
+      [Number(team.tournamentId), teamId, teamName],
+    );
+
+    if (duplicateTeam) {
+      throw new BadRequestException('Team already exists in this tournament.');
+    }
+
+    await this.usersRepository.manager.transaction(async (manager) => {
+      await manager.query(
+        `
+          UPDATE teams
+          SET name = $1
+          WHERE id = $2
+        `,
+        [teamName, teamId],
+      );
+      await manager.query('DELETE FROM team_players WHERE team_id = $1', [
+        teamId,
+      ]);
+
+      for (const playerName of uniquePlayerNames) {
+        await manager.query(
+          `
+            INSERT INTO team_players (team_id, name)
+            VALUES ($1, $2)
+          `,
+          [teamId, playerName],
+        );
+      }
+    });
+
+    return {
+      message: 'Team updated successfully.',
+      team: {
+        id: teamId,
+        name: teamName,
+        members: uniquePlayerNames.length,
+      },
+    };
+  }
+
+  private tournamentStatusExpression(
+    startColumn: string,
+    endColumn: string,
+    fallbackColumn: string,
+  ) {
+    return `
+      CASE
+        WHEN ${endColumn} IS NOT NULL AND ${endColumn} < NOW() THEN 'COMPLETE'
+        WHEN ${startColumn} IS NOT NULL AND ${startColumn} > NOW() THEN 'UPCOMING'
+        WHEN ${startColumn} IS NOT NULL OR ${endColumn} IS NOT NULL THEN 'ONGOING'
+        WHEN ${fallbackColumn} IN ('ACTIVE', 'LIVE', 'ONGOING') THEN 'ONGOING'
+        WHEN ${fallbackColumn} IN ('COMPLETED', 'COMPLETE', 'FINISHED', 'CANCELLED', 'CANCELED') THEN 'COMPLETE'
+        ELSE 'UPCOMING'
+      END
+    `;
   }
 
   private isKnownTeamName(name: string | null | undefined) {
