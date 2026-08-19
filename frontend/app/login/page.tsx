@@ -43,9 +43,6 @@ export default function LoginPage() {
     const prefix = "#google=";
 
     if (!hash.startsWith(prefix)) {
-      if (localStorage.getItem("currentUser") && localStorage.getItem("accessToken")) {
-        router.replace("/admin");
-      }
       return;
     }
 
