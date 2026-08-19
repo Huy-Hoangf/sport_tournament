@@ -16,6 +16,7 @@ import { isFinishedStatus } from "../utils";
 
 type TeamRow = {
   name: string;
+  logoUrl?: string | null;
   stage: string;
   wins: number;
   losses: number;
@@ -459,9 +460,7 @@ function TeamTableRow({
         {String(rank).padStart(2, "0")}
       </span>
       <div className="flex min-w-0 items-center gap-3">
-        <span className="grid h-9 w-11 shrink-0 place-items-center border border-[#314850] bg-[#07181d] text-sm font-black text-[#84d8e8]">
-          {getInitials(team.name)}
-        </span>
+        <TeamLogo team={team} />
         <div className="min-w-0">
           <p className="truncate text-sm font-black text-[#dce8eb]">
             {team.name}
@@ -496,6 +495,29 @@ function TeamTableRow({
       <TeamNumber value={team.members} />
       <TeamNumber value={team.matches} />
     </div>
+  );
+}
+
+function TeamLogo({ team }: { team: TeamRow }) {
+  const logoUrl = team.logoUrl?.trim();
+
+  return (
+    <span
+      aria-label={`${team.name} logo`}
+      className="relative grid h-10 w-12 shrink-0 place-items-center overflow-hidden border border-[#314850] bg-[#07181d] text-sm font-black text-[#84d8e8]"
+      title={team.name}
+    >
+      <span className={logoUrl ? "text-[#54747d]" : ""}>
+        {getInitials(team.name)}
+      </span>
+      {logoUrl && (
+        <span
+          aria-hidden="true"
+          className="absolute inset-1 bg-contain bg-center bg-no-repeat"
+          style={{ backgroundImage: toCssUrl(logoUrl) }}
+        />
+      )}
+    </span>
   );
 }
 
@@ -588,6 +610,7 @@ function normalizeTeamRow(row: TeamRow, sportType?: string): TeamRow {
     losses: Number(row.losses ?? 0),
     draws,
     score: Number(row.score ?? 0),
+    logoUrl: row.logoUrl ?? null,
     points: Number(row.points ?? fallbackPoints),
     matches: Number(row.matches ?? 0),
     members: Number(row.members ?? 0),
@@ -603,6 +626,7 @@ function ensureTeam(teams: Map<string, TeamRow>, name: string, stage: string) {
 
   const team: TeamRow = {
     name,
+    logoUrl: null,
     stage,
     wins: 0,
     losses: 0,
@@ -643,4 +667,8 @@ function getInitials(name: string) {
     .slice(0, 2)
     .map((part) => part[0]?.toUpperCase())
     .join("");
+}
+
+function toCssUrl(value: string) {
+  return `url("${value.replace(/"/g, '\\"')}")`;
 }

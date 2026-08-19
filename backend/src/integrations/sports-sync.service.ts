@@ -1691,12 +1691,51 @@ export class SportsApiSyncService {
       this.fetchLolLeagueEndpointMatches(leagueId, 'results'),
       this.fetchLolLeagueEndpointMatches(leagueId, 'past'),
     ]);
+    const currentTournamentIds =
+      this.getLolCurrentTournamentIds(scheduleMatches);
+    const scopedResults = this.filterLolMatchesByTournamentIds(
+      resultsMatches,
+      currentTournamentIds,
+    );
+    const scopedPast = this.filterLolMatchesByTournamentIds(
+      pastMatches,
+      currentTournamentIds,
+    );
 
     return this.withLolLeagueIdentity(
-      [...scheduleMatches, ...resultsMatches, ...pastMatches],
+      [...scheduleMatches, ...scopedResults, ...scopedPast],
       competition.id,
       competition.name,
     );
+  }
+
+  private getLolCurrentTournamentIds(scheduleMatches: CitoLolMatch[]) {
+    const tournamentIds = new Set<string>();
+
+    for (const match of scheduleMatches) {
+      const tournamentId = this.getLolTournamentId(match);
+
+      if (tournamentId) {
+        tournamentIds.add(tournamentId);
+      }
+    }
+
+    return tournamentIds;
+  }
+
+  private filterLolMatchesByTournamentIds(
+    matches: CitoLolMatch[],
+    tournamentIds: Set<string>,
+  ) {
+    if (tournamentIds.size === 0) {
+      return [];
+    }
+
+    return matches.filter((match) => {
+      const tournamentId = this.getLolTournamentId(match);
+
+      return tournamentId ? tournamentIds.has(tournamentId) : false;
+    });
   }
 
   private async fetchLolLeagueEndpointMatches(
@@ -2536,6 +2575,19 @@ export class SportsApiSyncService {
       __forcedLeagueSlug: leagueSlug,
       __forcedLeagueName: leagueName,
     }));
+  }
+
+  private getLolTournamentId(match: CitoLolMatch) {
+    return this.pickString(match, [
+      ['tournamentId'],
+      ['tournament_id'],
+      ['tournament', 'id'],
+      ['tournament', 'slug'],
+      ['serie', 'id'],
+      ['serie', 'slug'],
+      ['competition', 'id'],
+      ['competition', 'slug'],
+    ]);
   }
 
   private pickString(
