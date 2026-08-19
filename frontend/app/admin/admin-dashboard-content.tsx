@@ -29,7 +29,6 @@ import type {
   ImportSport,
   MatchRow,
   LolCompetitionOption,
-  SyncSport,
   TournamentForm,
   TournamentRow,
 } from "./tournaments/types";
@@ -196,7 +195,7 @@ export default function AdminDashboardContent({
     return () => window.clearInterval(interval);
   }, [loadDashboard]);
 
-  async function syncSportsApi(sport: SyncSport) {
+  async function syncSportsApi() {
     if (!isAdmin) {
       showNotice("Only admin can sync API data.", "error");
       return;
@@ -205,37 +204,37 @@ export default function AdminDashboardContent({
     setIsMutating(true);
 
     try {
-      if (sport === "FOOTBALL") {
-        const result = await apiRequest<{
+      const result = await apiRequest<{
+        football: {
           competitions: number;
           matches: number;
           error: string | null;
-        }>("/dashboard/sync/football", { method: "POST" });
-        showNotice(
-          [
-            `Football: ${result.competitions} competitions, ${result.matches} matches`,
-            result.error ? `Football note: ${result.error}` : "",
-          ]
-            .filter(Boolean)
-            .join("\n"),
-          result.error ? "info" : "success",
-        );
-      } else {
-        const result = await apiRequest<{
+        };
+        f1: {
           meetings: number;
           sessions: number;
           error: string | null;
-        }>("/dashboard/sync/f1", { method: "POST" });
-        showNotice(
-          [
-            `F1: ${result.meetings} meetings, ${result.sessions} sessions`,
-            result.error ? `F1 note: ${result.error}` : "",
-          ]
-            .filter(Boolean)
-            .join("\n"),
-          result.error ? "info" : "success",
-        );
-      }
+        };
+        error?: string | null;
+      }>("/dashboard/sync", { method: "POST" });
+      const hasNotes = Boolean(
+        result.error || result.football.error || result.f1.error,
+      );
+
+      showNotice(
+        [
+          `Football: ${result.football.competitions} competitions, ${result.football.matches} matches`,
+          `F1: ${result.f1.meetings} meetings, ${result.f1.sessions} sessions`,
+          result.error ? `Sync note: ${result.error}` : "",
+          result.football.error
+            ? `Football note: ${result.football.error}`
+            : "",
+          result.f1.error ? `F1 note: ${result.f1.error}` : "",
+        ]
+          .filter(Boolean)
+          .join("\n"),
+        hasNotes ? "info" : "success",
+      );
 
       setOpenSyncApiModal(false);
       await loadDashboard();
@@ -959,38 +958,29 @@ export default function AdminDashboardContent({
               Reset API Data
             </h3>
             <p className="mt-2 text-sm text-[#9fb2b8]">
-              Choose one data source. Dashboard refreshes never call external
-              APIs.
+              This will reset all connected API feeds at once. Dashboard
+              refreshes never call external APIs.
             </p>
-            <div className="mt-6 grid gap-3 sm:grid-cols-2">
-              <button
-                onClick={() => void syncSportsApi("FOOTBALL")}
-                disabled={isMutating}
-                className="rounded border border-[#84d8e8] bg-[#143942] px-5 py-5 text-left disabled:opacity-60"
-              >
-                <span className="block font-black text-white">Football</span>
-                <span className="mt-2 block text-xs text-[#9fb2b8]">
-                  Uses API-SPORTS Football quota
-                </span>
-              </button>
-              <button
-                onClick={() => void syncSportsApi("F1")}
-                disabled={isMutating}
-                className="rounded border border-[#3a4d54] bg-[#14272e] px-5 py-5 text-left disabled:opacity-60"
-              >
-                <span className="block font-black text-white">Formula 1</span>
-                <span className="mt-2 block text-xs text-[#9fb2b8]">
-                  Uses OpenF1, not API-SPORTS quota
-                </span>
-              </button>
+            <div className="mt-6 rounded border border-[#3a4d54] bg-[#14272e] px-5 py-4">
+              <p className="text-sm font-black text-white">Sources included</p>
+              <p className="mt-2 text-xs font-bold leading-5 text-[#9fb2b8]">
+                Football data feed and OpenF1 will be synced in the same run.
+              </p>
             </div>
-            <div className="mt-6 flex justify-end">
+            <div className="mt-6 flex justify-end gap-3">
               <button
                 onClick={() => setOpenSyncApiModal(false)}
                 disabled={isMutating}
                 className="h-11 rounded border border-white/10 px-6 font-bold text-zinc-200 disabled:opacity-60"
               >
                 Cancel
+              </button>
+              <button
+                onClick={() => void syncSportsApi()}
+                disabled={isMutating}
+                className="h-11 rounded border border-[#84d8e8] bg-[#84d8e8] px-6 font-black text-[#06161b] transition hover:bg-[#a1e8f2] disabled:cursor-wait disabled:opacity-60"
+              >
+                {isMutating ? "Resetting..." : "Reset All API"}
               </button>
             </div>
           </div>
