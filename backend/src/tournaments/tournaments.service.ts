@@ -11,22 +11,56 @@ type TournamentInput = {
   name?: string;
   sportType?: string;
   format?: string;
+  customFormat?: CustomFormatInput | null;
   status?: string;
   visibility?: string;
   startDate?: string | null;
   endDate?: string | null;
 };
 
-type TournamentFormat = 'GROUP_AND_KNOCKOUT' | 'ROUND_ROBIN' | 'KNOCKOUT';
+type TournamentFormat = 'GROUP_AND_KNOCKOUT' | 'ROUND_ROBIN' | 'KNOCKOUT' | 'CUSTOM';
 type TournamentStatus = 'UPCOMING' | 'ONGOING' | 'COMPLETE';
+type CustomStageType =
+  | 'GROUP_STAGE'
+  | 'ROUND_ROBIN'
+  | 'QUARTERFINAL'
+  | 'SEMIFINAL'
+  | 'FINAL'
+  | 'PLAYOFFS'
+  | 'SWISS_STAGE';
+
+type CustomFormatStageInput = {
+  id?: string;
+  type?: string;
+  label?: string;
+  teamsIn?: number;
+  teamsAdvance?: number;
+  matchFormat?: string;
+  tieBreakers?: string[];
+  predictionLockHours?: number;
+};
+
+type CustomFormatInput = {
+  name?: string;
+  stages?: CustomFormatStageInput[];
+};
 
 const SPORT_TYPES = ['FOOTBALL', 'F1', 'LOL', 'OTHER'];
-const FORMATS = ['GROUP_AND_KNOCKOUT', 'ROUND_ROBIN', 'KNOCKOUT'];
+const FORMATS = ['GROUP_AND_KNOCKOUT', 'ROUND_ROBIN', 'KNOCKOUT', 'CUSTOM'];
 const STATUSES: TournamentStatus[] = ['UPCOMING', 'ONGOING', 'COMPLETE'];
 const VISIBILITIES = ['PUBLIC', 'PRIVATE'];
+const CUSTOM_STAGE_TYPES: CustomStageType[] = [
+  'GROUP_STAGE',
+  'ROUND_ROBIN',
+  'QUARTERFINAL',
+  'SEMIFINAL',
+  'FINAL',
+  'PLAYOFFS',
+  'SWISS_STAGE',
+];
 
 const STAGES_BY_FORMAT: Record<
-  TournamentFormat,
+  Exclude<TournamentFormat, 'CUSTOM'>,
   Array<{ name: string; isKnockout: boolean }>
 > = {
   ROUND_ROBIN: [
@@ -69,6 +103,10 @@ export class TournamentsService {
         t.name,
         t.sport_type AS "sportType",
         t.format,
+        CASE
+          WHEN cf.id IS NULL THEN NULL
+          ELSE jsonb_build_object('name', cf.name, 'stages', cf.definition->'stages')
+        END AS "customFormat",
         ${this.statusExpression('t.start_date', 't.end_date', 't.status')} AS status,
         t.visibility,
         t.start_date AS "startDate",
@@ -81,8 +119,9 @@ export class TournamentsService {
       FROM tournaments t
       LEFT JOIN tournament_participants tp ON tp.tournament_id = t.id
       LEFT JOIN matches m ON m.tournament_id = t.id
+      LEFT JOIN tournament_custom_formats cf ON cf.tournament_id = t.id
       ${visibilityCondition}
-      GROUP BY t.id
+      GROUP BY t.id, cf.id
       ORDER BY t.updated_at DESC, t.created_at DESC
     `);
 
@@ -95,6 +134,10 @@ export class TournamentsService {
 
   async createTournamentByAdmin(adminId: number, input: TournamentInput) {
     const data = this.normalizeInput(input, true);
+    const customFormat = this.normalizeCustomFormat(
+      input.customFormat,
+      data.format,
+    );
 
     const [row] = await this.usersRepository.query(
       `
@@ -126,7 +169,10 @@ export class TournamentsService {
       ],
     );
 
-    await this.ensureStagesForFormat(Number(row.id), data.format);
+    if (data.format === 'CUSTOM') {
+      await this.saveCustomFormat(Number(row.id), customFormat);
+    }
+    await this.ensureStagesForFormat(Number(row.id), data.format, customFormat);
 
     return {
       message: 'Tournament created successfully.',
@@ -161,6 +207,11 @@ export class TournamentsService {
     }
 
     const data = this.normalizeInput(input, false);
+    const customFormat = this.normalizeCustomFormat(
+      input.customFormat,
+      (data.format ?? current.format) as TournamentFormat,
+      data.format === 'CUSTOM',
+    );
     if (data.startDate !== undefined || data.endDate !== undefined) {
       data.status = this.calculateStatus(
         data.startDate === undefined ? current.startDate : data.startDate,
@@ -190,7 +241,16 @@ export class TournamentsService {
       }
     }
 
-    if (data.format && data.format !== current.format) {
+    const updatesCustomFormat =
+      data.format === 'CUSTOM' ||
+      (data.format === undefined &&
+        current.format === 'CUSTOM' &&
+        customFormat !== undefined);
+
+    if (
+      (data.format && data.format !== current.format) ||
+      updatesCustomFormat
+    ) {
       await this.assertFormatCanChange(id);
     }
 
@@ -240,8 +300,15 @@ export class TournamentsService {
       values,
     );
 
-    if (data.format && data.format !== current.format) {
+    if (data.format === 'CUSTOM') {
+      await this.saveCustomFormat(id, customFormat);
+      await this.replaceStagesForFormat(id, data.format, customFormat);
+    } else if (data.format && data.format !== current.format) {
+      await this.deleteCustomFormat(id);
       await this.replaceStagesForFormat(id, data.format);
+    } else if (current.format === 'CUSTOM' && customFormat !== undefined) {
+      await this.saveCustomFormat(id, customFormat);
+      await this.replaceStagesForFormat(id, 'CUSTOM', customFormat);
     }
 
     return {
@@ -446,11 +513,129 @@ export class TournamentsService {
     `;
   }
 
+  private normalizeCustomFormat(
+    input: CustomFormatInput | null | undefined,
+    format: TournamentFormat | undefined,
+    requireWhenCustom = true,
+  ): CustomFormatInput | undefined {
+    if (format !== 'CUSTOM' && input === undefined) {
+      return undefined;
+    }
+
+    if (format !== 'CUSTOM') {
+      return undefined;
+    }
+
+    if (!input) {
+      if (requireWhenCustom) {
+        throw new BadRequestException('Custom format definition is required.');
+      }
+
+      return undefined;
+    }
+
+    const name = input.name?.trim() || 'Custom Tournament Format';
+    const stages = Array.isArray(input.stages) ? input.stages : [];
+
+    if (stages.length === 0) {
+      throw new BadRequestException('Custom format must include at least one stage.');
+    }
+
+    if (stages.length > 12) {
+      throw new BadRequestException('Custom format supports up to 12 stages.');
+    }
+
+    return {
+      name,
+      stages: stages.map((stage, index) =>
+        this.normalizeCustomStage(stage, index),
+      ),
+    };
+  }
+
+  private normalizeCustomStage(
+    stage: CustomFormatStageInput,
+    index: number,
+  ): Required<CustomFormatStageInput> {
+    const type = stage.type?.trim().toUpperCase() as CustomStageType;
+
+    if (!CUSTOM_STAGE_TYPES.includes(type)) {
+      throw new BadRequestException('Invalid custom stage type.');
+    }
+
+    const label = stage.label?.trim() || this.defaultStageLabel(type);
+    const teamsIn = this.normalizeNonNegativeInteger(stage.teamsIn, 2);
+    const teamsAdvance = this.normalizeNonNegativeInteger(
+      stage.teamsAdvance,
+      type === 'FINAL' ? 1 : Math.max(1, Math.floor(teamsIn / 2)),
+    );
+    const matchFormat = stage.matchFormat?.trim().toUpperCase() || 'BO1';
+    const predictionLockHours = this.normalizeNonNegativeInteger(
+      stage.predictionLockHours,
+      24,
+    );
+
+    if (!['BO1', 'BO3', 'BO5'].includes(matchFormat)) {
+      throw new BadRequestException('Invalid custom stage match format.');
+    }
+
+    if (teamsAdvance > teamsIn) {
+      throw new BadRequestException(
+        'Custom stage teams advance cannot exceed teams in.',
+      );
+    }
+
+    return {
+      id: stage.id?.trim() || `${type}-${index + 1}`,
+      type,
+      label: label.slice(0, 100),
+      teamsIn,
+      teamsAdvance,
+      matchFormat,
+      tieBreakers: Array.isArray(stage.tieBreakers)
+        ? stage.tieBreakers
+            .map((tieBreaker) => tieBreaker.trim())
+            .filter(Boolean)
+            .slice(0, 8)
+        : [],
+      predictionLockHours,
+    };
+  }
+
+  private normalizeNonNegativeInteger(value: unknown, fallback: number) {
+    const numberValue = Number(value);
+
+    if (!Number.isFinite(numberValue)) {
+      return fallback;
+    }
+
+    return Math.max(0, Math.floor(numberValue));
+  }
+
+  private defaultStageLabel(type: CustomStageType) {
+    return {
+      GROUP_STAGE: 'Group Stage',
+      ROUND_ROBIN: 'Round Robin',
+      QUARTERFINAL: 'Quarterfinal',
+      SEMIFINAL: 'Semifinal',
+      FINAL: 'Final',
+      PLAYOFFS: 'Playoffs',
+      SWISS_STAGE: 'Swiss Stage',
+    }[type];
+  }
+
   private async ensureStagesForFormat(
     tournamentId: number,
     format: TournamentFormat | undefined,
+    customFormat?: CustomFormatInput,
   ) {
-    const stages = STAGES_BY_FORMAT[format ?? 'ROUND_ROBIN'];
+    const stages =
+      format === 'CUSTOM' && customFormat
+        ? customFormat.stages!.map((stage) => ({
+            name: stage.label!,
+            isKnockout: this.isCustomStageKnockout(stage.type as CustomStageType),
+          }))
+        : STAGES_BY_FORMAT[format ?? 'ROUND_ROBIN'];
 
     for (const [index, stage] of stages.entries()) {
       await this.usersRepository.query(
@@ -471,13 +656,51 @@ export class TournamentsService {
   private async replaceStagesForFormat(
     tournamentId: number,
     format: TournamentFormat,
+    customFormat?: CustomFormatInput,
   ) {
     await this.assertFormatCanChange(tournamentId);
     await this.usersRepository.query(
       'DELETE FROM stages WHERE tournament_id = $1',
       [tournamentId],
     );
-    await this.ensureStagesForFormat(tournamentId, format);
+    await this.ensureStagesForFormat(tournamentId, format, customFormat);
+  }
+
+  private isCustomStageKnockout(type: CustomStageType) {
+    return !['GROUP_STAGE', 'ROUND_ROBIN', 'SWISS_STAGE'].includes(type);
+  }
+
+  private async saveCustomFormat(
+    tournamentId: number,
+    customFormat: CustomFormatInput | undefined,
+  ) {
+    if (!customFormat) {
+      throw new BadRequestException('Custom format definition is required.');
+    }
+
+    await this.usersRepository.query(
+      `
+        INSERT INTO tournament_custom_formats (tournament_id, name, definition)
+        VALUES ($1, $2, $3::jsonb)
+        ON CONFLICT (tournament_id)
+        DO UPDATE SET
+          name = EXCLUDED.name,
+          definition = EXCLUDED.definition,
+          updated_at = NOW()
+      `,
+      [
+        tournamentId,
+        customFormat.name,
+        JSON.stringify({ stages: customFormat.stages }),
+      ],
+    );
+  }
+
+  private async deleteCustomFormat(tournamentId: number) {
+    await this.usersRepository.query(
+      'DELETE FROM tournament_custom_formats WHERE tournament_id = $1',
+      [tournamentId],
+    );
   }
 
   private async assertFormatCanChange(tournamentId: number) {

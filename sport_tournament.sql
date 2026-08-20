@@ -45,6 +45,10 @@ IF OBJECT_ID('stages', 'U') IS NOT NULL
     DROP TABLE stages;
 GO
 
+IF OBJECT_ID('tournament_custom_formats', 'U') IS NOT NULL
+    DROP TABLE tournament_custom_formats;
+GO
+
 IF OBJECT_ID('tournament_participants', 'U') IS NOT NULL
     DROP TABLE tournament_participants;
 GO
@@ -95,13 +99,25 @@ CREATE TABLE tournaments (
     CHECK (sport_type IN ('FOOTBALL', 'F1', 'LOL', 'OTHER')),
 
     CONSTRAINT chk_tournaments_format
-    CHECK (format IN ('GROUP_AND_KNOCKOUT', 'ROUND_ROBIN', 'KNOCKOUT')),
+    CHECK (format IN ('GROUP_AND_KNOCKOUT', 'ROUND_ROBIN', 'KNOCKOUT', 'CUSTOM')),
 
     CONSTRAINT chk_tournaments_status
-    CHECK (status IN ('UPCOMING', 'ACTIVE', 'COMPLETED', 'CANCELLED')),
+    CHECK (status IN ('UPCOMING', 'ONGOING', 'COMPLETE')),
 
     CONSTRAINT chk_tournaments_visibility
     CHECK (visibility IN ('PUBLIC', 'PRIVATE'))
+);
+
+CREATE TABLE tournament_custom_formats (
+    id INT IDENTITY(1,1) PRIMARY KEY,
+    tournament_id INT NOT NULL UNIQUE,
+    name NVARCHAR(255) NOT NULL,
+    definition NVARCHAR(MAX) NOT NULL,
+    created_at DATETIME2 NOT NULL DEFAULT SYSDATETIME(),
+    updated_at DATETIME2 NOT NULL DEFAULT SYSDATETIME(),
+
+    CONSTRAINT fk_tournament_custom_formats_tournament
+    FOREIGN KEY (tournament_id) REFERENCES tournaments(id)
 );
 
 CREATE TABLE tournament_participants (

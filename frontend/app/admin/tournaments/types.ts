@@ -27,6 +27,7 @@ export type TournamentRow = {
   name: string;
   sportType?: string;
   format?: TournamentFormat;
+  customFormat?: CustomTournamentFormat | null;
   status: string;
   visibility: "PUBLIC" | "PRIVATE";
   startDate?: string | null;
@@ -49,12 +50,39 @@ export type TournamentStage = {
 export type TournamentFormat =
   | "GROUP_AND_KNOCKOUT"
   | "ROUND_ROBIN"
-  | "KNOCKOUT";
+  | "KNOCKOUT"
+  | "CUSTOM";
+
+export type CustomStageType =
+  | "GROUP_STAGE"
+  | "ROUND_ROBIN"
+  | "QUARTERFINAL"
+  | "SEMIFINAL"
+  | "FINAL"
+  | "PLAYOFFS"
+  | "SWISS_STAGE";
+
+export type CustomTournamentStage = {
+  id: string;
+  type: CustomStageType;
+  label: string;
+  teamsIn: number;
+  teamsAdvance: number;
+  matchFormat: "BO1" | "BO3" | "BO5";
+  tieBreakers: string[];
+  predictionLockHours: number;
+};
+
+export type CustomTournamentFormat = {
+  name: string;
+  stages: CustomTournamentStage[];
+};
 
 export type TournamentForm = {
   name: string;
   sportType: "FOOTBALL" | "F1" | "LOL" | "OTHER";
   format: TournamentFormat;
+  customFormat: CustomTournamentFormat | null;
   status: "UPCOMING" | "ONGOING" | "COMPLETE";
   visibility: "PUBLIC" | "PRIVATE";
   startDate: string;

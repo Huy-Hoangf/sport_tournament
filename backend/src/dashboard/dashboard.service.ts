@@ -22,6 +22,10 @@ type DashboardTournamentRow = {
   name: string;
   sportType: string;
   format: string | null;
+  customFormat: {
+    name: string;
+    stages: unknown[];
+  } | null;
   status: string;
   visibility: TournamentVisibility | null;
   teams: string | number | null;
@@ -145,6 +149,7 @@ export class DashboardService {
         name: row.name,
         sportType: row.sportType,
         format: row.format ?? 'ROUND_ROBIN',
+        customFormat: row.customFormat ?? null,
         status: row.status,
         teams: Number(row.teams ?? 0),
         matches: Number(row.matches ?? 0),
@@ -285,6 +290,10 @@ export class DashboardService {
         t.name,
         t.sport_type AS "sportType",
         t.format,
+        CASE
+          WHEN cf.id IS NULL THEN NULL
+          ELSE jsonb_build_object('name', cf.name, 'stages', cf.definition->'stages')
+        END AS "customFormat",
         ${this.tournamentStatusExpression('t.start_date', 't.end_date', 't.status')} AS status,
         t.visibility,
         t.start_date AS "startDate",
@@ -305,6 +314,7 @@ export class DashboardService {
       LEFT JOIN teams team ON team.tournament_id = t.id
         AND LOWER(TRIM(team.name)) NOT IN ('tbd', 'team 1', 'team 2', 'home team', 'away team')
       LEFT JOIN matches m ON ${matchJoinCondition}
+      LEFT JOIN tournament_custom_formats cf ON cf.tournament_id = t.id
       LEFT JOIN teams home_team ON home_team.id = m.home_team_id
       LEFT JOIN teams away_team ON away_team.id = m.away_team_id
       LEFT JOIN LATERAL (
@@ -315,7 +325,7 @@ export class DashboardService {
         AND LOWER(TRIM(effective_team.name)) NOT IN ('tbd', 'team 1', 'team 2', 'home team', 'away team')
       LEFT JOIN stages s ON s.tournament_id = t.id
       ${whereClause}
-      GROUP BY t.id, t.name, t.sport_type, t.format, t.status, t.visibility, t.start_date, t.end_date, t.updated_at, t.created_at
+      GROUP BY t.id, t.name, t.sport_type, t.format, cf.id, t.status, t.visibility, t.start_date, t.end_date, t.updated_at, t.created_at
       ORDER BY
         CASE ${this.tournamentStatusExpression('t.start_date', 't.end_date', 't.status')}
           WHEN 'ONGOING' THEN 0

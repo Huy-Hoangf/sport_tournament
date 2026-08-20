@@ -42,12 +42,14 @@ const stagesByFormat: Record<NonNullable<TournamentRow["format"]>, string[]> = {
     "Semi Finals",
     "Final",
   ],
+  CUSTOM: ["Custom Stage"],
 };
 
 const formatLabels: Record<NonNullable<TournamentRow["format"]>, string> = {
   ROUND_ROBIN: "Round Robin",
   KNOCKOUT: "Knockout",
   GROUP_AND_KNOCKOUT: "Group + Knockout",
+  CUSTOM: "Custom Format",
 };
 export function TournamentDetailView({
   tournament,
@@ -202,7 +204,11 @@ export function TournamentDetailView({
 
           <StageStrip
             stages={stageItems}
-            formatLabel={formatLabels[tournamentFormat]}
+            formatLabel={
+              tournamentFormat === "CUSTOM"
+                ? (tournament.customFormat?.name ?? formatLabels.CUSTOM)
+                : formatLabels[tournamentFormat]
+            }
             onOpenStageMatches={onOpenStageMatches}
           />
 

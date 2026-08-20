@@ -20,6 +20,7 @@ import {
   FootballCompetitionGroup,
   LolCompetitionGroup,
 } from "./tournaments/import-groups";
+import { CustomFormatBuilderModal } from "./tournaments/custom-format-builder";
 import { TournamentDetailView } from "./tournaments/tournament-detail/tournament-detail-view";
 import { TournamentManagementTable } from "./tournaments/tournament-table";
 import type {
@@ -50,6 +51,7 @@ const emptyTournamentForm: TournamentForm = {
   name: "",
   sportType: "FOOTBALL",
   format: "ROUND_ROBIN",
+  customFormat: null,
   status: "UPCOMING",
   visibility: "PUBLIC",
   startDate: "",
@@ -67,6 +69,7 @@ const tournamentFormatOptions = [
   { value: "ROUND_ROBIN", label: "Round Robin" },
   { value: "KNOCKOUT", label: "Knockout" },
   { value: "GROUP_AND_KNOCKOUT", label: "Group + Knockout" },
+  { value: "CUSTOM", label: "Custom" },
 ] satisfies Array<{ value: TournamentForm["format"]; label: string }>;
 
 const emptyDashboard: DashboardData = {
@@ -116,6 +119,8 @@ export default function AdminDashboardContent({
   const [isMutating, setIsMutating] = useState(false);
   const [notice, setNotice] = useState<Notice | null>(null);
   const [openTournamentForm, setOpenTournamentForm] = useState(false);
+  const [openCustomFormatBuilder, setOpenCustomFormatBuilder] =
+    useState(false);
   const [openImportApiModal, setOpenImportApiModal] = useState(false);
   const [openSyncApiModal, setOpenSyncApiModal] = useState(false);
   const [confirmResetApiData, setConfirmResetApiData] = useState(false);
@@ -562,6 +567,7 @@ export default function AdminDashboardContent({
           ? tournament.sportType
           : "FOOTBALL",
       format: tournament.format ?? "ROUND_ROBIN",
+      customFormat: tournament.customFormat ?? null,
       status: normalizeStatus(tournament.status),
       visibility: tournament.visibility ?? "PUBLIC",
       startDate: toDateInputValue(tournament.startDate),
@@ -694,6 +700,14 @@ export default function AdminDashboardContent({
 
     if (!effectiveTournamentName.trim()) {
       showNotice("Tournament name is required.", "error");
+      return;
+    }
+
+    if (
+      tournamentForm.format === "CUSTOM" &&
+      !tournamentForm.customFormat?.stages.length
+    ) {
+      showNotice("Create at least one custom format stage first.", "error");
       return;
     }
 
@@ -1279,6 +1293,31 @@ export default function AdminDashboardContent({
                 />
               </label>
             </div>
+            <div className="mb-4 rounded border border-[#244850] bg-[#07181d] p-4">
+              <div className="flex flex-wrap items-center justify-between gap-3">
+                <div>
+                  <p className="text-xs font-black uppercase tracking-[0.12em] text-[#84d8e8]">
+                    Custom Format
+                  </p>
+                  <p className="mt-1 text-sm font-bold text-[#9fb2b8]">
+                    {tournamentForm.customFormat
+                      ? `${tournamentForm.customFormat.name} · ${tournamentForm.customFormat.stages.length} stages`
+                      : "Create a drag-and-drop format with custom stages and rules."}
+                  </p>
+                </div>
+                <button
+                  type="button"
+                  onClick={() => setOpenCustomFormatBuilder(true)}
+                  disabled={isActiveTournamentEdit}
+                  className="inline-flex h-11 items-center gap-2 rounded border border-[#84d8e8] bg-[#102d35] px-4 text-xs font-black uppercase tracking-[0.08em] text-[#84d8e8] transition hover:bg-[#173742] disabled:cursor-not-allowed disabled:opacity-50"
+                >
+                  <Plus size={16} />
+                  {tournamentForm.customFormat
+                    ? "Edit Custom Format"
+                    : "Create Custom Format"}
+                </button>
+              </div>
+            </div>
             {isActiveTournamentEdit && (
               <p className="mt-1 text-xs font-bold text-[#84d8e8]">
                 Ongoing tournaments lock name, visibility, sport type and
@@ -1302,6 +1341,22 @@ export default function AdminDashboardContent({
             </div>
           </div>
         </div>
+      )}
+
+      {openCustomFormatBuilder && (
+        <CustomFormatBuilderModal
+          tournamentName={tournamentForm.name}
+          initialFormat={tournamentForm.customFormat}
+          onCancel={() => setOpenCustomFormatBuilder(false)}
+          onSave={(customFormat) => {
+            setTournamentForm((form) => ({
+              ...form,
+              format: "CUSTOM",
+              customFormat,
+            }));
+            setOpenCustomFormatBuilder(false);
+          }}
+        />
       )}
 
       {tournamentToDelete && (

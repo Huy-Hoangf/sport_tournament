@@ -38,8 +38,23 @@ export class TournamentsController {
       name: string;
       sportType?: string;
       format?: string;
+      customFormat?: {
+        name?: string;
+        stages?: Array<{
+          id?: string;
+          type?: string;
+          label?: string;
+          teamsIn?: number;
+          teamsAdvance?: number;
+          matchFormat?: string;
+          tieBreakers?: string[];
+          predictionLockHours?: number;
+        }>;
+      } | null;
       status?: string;
       visibility?: string;
+      startDate?: string | null;
+      endDate?: string | null;
     },
   ) {
     const admin = await this.authService.verifyAdminToken(authorization);
@@ -55,8 +70,23 @@ export class TournamentsController {
       name?: string;
       sportType?: string;
       format?: string;
+      customFormat?: {
+        name?: string;
+        stages?: Array<{
+          id?: string;
+          type?: string;
+          label?: string;
+          teamsIn?: number;
+          teamsAdvance?: number;
+          matchFormat?: string;
+          tieBreakers?: string[];
+          predictionLockHours?: number;
+        }>;
+      } | null;
       status?: string;
       visibility?: string;
+      startDate?: string | null;
+      endDate?: string | null;
     },
   ) {
     await this.authService.verifyAdminToken(authorization);
