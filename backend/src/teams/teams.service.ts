@@ -19,6 +19,10 @@ type UpdateTeamInput = {
   players: Array<{ name?: string }>;
 };
 
+type DeleteTeamInput = {
+  teamId: number;
+};
+
 @Injectable()
 export class TeamsService {
   constructor(
@@ -65,7 +69,13 @@ export class TeamsService {
             vt.sport_type,
             team.id AS team_id,
             team.name,
-            team.logo_url AS "logoUrl"
+            team.logo_url AS "logoUrl",
+            (
+              SELECT COUNT(*)
+              FROM matches match_count
+              WHERE match_count.home_team_id = team.id
+                 OR match_count.away_team_id = team.id
+            ) AS "directMatchCount"
           FROM teams team
           JOIN visible_tournaments vt ON vt.id = team.tournament_id
           WHERE LOWER(TRIM(team.name)) NOT IN ('tbd', 'team 1', 'team 2', 'home team', 'away team')
@@ -174,6 +184,7 @@ export class TeamsService {
             bt."logoUrl",
             COALESCE(id_stats.stage, name_stats.stage, 'Roster') AS stage,
             COALESCE(id_stats.matches, name_stats.matches, 0) AS matches,
+            COALESCE(bt."directMatchCount", 0) AS "directMatchCount",
             COALESCE(id_stats.wins, name_stats.wins, 0) AS wins,
             COALESCE(id_stats.losses, name_stats.losses, 0) AS losses,
             COALESCE(id_stats.draws, name_stats.draws, 0) AS draws,
@@ -199,6 +210,7 @@ export class TeamsService {
             NULL AS "logoUrl",
             COALESCE(stage, 'Main Stage') AS stage,
             matches,
+            0 AS "directMatchCount",
             wins,
             losses,
             draws,
@@ -213,6 +225,7 @@ export class TeamsService {
           "logoUrl",
           stage,
           matches,
+          "directMatchCount",
           wins,
           losses,
           draws,
@@ -233,6 +246,7 @@ export class TeamsService {
       logoUrl: row.logoUrl ?? null,
       stage: row.stage ?? 'Main Stage',
       matches: Number(row.matches ?? 0),
+      directMatchCount: Number(row.directMatchCount ?? 0),
       wins: Number(row.wins ?? 0),
       losses: Number(row.losses ?? 0),
       draws: Number(row.draws ?? 0),
@@ -264,6 +278,12 @@ export class TeamsService {
           team.tournament_id AS "tournamentId",
           team.name,
           team.logo_url AS "logoUrl",
+          (
+            SELECT COUNT(*)
+            FROM matches match_count
+            WHERE match_count.home_team_id = team.id
+               OR match_count.away_team_id = team.id
+          ) AS "directMatchCount",
           ${this.tournamentStatusExpression('t.start_date', 't.end_date', 't.status')} AS "tournamentStatus"
         FROM teams team
         JOIN tournaments t ON t.id = team.tournament_id
@@ -295,6 +315,7 @@ export class TeamsService {
       logoUrl: team.logoUrl ?? null,
       tournamentStatus: team.tournamentStatus,
       locked: team.tournamentStatus === 'ONGOING',
+      directMatchCount: Number(team.directMatchCount ?? 0),
       players: players.map((player) => ({
         id: Number(player.id),
         name: player.name,
@@ -491,6 +512,68 @@ export class TeamsService {
         name: teamName,
         members: uniquePlayerNames.length,
       },
+    };
+  }
+
+  async deleteTeam(input: DeleteTeamInput) {
+    const teamId = input.teamId;
+
+    if (!Number.isInteger(teamId) || teamId <= 0) {
+      throw new BadRequestException('Invalid team id.');
+    }
+
+    const [team] = await this.usersRepository.query(
+      `
+        SELECT
+          team.id,
+          team.name,
+          team.tournament_id AS "tournamentId",
+          ${this.tournamentStatusExpression('t.start_date', 't.end_date', 't.status')} AS "tournamentStatus",
+          (
+            SELECT COUNT(*)
+            FROM matches match_count
+            WHERE match_count.home_team_id = team.id
+               OR match_count.away_team_id = team.id
+          ) AS "directMatchCount"
+        FROM teams team
+        JOIN tournaments t ON t.id = team.tournament_id
+        WHERE team.id = $1
+        LIMIT 1
+      `,
+      [teamId],
+    );
+
+    if (!team) {
+      throw new NotFoundException('Team not found.');
+    }
+
+    if (team.tournamentStatus === 'ONGOING') {
+      throw new BadRequestException(
+        'Cannot delete team while tournament is ongoing.',
+      );
+    }
+
+    if (team.tournamentStatus === 'COMPLETE') {
+      throw new BadRequestException(
+        'Completed tournaments are read-only. Export data instead.',
+      );
+    }
+
+    if (Number(team.directMatchCount ?? 0) > 0) {
+      throw new BadRequestException(
+        'Cannot delete team after matches have been created.',
+      );
+    }
+
+    await this.usersRepository.query('DELETE FROM teams WHERE id = $1', [
+      teamId,
+    ]);
+
+    return {
+      message: 'Team deleted successfully.',
+      deletedId: teamId,
+      tournamentId: Number(team.tournamentId),
+      teamName: team.name,
     };
   }
 

@@ -25,6 +25,7 @@ type TeamRow = {
   score: number;
   points: number;
   matches: number;
+  directMatchCount?: number;
   members: number;
 };
 
@@ -40,7 +41,13 @@ type TeamDetail = {
   logoUrl?: string | null;
   tournamentStatus: string;
   locked: boolean;
+  directMatchCount?: number;
   players: TeamPlayerRow[];
+};
+
+type TeamDeletePolicy = {
+  canDelete: boolean;
+  reason: string;
 };
 
 export function TeamsTab({
@@ -66,6 +73,9 @@ export function TeamsTab({
   const [teamDetailError, setTeamDetailError] = useState<string | null>(null);
   const [isLoadingTeamDetail, setIsLoadingTeamDetail] = useState(false);
   const [isSavingTeamDetail, setIsSavingTeamDetail] = useState(false);
+  const [teamToDelete, setTeamToDelete] = useState<TeamRow | null>(null);
+  const [deleteTeamError, setDeleteTeamError] = useState<string | null>(null);
+  const [isDeletingTeam, setIsDeletingTeam] = useState(false);
   const [teamName, setTeamName] = useState("");
   const [playerNames, setPlayerNames] = useState([""]);
   const [registerTeamError, setRegisterTeamError] = useState<string | null>(
@@ -157,6 +167,24 @@ export function TeamsTab({
     setTeamDetailError(null);
   }
 
+  function requestDeleteTeam(team: TeamRow) {
+    const policy = getTeamDeletePolicy(tournament.status, team);
+
+    if (!canManage) {
+      onUnavailableFeature();
+      return;
+    }
+
+    if (!team.id || !policy.canDelete) {
+      setDeleteTeamError(policy.reason);
+      setTeamToDelete(team);
+      return;
+    }
+
+    setDeleteTeamError(null);
+    setTeamToDelete(team);
+  }
+
   async function openTeamDetail(team: TeamRow) {
     if (!team.id) {
       return;
@@ -245,6 +273,30 @@ export function TeamsTab({
       );
     } finally {
       setIsSavingTeamDetail(false);
+    }
+  }
+
+  async function deleteTeam() {
+    if (!teamToDelete?.id) {
+      return;
+    }
+
+    setIsDeletingTeam(true);
+    setDeleteTeamError(null);
+
+    try {
+      await apiRequest(`/teams/${teamToDelete.id}`, {
+        method: "DELETE",
+      });
+      setTeamToDelete(null);
+      setPage(1);
+      await loadTeams();
+    } catch (error) {
+      setDeleteTeamError(
+        error instanceof Error ? error.message : "Cannot delete team.",
+      );
+    } finally {
+      setIsDeletingTeam(false);
     }
   }
 
@@ -389,8 +441,8 @@ export function TeamsTab({
 
       <div className="overflow-hidden border border-[#243c43] bg-[#0d252d]">
         <div className="overflow-x-auto">
-          <div className="min-w-[1030px]">
-            <div className="grid grid-cols-[72px_minmax(250px,1fr)_80px_80px_80px_80px_90px_92px_90px_90px] gap-x-5 border-b border-[#243c43] bg-[#10242b] px-5 py-4 text-[10px] font-black uppercase tracking-[0.1em] text-[#9fb2b8]">
+          <div className="min-w-[1130px]">
+            <div className="grid grid-cols-[72px_minmax(250px,1fr)_80px_80px_80px_80px_90px_92px_90px_90px_100px] gap-x-5 border-b border-[#243c43] bg-[#10242b] px-5 py-4 text-[10px] font-black uppercase tracking-[0.1em] text-[#9fb2b8]">
               <span>Rank</span>
               <span>Team Identity</span>
               <span>Pts</span>
@@ -401,6 +453,7 @@ export function TeamsTab({
               <span>Trend</span>
               <span>Members</span>
               <span>Matches</span>
+              <span>Action</span>
             </div>
             <div className="divide-y divide-[#243c43]">
               {visibleRows.map((team, index) => (
@@ -410,6 +463,9 @@ export function TeamsTab({
                   rank={start + index + 1}
                   highlighted={index === 0}
                   onOpen={() => void openTeamDetail(team)}
+                  canManage={canManage}
+                  deletePolicy={getTeamDeletePolicy(tournament.status, team)}
+                  onDelete={() => requestDeleteTeam(team)}
                 />
               ))}
               {visibleRows.length === 0 && (
@@ -552,6 +608,83 @@ export function TeamsTab({
         </div>
       )}
 
+      {teamToDelete && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/70 px-4">
+          <div className="w-full max-w-lg border border-[#8a3d3d] bg-[#102b33] p-6 shadow-2xl shadow-black/50">
+            <div className="flex items-start justify-between gap-4">
+              <div>
+                <h3 className="text-2xl font-black text-[#ff9d9d]">
+                  Delete Team
+                </h3>
+                <p className="mt-1 text-sm font-bold text-[#9fb2b8]">
+                  {tournament.name}
+                </p>
+              </div>
+              <button
+                type="button"
+                onClick={() => {
+                  setTeamToDelete(null);
+                  setDeleteTeamError(null);
+                }}
+                disabled={isDeletingTeam}
+                className="grid h-10 w-10 place-items-center border border-[#314850] text-[#9fb2b8] transition hover:border-[#84d8e8] hover:text-[#84d8e8] disabled:opacity-60"
+                aria-label="Close delete team modal"
+              >
+                <X size={18} />
+              </button>
+            </div>
+            <p className="mt-5 text-base font-black text-white">
+              Delete{" "}
+              <span className="text-[#ffb4b4]">{teamToDelete.name}</span>?
+            </p>
+            <p className="mt-2 text-sm font-bold text-[#9fb2b8]">
+              Teams can only be deleted while the tournament is upcoming and
+              before matches are created for that team.
+            </p>
+            <div className="mt-4 border border-[#31515a] bg-[#071516] p-4 text-sm font-bold text-[#dce8eb]">
+              <p>Status: {tournament.status.toUpperCase()}</p>
+              <p className="mt-1">
+                Team matches:{" "}
+                {(teamToDelete.directMatchCount ?? teamToDelete.matches).toLocaleString()}
+              </p>
+            </div>
+            {(deleteTeamError ||
+              !getTeamDeletePolicy(tournament.status, teamToDelete)
+                .canDelete) && (
+              <p className="mt-4 border border-[#8a3d3d] bg-[#2a1114] px-4 py-3 text-sm font-bold text-[#ffb4b4]">
+                {deleteTeamError ??
+                  getTeamDeletePolicy(tournament.status, teamToDelete).reason}
+              </p>
+            )}
+            <div className="mt-6 flex justify-end gap-3">
+              <button
+                type="button"
+                onClick={() => {
+                  setTeamToDelete(null);
+                  setDeleteTeamError(null);
+                }}
+                disabled={isDeletingTeam}
+                className="h-11 border border-[#31515a] px-5 text-sm font-black text-[#dce8eb] transition hover:border-[#84d8e8] hover:text-[#84d8e8] disabled:opacity-60"
+              >
+                Cancel
+              </button>
+              <button
+                type="button"
+                onClick={() => void deleteTeam()}
+                disabled={
+                  isDeletingTeam ||
+                  !getTeamDeletePolicy(tournament.status, teamToDelete)
+                    .canDelete
+                }
+                className="h-11 border border-[#ff8a8a] bg-[#341216] px-5 text-sm font-black text-[#ffb4b4] transition hover:bg-[#461920] disabled:cursor-not-allowed disabled:opacity-60"
+              >
+                {isDeletingTeam ? "Deleting..." : "Delete Team"}
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+
       {(selectedTeamDetail || isLoadingTeamDetail || teamDetailError) && (
         <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/70 px-4">
           <form
@@ -681,11 +814,17 @@ function TeamTableRow({
   rank,
   highlighted,
   onOpen,
+  canManage,
+  deletePolicy,
+  onDelete,
 }: {
   team: TeamRow;
   rank: number;
   highlighted: boolean;
   onOpen: () => void;
+  canManage: boolean;
+  deletePolicy: TeamDeletePolicy;
+  onDelete: () => void;
 }) {
   const trend =
     team.wins > 0 && team.wins >= team.losses
@@ -699,7 +838,7 @@ function TeamTableRow({
       type="button"
       onClick={onOpen}
       disabled={!team.id}
-      className={`grid w-full grid-cols-[72px_minmax(250px,1fr)_80px_80px_80px_80px_90px_92px_90px_90px] items-center gap-x-5 px-5 py-4 text-left text-sm ${
+      className={`grid w-full grid-cols-[72px_minmax(250px,1fr)_80px_80px_80px_80px_90px_92px_90px_90px_100px] items-center gap-x-5 px-5 py-4 text-left text-sm ${
         highlighted ? "bg-[#18343d]" : "bg-[#0d252d]"
       } transition enabled:hover:bg-[#1b3b45] disabled:cursor-default`}
     >
@@ -747,6 +886,34 @@ function TeamTableRow({
       </span>
       <TeamNumber value={team.members} />
       <TeamNumber value={team.matches} />
+      <span>
+        {canManage && (
+          <span
+            role="button"
+            tabIndex={0}
+            title={deletePolicy.canDelete ? "Delete team" : deletePolicy.reason}
+            onClick={(event) => {
+              event.stopPropagation();
+              onDelete();
+            }}
+            onKeyDown={(event) => {
+              if (event.key === "Enter" || event.key === " ") {
+                event.preventDefault();
+                event.stopPropagation();
+                onDelete();
+              }
+            }}
+            className={`inline-flex h-9 items-center gap-2 border px-3 text-[10px] font-black uppercase tracking-[0.08em] transition ${
+              deletePolicy.canDelete
+                ? "border-[#ff8a8a] bg-[#341216] text-[#ff9d9d] hover:bg-[#461920]"
+                : "cursor-not-allowed border-[#314850] bg-[#10242b] text-[#789098]"
+            }`}
+          >
+            <Trash2 size={14} />
+            Delete
+          </span>
+        )}
+      </span>
     </button>
   );
 }
@@ -867,6 +1034,7 @@ function normalizeTeamRow(row: TeamRow, sportType?: string): TeamRow {
     logoUrl: row.logoUrl ?? null,
     points: Number(row.points ?? fallbackPoints),
     matches: Number(row.matches ?? 0),
+    directMatchCount: Number(row.directMatchCount ?? row.matches ?? 0),
     members: Number(row.members ?? 0),
   };
 }
@@ -889,6 +1057,7 @@ function ensureTeam(teams: Map<string, TeamRow>, name: string, stage: string) {
     score: 0,
     points: 0,
     matches: 0,
+    directMatchCount: 0,
     members: 0,
   };
 
@@ -930,4 +1099,49 @@ function toCssUrl(value: string) {
 
 function isTournamentTeamLocked(status: string) {
   return ["ACTIVE", "ONGOING"].includes(status.toUpperCase());
+}
+
+function getTeamDeletePolicy(
+  status: string,
+  team?: TeamRow | null,
+): TeamDeletePolicy {
+  const normalizedStatus = status.toUpperCase();
+  const directMatchCount = Number(team?.directMatchCount ?? team?.matches ?? 0);
+
+  if (normalizedStatus === "ONGOING" || normalizedStatus === "ACTIVE") {
+    return {
+      canDelete: false,
+      reason: "Cannot delete team while tournament is ongoing.",
+    };
+  }
+
+  if (
+    normalizedStatus === "COMPLETE" ||
+    normalizedStatus === "COMPLETED" ||
+    normalizedStatus === "FINISHED"
+  ) {
+    return {
+      canDelete: false,
+      reason: "Completed tournaments are read-only. Export data instead.",
+    };
+  }
+
+  if (!team?.id) {
+    return {
+      canDelete: false,
+      reason: "Only registered teams can be deleted.",
+    };
+  }
+
+  if (directMatchCount > 0) {
+    return {
+      canDelete: false,
+      reason: "Cannot delete team after matches have been created.",
+    };
+  }
+
+  return {
+    canDelete: true,
+    reason: "Delete team",
+  };
 }

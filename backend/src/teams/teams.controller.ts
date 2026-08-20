@@ -1,6 +1,7 @@
 import {
   Body,
   Controller,
+  Delete,
   Get,
   Headers,
   Param,
@@ -85,6 +86,18 @@ export class TeamsController {
       teamId: Number(teamId),
       teamName: body.teamName ?? '',
       players: body.players ?? [],
+    });
+  }
+
+  @Delete(':teamId')
+  async deleteTeam(
+    @Headers('authorization') authorization: string | undefined,
+    @Param('teamId') teamId: string,
+  ) {
+    await this.authService.verifyAdminToken(authorization);
+
+    return this.teamsService.deleteTeam({
+      teamId: Number(teamId),
     });
   }
 }
