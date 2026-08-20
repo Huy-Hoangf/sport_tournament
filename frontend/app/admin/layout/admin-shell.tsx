@@ -193,7 +193,7 @@ export function AdminShell({
             className="mb-7 flex items-center gap-4 text-xl text-[#e2edf0]"
           >
             <Settings size={21} />
-            Setting
+            Change Password
           </button>
 
           <button
