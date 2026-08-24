@@ -98,6 +98,10 @@ export function getFootballCompetitionPhase(competition: FootballCompetitionOpti
   const start = competition.start ? new Date(competition.start) : null;
   const end = competition.end ? new Date(competition.end) : null;
 
+  if (!start && !end) {
+    return "upcoming";
+  }
+
   if ((!start || start <= now) && (!end || end >= now)) {
     return "ongoing";
   }

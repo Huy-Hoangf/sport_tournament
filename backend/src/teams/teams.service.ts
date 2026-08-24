@@ -586,7 +586,8 @@ export class TeamsService {
       CASE
         WHEN ${endColumn} IS NOT NULL AND ${endColumn} < NOW() THEN 'COMPLETE'
         WHEN ${startColumn} IS NOT NULL AND ${startColumn} > NOW() THEN 'UPCOMING'
-        WHEN ${startColumn} IS NOT NULL OR ${endColumn} IS NOT NULL THEN 'ONGOING'
+        WHEN ${startColumn} IS NOT NULL AND ${startColumn} <= NOW()
+          AND (${endColumn} IS NULL OR ${endColumn} >= NOW()) THEN 'ONGOING'
         WHEN ${fallbackColumn} IN ('ACTIVE', 'LIVE', 'ONGOING') THEN 'ONGOING'
         WHEN ${fallbackColumn} IN ('COMPLETED', 'COMPLETE', 'FINISHED', 'CANCELLED', 'CANCELED') THEN 'COMPLETE'
         ELSE 'UPCOMING'

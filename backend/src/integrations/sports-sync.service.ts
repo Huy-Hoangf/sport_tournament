@@ -438,17 +438,27 @@ export class SportsApiSyncService {
       try {
         const isAseanChampionship =
           league.name.trim().toLowerCase() === 'asean championship';
-        const tournamentStatus = this.resolveFootballTournamentStatus(
-          league.season,
-          league.start,
-          league.end,
-          league.current,
-          isAseanChampionship,
-        );
         const fixtures = isAseanChampionship
           ? await this.fetchAseanChampionshipFixtures(league.season, true)
-          : await this.fetchFootballDataOrgFixturesForLeague(league.id, true);
+          : await this.fetchFootballDataOrgFixturesForLeague(
+              league.id,
+              league.season,
+              true,
+            );
         const competitionName = fixtures[0]?.league?.name || league.name;
+        const fixtureRange = this.getFixtureDateRange(fixtures);
+        const tournamentStatus = fixtureRange
+          ? this.mapTournamentStatusFromDates(
+              fixtureRange.start,
+              fixtureRange.end,
+            )
+          : this.resolveFootballTournamentStatus(
+              league.season,
+              null,
+              null,
+              league.current,
+              isAseanChampionship,
+            );
 
         if (!competitionName) {
           continue;
@@ -459,8 +469,8 @@ export class SportsApiSyncService {
             adminId,
             competitionName,
             tournamentStatus,
-            league.start,
-            league.end,
+            fixtureRange?.start ?? null,
+            fixtureRange?.end ?? null,
           );
           competitionCount += 1;
           continue;
@@ -471,6 +481,7 @@ export class SportsApiSyncService {
           fixtures,
           isAseanChampionship ? 'ESPN_ASEAN' : 'FOOTBALL_DATA',
           tournamentStatus,
+          fixtureRange,
         );
 
         if (importedMatches > 0) {
@@ -809,17 +820,21 @@ export class SportsApiSyncService {
     let matchCount = 0;
 
     for (const competition of this.listFootballCompetitions()) {
-      const tournamentStatus = this.resolveFootballTournamentStatus(
-        competition.season,
-        competition.start,
-        competition.end,
-        competition.current,
-        false,
-      );
       const fixtures = await this.fetchFootballDataOrgFixturesForLeague(
         competition.id,
+        competition.season,
         true,
       );
+      const fixtureRange = this.getFixtureDateRange(fixtures);
+      const tournamentStatus = fixtureRange
+        ? this.mapTournamentStatusFromDates(fixtureRange.start, fixtureRange.end)
+        : this.resolveFootballTournamentStatus(
+            competition.season,
+            null,
+            null,
+            competition.current,
+            false,
+          );
 
       if (fixtures.length === 0) {
         continue;
@@ -830,6 +845,7 @@ export class SportsApiSyncService {
         fixtures,
         'FOOTBALL_DATA',
         tournamentStatus,
+        fixtureRange,
       );
 
       if (importedMatches > 0) {
@@ -853,6 +869,7 @@ export class SportsApiSyncService {
     matches: Iterable<FootballMatch>,
     source: 'FOOTBALL_DATA' | 'ESPN_ASEAN' = 'FOOTBALL_DATA',
     tournamentStatusOverride?: TournamentStatus,
+    tournamentDateRange?: { start: string; end: string } | null,
   ) {
     await this.ensureTeamLogoColumn();
     let matchCount = 0;
@@ -868,8 +885,8 @@ export class SportsApiSyncService {
         status:
           tournamentStatusOverride ??
           this.mapTournamentStatus(match.fixture.status?.short ?? ''),
-        startDate: match.league.startDate,
-        endDate: match.league.endDate,
+        startDate: tournamentDateRange?.start ?? match.league.startDate,
+        endDate: tournamentDateRange?.end ?? match.league.endDate,
         adminId,
       });
       const stageId = await this.upsertStage(tournamentId, 'API Feed');
@@ -996,6 +1013,7 @@ export class SportsApiSyncService {
 
   private async fetchFootballDataOrgFixturesForLeague(
     leagueId: number,
+    season: number,
     includeFinishedFixtures = false,
   ) {
     const apiKey = process.env.FOOTBALL_DATA_ORG_API_KEY?.trim();
@@ -1005,10 +1023,11 @@ export class SportsApiSyncService {
       return [];
     }
 
+    const query = new URLSearchParams({ season: String(season) });
     const response = await fetchOptionalJson<{
       matches?: FootballDataOrgMatch[];
     }>(
-      `${FOOTBALL_DATA_ORG_API_BASE_URL}/competitions/${competitionCode}/matches`,
+      `${FOOTBALL_DATA_ORG_API_BASE_URL}/competitions/${competitionCode}/matches?${query.toString()}`,
       { 'X-Auth-Token': apiKey },
     );
 
@@ -1017,6 +1036,7 @@ export class SportsApiSyncService {
       .filter(
         (match): match is FootballMatch =>
           match !== null &&
+          Number(match.league?.season) === season &&
           this.isFootballFixtureImportable(match, includeFinishedFixtures),
       )
       .sort((first, second) =>
@@ -1134,7 +1154,23 @@ export class SportsApiSyncService {
       return 'UPCOMING';
     }
 
-    return 'ONGOING';
+    return 'UPCOMING';
+  }
+
+  private getFixtureDateRange(matches: FootballMatch[]) {
+    const timestamps = matches
+      .map((match) => new Date(match.fixture.date).getTime())
+      .filter((timestamp) => Number.isFinite(timestamp))
+      .sort((first, second) => first - second);
+
+    if (timestamps.length === 0) {
+      return null;
+    }
+
+    return {
+      start: new Date(timestamps[0]).toISOString(),
+      end: new Date(timestamps[timestamps.length - 1]).toISOString(),
+    };
   }
 
   private getAseanTournamentStatus(season: number): TournamentStatus {
@@ -1160,7 +1196,11 @@ export class SportsApiSyncService {
       return 'UPCOMING';
     }
 
-    return 'ONGOING';
+    if (Number.isFinite(startTime) && Number.isFinite(endTime)) {
+      return 'ONGOING';
+    }
+
+    return 'UPCOMING';
   }
 
   private isFootballFixtureImportable(
@@ -2773,17 +2813,14 @@ export class SportsApiSyncService {
     competition: (typeof FOOTBALL_DATA_ORG_IMPORT_COMPETITIONS)[number],
   ): FootballCompetitionOption {
     const season = this.getCurrentEuropeanFootballSeason();
-    const start = `${season}-08-01`;
-    const end = `${season + 1}-06-30`;
-
     return {
       id: competition.id,
       name: competition.name,
       country: competition.country,
       season,
-      start,
-      end,
-      current: this.mapTournamentStatusFromDates(start, end) === 'ONGOING',
+      start: null,
+      end: null,
+      current: false,
       type: competition.type,
     };
   }
@@ -2960,7 +2997,7 @@ export class SportsApiSyncService {
       return 'COMPLETE' as const;
     }
 
-    return 'ONGOING' as const;
+    return 'UPCOMING' as const;
   }
 
   private isLiveWindow(startValue: string, endValue: string) {
@@ -2977,7 +3014,8 @@ export class SportsApiSyncService {
       CASE
         WHEN ${endColumn} IS NOT NULL AND ${endColumn} < NOW() THEN 'COMPLETE'
         WHEN ${startColumn} IS NOT NULL AND ${startColumn} > NOW() THEN 'UPCOMING'
-        WHEN ${startColumn} IS NOT NULL OR ${endColumn} IS NOT NULL THEN 'ONGOING'
+        WHEN ${startColumn} IS NOT NULL AND ${startColumn} <= NOW()
+          AND (${endColumn} IS NULL OR ${endColumn} >= NOW()) THEN 'ONGOING'
         WHEN ${fallbackColumn} IN ('ACTIVE', 'LIVE', 'ONGOING') THEN 'ONGOING'
         WHEN ${fallbackColumn} IN ('COMPLETED', 'COMPLETE', 'FINISHED', 'CANCELLED', 'CANCELED') THEN 'COMPLETE'
         ELSE 'UPCOMING'

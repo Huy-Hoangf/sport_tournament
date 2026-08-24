@@ -124,6 +124,25 @@ export class DatabaseMigrationsService implements OnModuleInit {
       WHERE match_ranges.tournament_id = t.id
         AND (t.start_date IS NULL OR t.end_date IS NULL)
     `);
+    await this.usersRepository.query(`
+      WITH football_api_match_ranges AS (
+        SELECT
+          m.tournament_id,
+          MIN(m.scheduled_time) AS start_date,
+          MAX(m.scheduled_time) AS end_date
+        FROM matches m
+        JOIN tournaments t ON t.id = m.tournament_id
+        WHERE t.sport_type = 'FOOTBALL'
+          AND m.external_source IN ('FOOTBALL_DATA', 'ESPN_ASEAN')
+        GROUP BY m.tournament_id
+      )
+      UPDATE tournaments t
+      SET
+        start_date = football_api_match_ranges.start_date,
+        end_date = football_api_match_ranges.end_date
+      FROM football_api_match_ranges
+      WHERE football_api_match_ranges.tournament_id = t.id
+    `);
   }
 
   private async migrateTournamentStatuses() {
@@ -164,7 +183,8 @@ export class DatabaseMigrationsService implements OnModuleInit {
       SET status = CASE
         WHEN end_date IS NOT NULL AND end_date < NOW() THEN 'COMPLETE'
         WHEN start_date IS NOT NULL AND start_date > NOW() THEN 'UPCOMING'
-        WHEN start_date IS NOT NULL OR end_date IS NOT NULL THEN 'ONGOING'
+        WHEN start_date IS NOT NULL AND start_date <= NOW()
+          AND (end_date IS NULL OR end_date >= NOW()) THEN 'ONGOING'
         ELSE status
       END
     `);
