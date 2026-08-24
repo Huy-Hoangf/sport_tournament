@@ -371,11 +371,14 @@ export class SportsApiSyncService {
     return this.syncF1(adminId);
   }
 
-  // Import options intentionally list competitions first; matches are fetched only after admin selection to protect quota.
-  listFootballCompetitions() {
-    return FOOTBALL_DATA_ORG_IMPORT_COMPETITIONS.map((competition) =>
-      this.toFootballDataOrgCompetitionOption(competition),
-    ).sort((first, second) => {
+  async listFootballCompetitions() {
+    const competitions = await Promise.all(
+      FOOTBALL_DATA_ORG_IMPORT_COMPETITIONS.map((competition) =>
+        this.toFootballDataOrgCompetitionOption(competition),
+      ),
+    );
+
+    return competitions.sort((first, second) => {
       const firstPhasePriority = this.getCompetitionPhasePriority(first);
       const secondPhasePriority = this.getCompetitionPhasePriority(second);
 
@@ -819,7 +822,7 @@ export class SportsApiSyncService {
     let competitionCount = 0;
     let matchCount = 0;
 
-    for (const competition of this.listFootballCompetitions()) {
+    for (const competition of await this.listFootballCompetitions()) {
       const fixtures = await this.fetchFootballDataOrgFixturesForLeague(
         competition.id,
         competition.season,
@@ -1045,8 +1048,7 @@ export class SportsApiSyncService {
             new Date(first.fixture.date).getTime()
           : new Date(first.fixture.date).getTime() -
             new Date(second.fixture.date).getTime(),
-      )
-      .slice(0, 200);
+      );
   }
 
   private toFootballDataOrgMatch(
@@ -2809,20 +2811,46 @@ export class SportsApiSyncService {
     return Boolean(value) && typeof value === 'object' && !Array.isArray(value);
   }
 
-  private toFootballDataOrgCompetitionOption(
+  private async toFootballDataOrgCompetitionOption(
     competition: (typeof FOOTBALL_DATA_ORG_IMPORT_COMPETITIONS)[number],
-  ): FootballCompetitionOption {
+  ): Promise<FootballCompetitionOption> {
     const season = this.getCurrentEuropeanFootballSeason();
+    const fixtures = await this.fetchFootballDataOrgFixturesForLeague(
+      competition.id,
+      season,
+      true,
+    );
+    const fixtureRange = this.getFixtureDateRange(fixtures);
+    const nextMatch = this.getNextFixtureDate(fixtures);
+    const current = fixtureRange
+      ? this.mapTournamentStatusFromDates(fixtureRange.start, fixtureRange.end) ===
+        'ONGOING'
+      : false;
+
     return {
       id: competition.id,
       name: competition.name,
       country: competition.country,
       season,
-      start: null,
-      end: null,
-      current: false,
+      start: fixtureRange?.start ?? null,
+      end: fixtureRange?.end ?? null,
+      current,
       type: competition.type,
+      matches: fixtures.length,
+      nextMatchAt: nextMatch,
     };
+  }
+
+  private getNextFixtureDate(matches: FootballMatch[]) {
+    const now = Date.now();
+    const nextTimestamp = matches
+      .map((match) => new Date(match.fixture.date).getTime())
+      .filter((timestamp) => Number.isFinite(timestamp) && timestamp >= now)
+      .sort((first, second) => first - second)[0];
+
+    return Number.isFinite(nextTimestamp)
+      ? new Date(nextTimestamp).toISOString()
+      : null;
   }
 
   private getCurrentEuropeanFootballSeason() {

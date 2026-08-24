@@ -7,4 +7,6 @@ export type FootballCompetitionOption = {
   end: string | null;
   current: boolean;
   type: string;
+  matches?: number;
+  nextMatchAt?: string | null;
 };
