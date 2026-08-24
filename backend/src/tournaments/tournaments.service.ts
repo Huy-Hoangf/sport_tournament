@@ -18,7 +18,8 @@ type TournamentInput = {
   endDate?: string | null;
 };
 
-type TournamentFormat = 'GROUP_AND_KNOCKOUT' | 'ROUND_ROBIN' | 'KNOCKOUT' | 'CUSTOM';
+type TournamentFormat =
+  'GROUP_AND_KNOCKOUT' | 'ROUND_ROBIN' | 'KNOCKOUT' | 'CUSTOM';
 type TournamentStatus = 'UPCOMING' | 'ONGOING' | 'COMPLETE';
 type CustomStageType =
   | 'GROUP_STAGE'
@@ -43,6 +44,17 @@ type CustomFormatStageInput = {
 type CustomFormatInput = {
   name?: string;
   stages?: CustomFormatStageInput[];
+};
+
+type TournamentSummaryRow = {
+  id: number;
+  name: string;
+  sportType: string;
+  format: string;
+  status: string;
+  visibility: string;
+  startDate: string | null;
+  endDate: string | null;
 };
 
 const SPORT_TYPES = ['FOOTBALL', 'F1', 'LOL', 'OTHER'];
@@ -185,8 +197,9 @@ export class TournamentsService {
       throw new BadRequestException('Invalid tournament id.');
     }
 
-    const [current] = await this.usersRepository.query(
-      `
+    const currentRows: TournamentSummaryRow[] =
+      await this.usersRepository.query(
+        `
         SELECT
           id,
           name,
@@ -199,8 +212,9 @@ export class TournamentsService {
         FROM tournaments
         WHERE id = $1
       `,
-      [id],
-    );
+        [id],
+      );
+    const [current] = currentRows;
 
     if (!current) {
       throw new NotFoundException('Tournament not found.');
@@ -393,7 +407,9 @@ export class TournamentsService {
     }
 
     if (startDate && endDate && new Date(startDate) > new Date(endDate)) {
-      throw new BadRequestException('Tournament start date must be before end date.');
+      throw new BadRequestException(
+        'Tournament start date must be before end date.',
+      );
     }
 
     const resolvedStatus = this.resolveStatusFromDates(
@@ -504,7 +520,11 @@ export class TournamentsService {
     return fallbackStatus;
   }
 
-  private statusExpression(startColumn: string, endColumn: string, fallbackColumn: string) {
+  private statusExpression(
+    startColumn: string,
+    endColumn: string,
+    fallbackColumn: string,
+  ) {
     return `
       CASE
         WHEN ${endColumn} IS NOT NULL AND ${endColumn} < NOW() THEN 'COMPLETE'
@@ -543,7 +563,9 @@ export class TournamentsService {
     const stages = Array.isArray(input.stages) ? input.stages : [];
 
     if (stages.length === 0) {
-      throw new BadRequestException('Custom format must include at least one stage.');
+      throw new BadRequestException(
+        'Custom format must include at least one stage.',
+      );
     }
 
     if (stages.length > 12) {
@@ -638,7 +660,9 @@ export class TournamentsService {
       format === 'CUSTOM' && customFormat
         ? customFormat.stages!.map((stage) => ({
             name: stage.label!,
-            isKnockout: this.isCustomStageKnockout(stage.type as CustomStageType),
+            isKnockout: this.isCustomStageKnockout(
+              stage.type as CustomStageType,
+            ),
           }))
         : STAGES_BY_FORMAT[format ?? 'ROUND_ROBIN'];
 

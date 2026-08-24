@@ -72,7 +72,10 @@ export class ScoringRulesService {
     }));
   }
 
-  async replaceTournamentRules(tournamentId: number, rules: ScoringRuleInput[]) {
+  async replaceTournamentRules(
+    tournamentId: number,
+    rules: ScoringRuleInput[],
+  ) {
     await this.ensureTournamentExists(tournamentId);
 
     if (!Array.isArray(rules)) {
@@ -84,9 +87,10 @@ export class ScoringRulesService {
     );
 
     await this.usersRepository.manager.transaction(async (manager) => {
-      await manager.query('DELETE FROM scoring_rules WHERE tournament_id = $1', [
-        tournamentId,
-      ]);
+      await manager.query(
+        'DELETE FROM scoring_rules WHERE tournament_id = $1',
+        [tournamentId],
+      );
 
       for (const rule of normalized) {
         await manager.query(
@@ -141,7 +145,9 @@ export class ScoringRulesService {
   }
 
   private normalizeRule(rule: ScoringRuleInput, sortOrder: number) {
-    const category = String(rule.category ?? 'CUSTOM').trim().toUpperCase();
+    const category = String(rule.category ?? 'CUSTOM')
+      .trim()
+      .toUpperCase();
     const title = String(rule.title ?? '').trim();
     const content = String(rule.content ?? '').trim();
     const points = Number(rule.points ?? 0);

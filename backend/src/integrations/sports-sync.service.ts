@@ -830,7 +830,10 @@ export class SportsApiSyncService {
       );
       const fixtureRange = this.getFixtureDateRange(fixtures);
       const tournamentStatus = fixtureRange
-        ? this.mapTournamentStatusFromDates(fixtureRange.start, fixtureRange.end)
+        ? this.mapTournamentStatusFromDates(
+            fixtureRange.start,
+            fixtureRange.end,
+          )
         : this.resolveFootballTournamentStatus(
             competition.season,
             null,
@@ -2823,8 +2826,10 @@ export class SportsApiSyncService {
     const fixtureRange = this.getFixtureDateRange(fixtures);
     const nextMatch = this.getNextFixtureDate(fixtures);
     const current = fixtureRange
-      ? this.mapTournamentStatusFromDates(fixtureRange.start, fixtureRange.end) ===
-        'ONGOING'
+      ? this.mapTournamentStatusFromDates(
+          fixtureRange.start,
+          fixtureRange.end,
+        ) === 'ONGOING'
       : false;
 
     return {
