@@ -10,17 +10,39 @@ import { User } from '../users/user.entity';
 type RegisterTeamInput = {
   tournamentId: number;
   teamName: string;
-  players: Array<{ name?: string }>;
+  players: Array<{ id?: number; name?: string }>;
 };
 
 type UpdateTeamInput = {
   teamId: number;
   teamName: string;
-  players: Array<{ name?: string }>;
+  players: Array<{ id?: number; name?: string }>;
 };
 
 type DeleteTeamInput = {
   teamId: number;
+};
+
+type RosterPlayer = {
+  id: number;
+  name: string;
+};
+
+type TeamPlayerDetailRow = {
+  userId: number | null;
+  name: string;
+  email: string | null;
+  memberCode: string | null;
+};
+
+type RosterPlayerRow = {
+  id: number;
+  name: string;
+};
+
+type RosterConflictRow = {
+  playerName: string;
+  teamName: string;
 };
 
 @Injectable()
@@ -298,12 +320,17 @@ export class TeamsService {
       throw new NotFoundException('Team not found.');
     }
 
-    const players = await this.usersRepository.query(
+    const players: TeamPlayerDetailRow[] = await this.usersRepository.query(
       `
-        SELECT id, name
-        FROM team_players
-        WHERE team_id = $1
-        ORDER BY name ASC
+        SELECT
+          COALESCE(u.id, tp.user_id) AS "userId",
+          COALESCE(u.full_name, tp.name) AS name,
+          u.email,
+          u.member_code AS "memberCode"
+        FROM team_players tp
+        LEFT JOIN users u ON u.id = tp.user_id
+        WHERE tp.team_id = $1
+        ORDER BY COALESCE(u.full_name, tp.name) ASC
       `,
       [teamId],
     );
@@ -317,8 +344,13 @@ export class TeamsService {
       locked: team.tournamentStatus === 'ONGOING',
       directMatchCount: Number(team.directMatchCount ?? 0),
       players: players.map((player) => ({
-        id: Number(player.id),
+        id:
+          player.userId === null || player.userId === undefined
+            ? undefined
+            : Number(player.userId),
         name: player.name,
+        email: player.email ?? null,
+        memberCode: player.memberCode ?? null,
       })),
     };
   }
@@ -326,9 +358,7 @@ export class TeamsService {
   async registerTeam(input: RegisterTeamInput) {
     const tournamentId = input.tournamentId;
     const teamName = input.teamName.trim();
-    const playerNames = input.players
-      .map((player) => player.name?.trim() ?? '')
-      .filter(Boolean);
+    const playerIds = this.normalizeRosterPlayerIds(input.players);
 
     if (!Number.isInteger(tournamentId) || tournamentId <= 0) {
       throw new BadRequestException('Invalid tournament id.');
@@ -338,18 +368,8 @@ export class TeamsService {
       throw new BadRequestException('Team name is required.');
     }
 
-    if (playerNames.length === 0) {
+    if (playerIds.length === 0) {
       throw new BadRequestException('At least one player is required.');
-    }
-
-    const uniquePlayerNames = Array.from(
-      new Map(
-        playerNames.map((playerName) => [playerName.toLowerCase(), playerName]),
-      ).values(),
-    );
-
-    if (uniquePlayerNames.length !== playerNames.length) {
-      throw new BadRequestException('Player names must be unique.');
     }
 
     const [tournament] = await this.usersRepository.query(
@@ -368,9 +388,9 @@ export class TeamsService {
       throw new NotFoundException('Tournament not found.');
     }
 
-    if (tournament.status === 'COMPLETE') {
+    if (tournament.status !== 'UPCOMING') {
       throw new BadRequestException(
-        'Completed tournaments cannot register teams.',
+        'Teams can only be registered before the tournament starts.',
       );
     }
 
@@ -389,6 +409,11 @@ export class TeamsService {
       throw new BadRequestException('Team already exists in this tournament.');
     }
 
+    const rosterPlayers = await this.resolveRosterPlayers(
+      tournamentId,
+      playerIds,
+    );
+
     const [team] = await this.usersRepository.query(
       `
         INSERT INTO teams (tournament_id, name)
@@ -398,13 +423,13 @@ export class TeamsService {
       [tournamentId, teamName],
     );
 
-    for (const playerName of uniquePlayerNames) {
+    for (const player of rosterPlayers) {
       await this.usersRepository.query(
         `
-          INSERT INTO team_players (team_id, name)
-          VALUES ($1, $2)
+          INSERT INTO team_players (team_id, user_id, name)
+          VALUES ($1, $2, $3)
         `,
-        [Number(team.id), playerName],
+        [Number(team.id), player.id, player.name],
       );
     }
 
@@ -413,7 +438,7 @@ export class TeamsService {
       team: {
         id: Number(team.id),
         name: team.name,
-        members: uniquePlayerNames.length,
+        members: rosterPlayers.length,
       },
     };
   }
@@ -421,9 +446,7 @@ export class TeamsService {
   async updateTeam(input: UpdateTeamInput) {
     const teamId = input.teamId;
     const teamName = input.teamName.trim();
-    const playerNames = input.players
-      .map((player) => player.name?.trim() ?? '')
-      .filter(Boolean);
+    const playerIds = this.normalizeRosterPlayerIds(input.players);
 
     if (!Number.isInteger(teamId) || teamId <= 0) {
       throw new BadRequestException('Invalid team id.');
@@ -431,16 +454,6 @@ export class TeamsService {
 
     if (!this.isKnownTeamName(teamName)) {
       throw new BadRequestException('Team name is required.');
-    }
-
-    const uniquePlayerNames = Array.from(
-      new Map(
-        playerNames.map((playerName) => [playerName.toLowerCase(), playerName]),
-      ).values(),
-    );
-
-    if (uniquePlayerNames.length !== playerNames.length) {
-      throw new BadRequestException('Player names must be unique.');
     }
 
     const [team] = await this.usersRepository.query(
@@ -481,6 +494,12 @@ export class TeamsService {
       throw new BadRequestException('Team already exists in this tournament.');
     }
 
+    const rosterPlayers = await this.resolveRosterPlayers(
+      Number(team.tournamentId),
+      playerIds,
+      teamId,
+    );
+
     await this.usersRepository.manager.transaction(async (manager) => {
       await manager.query(
         `
@@ -494,13 +513,13 @@ export class TeamsService {
         teamId,
       ]);
 
-      for (const playerName of uniquePlayerNames) {
+      for (const player of rosterPlayers) {
         await manager.query(
           `
-            INSERT INTO team_players (team_id, name)
-            VALUES ($1, $2)
+            INSERT INTO team_players (team_id, user_id, name)
+            VALUES ($1, $2, $3)
           `,
-          [teamId, playerName],
+          [teamId, player.id, player.name],
         );
       }
     });
@@ -510,7 +529,7 @@ export class TeamsService {
       team: {
         id: teamId,
         name: teamName,
-        members: uniquePlayerNames.length,
+        members: rosterPlayers.length,
       },
     };
   }
@@ -575,6 +594,90 @@ export class TeamsService {
       tournamentId: Number(team.tournamentId),
       teamName: team.name,
     };
+  }
+
+  private normalizeRosterPlayerIds(players: Array<{ id?: number }>) {
+    const playerIds = players.map((player) => Number(player.id));
+
+    if (playerIds.some((id) => !Number.isInteger(id) || id <= 0)) {
+      throw new BadRequestException(
+        'Every team member must be selected from the Players table.',
+      );
+    }
+
+    const uniquePlayerIds = Array.from(new Set(playerIds));
+
+    if (uniquePlayerIds.length !== playerIds.length) {
+      throw new BadRequestException('Players must be unique.');
+    }
+
+    return uniquePlayerIds;
+  }
+
+  private async resolveRosterPlayers(
+    tournamentId: number,
+    playerIds: number[],
+    currentTeamId?: number,
+  ): Promise<RosterPlayer[]> {
+    if (playerIds.length === 0) {
+      return [];
+    }
+
+    const players: RosterPlayerRow[] = await this.usersRepository.query(
+      `
+        SELECT
+          id,
+          full_name AS name
+        FROM users
+        WHERE id = ANY($1::int[])
+          AND role = 'PLAYER'
+          AND user_status = 'ACTIVE'
+      `,
+      [playerIds],
+    );
+
+    if (players.length !== playerIds.length) {
+      throw new BadRequestException(
+        'Every team member must be an active player from the Players table.',
+      );
+    }
+
+    const conflicts: RosterConflictRow[] = await this.usersRepository.query(
+      `
+        SELECT
+          u.full_name AS "playerName",
+          team.name AS "teamName"
+        FROM team_players tp
+        JOIN teams team ON team.id = tp.team_id
+        JOIN users u ON u.id = tp.user_id
+        WHERE team.tournament_id = $1
+          AND tp.user_id = ANY($2::int[])
+          AND ($3::int IS NULL OR team.id != $3::int)
+        ORDER BY u.full_name ASC
+        LIMIT 3
+      `,
+      [tournamentId, playerIds, currentTeamId ?? null],
+    );
+
+    if (conflicts.length > 0) {
+      const conflict = conflicts[0];
+
+      throw new BadRequestException(
+        `${conflict.playerName} already belongs to ${conflict.teamName}.`,
+      );
+    }
+
+    const playersById = new Map<number, RosterPlayer>(
+      players.map((player) => [
+        Number(player.id),
+        {
+          id: Number(player.id),
+          name: player.name,
+        },
+      ]),
+    );
+
+    return playerIds.map((playerId) => playersById.get(playerId)!);
   }
 
   private tournamentStatusExpression(

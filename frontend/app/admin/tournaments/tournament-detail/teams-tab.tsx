@@ -11,6 +11,7 @@ import {
 import { useCallback, useEffect, useMemo, useState } from "react";
 
 import { apiRequest } from "../../../api";
+import type { BackendUser } from "../../types/player";
 import type { MatchRow, TournamentRow } from "../types";
 import { isFinishedStatus } from "../utils";
 
@@ -32,6 +33,15 @@ type TeamRow = {
 type TeamPlayerRow = {
   id?: number;
   name: string;
+  email?: string | null;
+  memberCode?: string | null;
+};
+
+type RosterPlayerOption = {
+  id: number;
+  name: string;
+  email: string;
+  memberCode: string;
 };
 
 type TeamDetail = {
@@ -69,7 +79,7 @@ export function TeamsTab({
   const [selectedTeamDetail, setSelectedTeamDetail] =
     useState<TeamDetail | null>(null);
   const [teamDetailName, setTeamDetailName] = useState("");
-  const [teamDetailPlayers, setTeamDetailPlayers] = useState<string[]>([]);
+  const [teamDetailPlayerIds, setTeamDetailPlayerIds] = useState<number[]>([]);
   const [teamDetailError, setTeamDetailError] = useState<string | null>(null);
   const [isLoadingTeamDetail, setIsLoadingTeamDetail] = useState(false);
   const [isSavingTeamDetail, setIsSavingTeamDetail] = useState(false);
@@ -77,14 +87,15 @@ export function TeamsTab({
   const [deleteTeamError, setDeleteTeamError] = useState<string | null>(null);
   const [isDeletingTeam, setIsDeletingTeam] = useState(false);
   const [teamName, setTeamName] = useState("");
-  const [playerNames, setPlayerNames] = useState([""]);
+  const [playerIds, setPlayerIds] = useState<number[]>([0]);
+  const [playerOptions, setPlayerOptions] = useState<RosterPlayerOption[]>([]);
   const [registerTeamError, setRegisterTeamError] = useState<string | null>(
     null,
   );
   const [isRegisteringTeam, setIsRegisteringTeam] = useState(false);
   const pageSize = 4;
   const canRegisterTeam =
-    canManage && tournament.status.toUpperCase() !== "COMPLETE";
+    canManage && tournament.status.toUpperCase() === "UPCOMING";
   const canEditSelectedTeam =
     canManage &&
     !!selectedTeamDetail &&
@@ -116,6 +127,7 @@ export function TeamsTab({
   const activePage = Math.min(page, totalPages);
   const start = (activePage - 1) * pageSize;
   const visibleRows = filteredRows.slice(start, start + pageSize);
+  const paginationItems = getCompactPageItems(activePage, totalPages);
 
   const loadTeams = useCallback(async () => {
     const rows = await apiRequest<TeamRow[]>(
@@ -153,17 +165,57 @@ export function TeamsTab({
     };
   }, [tournament.id, tournament.sportType]);
 
+  useEffect(() => {
+    if (!canManage) {
+      setPlayerOptions([]);
+      return;
+    }
+
+    let isMounted = true;
+
+    apiRequest<BackendUser[]>("/users")
+      .then((users) => {
+        if (!isMounted) {
+          return;
+        }
+
+        setPlayerOptions(
+          users
+            .filter(
+              (user) =>
+                user.role === "PLAYER" && (user.status ?? "ACTIVE") === "ACTIVE",
+            )
+            .map((user) => ({
+              id: user.id,
+              name: user.fullName,
+              email: user.email,
+              memberCode: user.memberCode ?? "",
+            }))
+            .sort((first, second) => first.name.localeCompare(second.name)),
+        );
+      })
+      .catch(() => {
+        if (isMounted) {
+          setPlayerOptions([]);
+        }
+      });
+
+    return () => {
+      isMounted = false;
+    };
+  }, [canManage]);
+
   function closeRegisterTeamModal() {
     setIsRegisterTeamOpen(false);
     setTeamName("");
-    setPlayerNames([""]);
+    setPlayerIds([0]);
     setRegisterTeamError(null);
   }
 
   function closeTeamDetailModal() {
     setSelectedTeamDetail(null);
     setTeamDetailName("");
-    setTeamDetailPlayers([]);
+    setTeamDetailPlayerIds([]);
     setTeamDetailError(null);
   }
 
@@ -197,10 +249,10 @@ export function TeamsTab({
       const detail = await apiRequest<TeamDetail>(`/teams/${team.id}`);
       setSelectedTeamDetail(detail);
       setTeamDetailName(detail.name);
-      setTeamDetailPlayers(
+      setTeamDetailPlayerIds(
         detail.players.length > 0
-          ? detail.players.map((player) => player.name)
-          : [""],
+          ? detail.players.map((player) => player.id ?? 0)
+          : [0],
       );
     } catch (error) {
       setTeamDetailError(
@@ -212,21 +264,21 @@ export function TeamsTab({
   }
 
   function addTeamDetailPlayer() {
-    setTeamDetailPlayers((current) => [...current, ""]);
+    setTeamDetailPlayerIds((current) => [...current, 0]);
   }
 
-  function updateTeamDetailPlayer(index: number, value: string) {
-    setTeamDetailPlayers((current) =>
-      current.map((name, currentIndex) =>
-        currentIndex === index ? value : name,
+  function updateTeamDetailPlayer(index: number, value: number) {
+    setTeamDetailPlayerIds((current) =>
+      current.map((playerId, currentIndex) =>
+        currentIndex === index ? value : playerId,
       ),
     );
   }
 
   function removeTeamDetailPlayer(index: number) {
-    setTeamDetailPlayers((current) =>
+    setTeamDetailPlayerIds((current) =>
       current.length === 1
-        ? [""]
+        ? [0]
         : current.filter((_, currentIndex) => currentIndex !== index),
     );
   }
@@ -237,20 +289,21 @@ export function TeamsTab({
     }
 
     const normalizedTeamName = teamDetailName.trim();
-    const normalizedPlayers = teamDetailPlayers
-      .map((name) => name.trim())
-      .filter(Boolean);
-    const uniquePlayers = new Set(
-      normalizedPlayers.map((name) => name.toLowerCase()),
-    );
+    const selectedPlayerIds = teamDetailPlayerIds.filter((id) => id > 0);
+    const uniquePlayers = new Set(selectedPlayerIds);
 
     if (!normalizedTeamName) {
       setTeamDetailError("Team name is required.");
       return;
     }
 
-    if (uniquePlayers.size !== normalizedPlayers.length) {
-      setTeamDetailError("Member names must be unique.");
+    if (uniquePlayers.size !== selectedPlayerIds.length) {
+      setTeamDetailError("Members must be unique.");
+      return;
+    }
+
+    if (selectedPlayerIds.length !== teamDetailPlayerIds.length) {
+      setTeamDetailError("Every member must be selected from Players.");
       return;
     }
 
@@ -262,7 +315,7 @@ export function TeamsTab({
         method: "PUT",
         body: JSON.stringify({
           teamName: normalizedTeamName,
-          players: normalizedPlayers.map((name) => ({ name })),
+          players: selectedPlayerIds.map((id) => ({ id })),
         }),
       });
       closeTeamDetailModal();
@@ -301,46 +354,47 @@ export function TeamsTab({
   }
 
   function addPlayerField() {
-    setPlayerNames((current) => [...current, ""]);
+    setPlayerIds((current) => [...current, 0]);
   }
 
-  function updatePlayerName(index: number, value: string) {
-    setPlayerNames((current) =>
-      current.map((name, currentIndex) =>
-        currentIndex === index ? value : name,
+  function updatePlayerName(index: number, value: number) {
+    setPlayerIds((current) =>
+      current.map((playerId, currentIndex) =>
+        currentIndex === index ? value : playerId,
       ),
     );
   }
 
   function removePlayerField(index: number) {
-    setPlayerNames((current) =>
+    setPlayerIds((current) =>
       current.length === 1
-        ? [""]
+        ? [0]
         : current.filter((_, currentIndex) => currentIndex !== index),
     );
   }
 
   async function registerTeam() {
     const normalizedTeamName = teamName.trim();
-    const normalizedPlayers = playerNames
-      .map((name) => name.trim())
-      .filter(Boolean);
-    const uniquePlayers = new Set(
-      normalizedPlayers.map((name) => name.toLowerCase()),
-    );
+    const selectedPlayerIds = playerIds.filter((id) => id > 0);
+    const uniquePlayers = new Set(selectedPlayerIds);
 
     if (!normalizedTeamName) {
       setRegisterTeamError("Team name is required.");
       return;
     }
 
-    if (normalizedPlayers.length === 0) {
+    if (selectedPlayerIds.length === 0) {
       setRegisterTeamError("Add at least one player.");
       return;
     }
 
-    if (uniquePlayers.size !== normalizedPlayers.length) {
-      setRegisterTeamError("Player names must be unique.");
+    if (uniquePlayers.size !== selectedPlayerIds.length) {
+      setRegisterTeamError("Players must be unique.");
+      return;
+    }
+
+    if (selectedPlayerIds.length !== playerIds.length) {
+      setRegisterTeamError("Every player must be selected from Players.");
       return;
     }
 
@@ -353,7 +407,7 @@ export function TeamsTab({
         body: JSON.stringify({
           tournamentId: tournament.id,
           teamName: normalizedTeamName,
-          players: normalizedPlayers.map((name) => ({ name })),
+          players: selectedPlayerIds.map((id) => ({ id })),
         }),
       });
       closeRegisterTeamModal();
@@ -383,7 +437,10 @@ export function TeamsTab({
             type="button"
             onClick={() => {
               if (!canRegisterTeam) {
-                onUnavailableFeature();
+                setRegisterTeamError(
+                  "Teams can only be registered before the tournament starts.",
+                );
+                setIsRegisterTeamOpen(true);
                 return;
               }
 
@@ -486,9 +543,24 @@ export function TeamsTab({
             {Math.min(start + pageSize, filteredRows.length)} of{" "}
             {filteredRows.length} teams
           </p>
-          <div className="flex gap-2">
-            {Array.from({ length: totalPages }, (_, index) => index + 1).map(
-              (pageNumber) => (
+          <div className="flex flex-wrap items-center gap-2">
+            <button
+              type="button"
+              onClick={() => setPage((current) => Math.max(1, current - 1))}
+              disabled={activePage === 1}
+              className="h-9 border border-[#314850] px-3 text-xs font-black text-[#9fb2b8] transition hover:border-[#84d8e8] hover:text-[#84d8e8] disabled:cursor-not-allowed disabled:opacity-40"
+            >
+              Prev
+            </button>
+            {paginationItems.map((pageNumber, index) =>
+              pageNumber === "ellipsis" ? (
+                <span
+                  key={`ellipsis-${index}`}
+                  className="grid h-9 min-w-9 place-items-center text-xs font-black text-[#789098]"
+                >
+                  ...
+                </span>
+              ) : (
                 <button
                   key={pageNumber}
                   type="button"
@@ -503,6 +575,16 @@ export function TeamsTab({
                 </button>
               ),
             )}
+            <button
+              type="button"
+              onClick={() =>
+                setPage((current) => Math.min(totalPages, current + 1))
+              }
+              disabled={activePage === totalPages}
+              className="h-9 border border-[#314850] px-3 text-xs font-black text-[#9fb2b8] transition hover:border-[#84d8e8] hover:text-[#84d8e8] disabled:cursor-not-allowed disabled:opacity-40"
+            >
+              Next
+            </button>
           </div>
         </div>
       </div>
@@ -560,15 +642,14 @@ export function TeamsTab({
             </div>
 
             <div className="mt-3 max-h-64 space-y-3 overflow-y-auto pr-1">
-              {playerNames.map((name, index) => (
+              {playerIds.map((playerId, index) => (
                 <div key={index} className="flex gap-2">
-                  <input
-                    value={name}
-                    onChange={(event) =>
-                      updatePlayerName(index, event.target.value)
-                    }
-                    placeholder={`Player ${index + 1}`}
-                    className="h-11 flex-1 border border-[#31515a] bg-[#071516] px-4 text-sm font-bold text-white outline-none placeholder:text-[#789098] focus:border-[#84d8e8]"
+                  <RosterPlayerSelect
+                    value={playerId}
+                    options={playerOptions}
+                    selectedIds={playerIds}
+                    placeholder={`Select player ${index + 1}`}
+                    onChange={(value) => updatePlayerName(index, value)}
                   />
                   <button
                     type="button"
@@ -751,16 +832,17 @@ export function TeamsTab({
                 </div>
 
                 <div className="mt-3 max-h-64 space-y-3 overflow-y-auto pr-1">
-                  {teamDetailPlayers.map((name, index) => (
+                  {teamDetailPlayerIds.map((playerId, index) => (
                     <div key={index} className="flex gap-2">
-                      <input
-                        value={name}
-                        onChange={(event) =>
-                          updateTeamDetailPlayer(index, event.target.value)
+                      <RosterPlayerSelect
+                        value={playerId}
+                        options={playerOptions}
+                        selectedIds={teamDetailPlayerIds}
+                        placeholder={`Select member ${index + 1}`}
+                        onChange={(value) =>
+                          updateTeamDetailPlayer(index, value)
                         }
                         disabled={!canEditSelectedTeam}
-                        placeholder={`Member ${index + 1}`}
-                        className="h-11 flex-1 border border-[#31515a] bg-[#071516] px-4 text-sm font-bold text-white outline-none placeholder:text-[#789098] focus:border-[#84d8e8] disabled:cursor-not-allowed disabled:text-[#9fb2b8]"
                       />
                       {canEditSelectedTeam && (
                         <button
@@ -806,6 +888,49 @@ export function TeamsTab({
         </div>
       )}
     </section>
+  );
+}
+
+function RosterPlayerSelect({
+  value,
+  options,
+  selectedIds,
+  placeholder,
+  disabled = false,
+  onChange,
+}: {
+  value: number;
+  options: RosterPlayerOption[];
+  selectedIds: number[];
+  placeholder: string;
+  disabled?: boolean;
+  onChange: (value: number) => void;
+}) {
+  return (
+    <select
+      value={value || ""}
+      onChange={(event) => onChange(Number(event.target.value))}
+      disabled={disabled}
+      className="h-11 flex-1 border border-[#31515a] bg-[#071516] px-4 text-sm font-bold text-white outline-none focus:border-[#84d8e8] disabled:cursor-not-allowed disabled:text-[#9fb2b8]"
+    >
+      <option value="">{placeholder}</option>
+      {options.map((player) => {
+        const isAlreadySelected =
+          player.id !== value && selectedIds.includes(player.id);
+
+        return (
+          <option
+            key={player.id}
+            value={player.id}
+            disabled={isAlreadySelected}
+          >
+            {player.name}
+            {player.memberCode ? ` - ${player.memberCode}` : ""}
+            {player.email ? ` - ${player.email}` : ""}
+          </option>
+        );
+      })}
+    </select>
   );
 }
 
@@ -1095,6 +1220,31 @@ function getInitials(name: string) {
 
 function toCssUrl(value: string) {
   return `url("${value.replace(/"/g, '\\"')}")`;
+}
+
+function getCompactPageItems(activePage: number, totalPages: number) {
+  const pages = new Set([1, totalPages]);
+
+  for (let page = activePage - 1; page <= activePage + 1; page += 1) {
+    if (page >= 1 && page <= totalPages) {
+      pages.add(page);
+    }
+  }
+
+  const sortedPages = [...pages].sort((first, second) => first - second);
+  const items: Array<number | "ellipsis"> = [];
+
+  sortedPages.forEach((page, index) => {
+    const previousPage = sortedPages[index - 1];
+
+    if (previousPage !== undefined && page - previousPage > 1) {
+      items.push("ellipsis");
+    }
+
+    items.push(page);
+  });
+
+  return items;
 }
 
 function isTournamentTeamLocked(status: string) {

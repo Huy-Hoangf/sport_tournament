@@ -58,7 +58,7 @@ export class TeamsController {
     body: {
       tournamentId?: number;
       teamName?: string;
-      players?: Array<{ name?: string }>;
+      players?: Array<{ id?: number; name?: string }>;
     },
   ) {
     await this.authService.verifyAdminToken(authorization);
@@ -77,7 +77,7 @@ export class TeamsController {
     @Body()
     body: {
       teamName?: string;
-      players?: Array<{ name?: string }>;
+      players?: Array<{ id?: number; name?: string }>;
     },
   ) {
     await this.authService.verifyAdminToken(authorization);

@@ -110,6 +110,10 @@ export function TournamentDetailView({
     Math.ceil(sortedMatches.length / schedulePageSize),
   );
   const activeSchedulePage = Math.min(schedulePage, scheduleTotalPages);
+  const schedulePaginationItems = getCompactPageItems(
+    activeSchedulePage,
+    scheduleTotalPages,
+  );
   const scheduleStart = (activeSchedulePage - 1) * schedulePageSize;
   const visibleScheduleMatches = sortedMatches.slice(
     scheduleStart,
@@ -406,24 +410,52 @@ export function TournamentDetailView({
                   <p className="text-xs font-black uppercase text-[#9fb2b8]">
                     Page {activeSchedulePage} of {scheduleTotalPages}
                   </p>
-                  <div className="flex flex-wrap gap-2">
-                    {Array.from(
-                      { length: scheduleTotalPages },
-                      (_, index) => index + 1,
-                    ).map((page) => (
-                      <button
-                        key={page}
-                        type="button"
-                        onClick={() => setSchedulePage(page)}
-                        className={`h-9 min-w-9 border px-3 text-xs font-black transition ${
-                          page === activeSchedulePage
-                            ? "border-[#84d8e8] bg-[#84d8e8] text-[#06161b]"
-                            : "border-[#3a4d54] text-white hover:border-[#84d8e8] hover:text-[#84d8e8]"
-                        }`}
-                      >
-                        {page}
-                      </button>
-                    ))}
+                  <div className="flex flex-wrap items-center gap-2">
+                    <button
+                      type="button"
+                      onClick={() =>
+                        setSchedulePage((page) => Math.max(1, page - 1))
+                      }
+                      disabled={activeSchedulePage === 1}
+                      className="h-9 border border-[#3a4d54] px-3 text-xs font-black text-white transition hover:border-[#84d8e8] hover:text-[#84d8e8] disabled:cursor-not-allowed disabled:opacity-40"
+                    >
+                      Prev
+                    </button>
+                    {schedulePaginationItems.map((page, index) =>
+                      page === "ellipsis" ? (
+                        <span
+                          key={`ellipsis-${index}`}
+                          className="grid h-9 min-w-9 place-items-center text-xs font-black text-[#789098]"
+                        >
+                          ...
+                        </span>
+                      ) : (
+                        <button
+                          key={page}
+                          type="button"
+                          onClick={() => setSchedulePage(page)}
+                          className={`h-9 min-w-9 border px-3 text-xs font-black transition ${
+                            page === activeSchedulePage
+                              ? "border-[#84d8e8] bg-[#84d8e8] text-[#06161b]"
+                              : "border-[#3a4d54] text-white hover:border-[#84d8e8] hover:text-[#84d8e8]"
+                          }`}
+                        >
+                          {page}
+                        </button>
+                      ),
+                    )}
+                    <button
+                      type="button"
+                      onClick={() =>
+                        setSchedulePage((page) =>
+                          Math.min(scheduleTotalPages, page + 1),
+                        )
+                      }
+                      disabled={activeSchedulePage === scheduleTotalPages}
+                      className="h-9 border border-[#3a4d54] px-3 text-xs font-black text-white transition hover:border-[#84d8e8] hover:text-[#84d8e8] disabled:cursor-not-allowed disabled:opacity-40"
+                    >
+                      Next
+                    </button>
                   </div>
                 </div>
               )}
@@ -895,4 +927,29 @@ function isExcelFile(file: File) {
       "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet" ||
     file.type === "application/vnd.ms-excel"
   );
+}
+
+function getCompactPageItems(activePage: number, totalPages: number) {
+  const pages = new Set([1, totalPages]);
+
+  for (let page = activePage - 1; page <= activePage + 1; page += 1) {
+    if (page >= 1 && page <= totalPages) {
+      pages.add(page);
+    }
+  }
+
+  const sortedPages = [...pages].sort((first, second) => first - second);
+  const items: Array<number | "ellipsis"> = [];
+
+  sortedPages.forEach((page, index) => {
+    const previousPage = sortedPages[index - 1];
+
+    if (previousPage !== undefined && page - previousPage > 1) {
+      items.push("ellipsis");
+    }
+
+    items.push(page);
+  });
+
+  return items;
 }

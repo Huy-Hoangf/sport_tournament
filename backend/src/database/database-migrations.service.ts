@@ -238,5 +238,25 @@ export class DatabaseMigrationsService implements OnModuleInit {
       CREATE UNIQUE INDEX IF NOT EXISTS uq_team_players_team_name
       ON team_players(team_id, LOWER(name))
     `);
+    await this.usersRepository.query(`
+      ALTER TABLE team_players
+      ADD COLUMN IF NOT EXISTS user_id INTEGER REFERENCES users(id) ON DELETE SET NULL
+    `);
+    await this.usersRepository.query(`
+      UPDATE team_players tp
+      SET user_id = u.id
+      FROM users u
+      WHERE tp.user_id IS NULL
+        AND (
+          LOWER(TRIM(tp.name)) = LOWER(TRIM(u.full_name))
+          OR LOWER(TRIM(tp.name)) = LOWER(TRIM(u.email))
+          OR LOWER(TRIM(tp.name)) = LOWER(TRIM(COALESCE(u.member_code, '')))
+        )
+    `);
+    await this.usersRepository.query(`
+      CREATE UNIQUE INDEX IF NOT EXISTS uq_team_players_team_user
+      ON team_players(team_id, user_id)
+      WHERE user_id IS NOT NULL
+    `);
   }
 }
