@@ -628,18 +628,30 @@ export function TeamsTab({
             />
 
             <div className="mt-5 flex items-center justify-between gap-3">
-              <label className="text-xs font-black uppercase tracking-[0.14em] text-[#9fb2b8]">
-                Players
-              </label>
+              <div>
+                <label className="text-xs font-black uppercase tracking-[0.14em] text-[#9fb2b8]">
+                  Players
+                </label>
+                <p className="mt-1 text-xs font-bold text-[#789098]">
+                  Choose active players from the player directory.
+                </p>
+              </div>
               <button
                 type="button"
                 onClick={addPlayerField}
+                disabled={playerOptions.length === 0}
                 className="inline-flex h-9 items-center gap-2 border border-[#31515a] px-3 text-[10px] font-black uppercase tracking-[0.1em] text-[#84d8e8] transition hover:border-[#84d8e8]"
               >
                 <Plus size={14} />
                 Add player
               </button>
             </div>
+
+            {playerOptions.length === 0 && (
+              <p className="mt-3 border border-[#705f1d] bg-[#2a240d] px-4 py-3 text-xs font-bold text-[#ffd76a]">
+                No active players available. Create or activate players first.
+              </p>
+            )}
 
             <div className="mt-3 max-h-64 space-y-3 overflow-y-auto pr-1">
               {playerIds.map((playerId, index) => (
@@ -648,6 +660,7 @@ export function TeamsTab({
                     value={playerId}
                     options={playerOptions}
                     selectedIds={playerIds}
+                    label={`Slot ${String(index + 1).padStart(2, "0")}`}
                     placeholder={`Select player ${index + 1}`}
                     onChange={(value) => updatePlayerName(index, value)}
                   />
@@ -823,6 +836,7 @@ export function TeamsTab({
                     <button
                       type="button"
                       onClick={addTeamDetailPlayer}
+                      disabled={playerOptions.length === 0}
                       className="inline-flex h-9 items-center gap-2 border border-[#31515a] px-3 text-[10px] font-black uppercase tracking-[0.1em] text-[#84d8e8] transition hover:border-[#84d8e8]"
                     >
                       <Plus size={14} />
@@ -831,6 +845,13 @@ export function TeamsTab({
                   )}
                 </div>
 
+                {canEditSelectedTeam && playerOptions.length === 0 && (
+                  <p className="mt-3 border border-[#705f1d] bg-[#2a240d] px-4 py-3 text-xs font-bold text-[#ffd76a]">
+                    No active players available. Create or activate players
+                    first.
+                  </p>
+                )}
+
                 <div className="mt-3 max-h-64 space-y-3 overflow-y-auto pr-1">
                   {teamDetailPlayerIds.map((playerId, index) => (
                     <div key={index} className="flex gap-2">
@@ -838,6 +859,7 @@ export function TeamsTab({
                         value={playerId}
                         options={playerOptions}
                         selectedIds={teamDetailPlayerIds}
+                        label={`Slot ${String(index + 1).padStart(2, "0")}`}
                         placeholder={`Select member ${index + 1}`}
                         onChange={(value) =>
                           updateTeamDetailPlayer(index, value)
@@ -895,6 +917,7 @@ function RosterPlayerSelect({
   value,
   options,
   selectedIds,
+  label,
   placeholder,
   disabled = false,
   onChange,
@@ -902,35 +925,54 @@ function RosterPlayerSelect({
   value: number;
   options: RosterPlayerOption[];
   selectedIds: number[];
+  label: string;
   placeholder: string;
   disabled?: boolean;
   onChange: (value: number) => void;
 }) {
-  return (
-    <select
-      value={value || ""}
-      onChange={(event) => onChange(Number(event.target.value))}
-      disabled={disabled}
-      className="h-11 flex-1 border border-[#31515a] bg-[#071516] px-4 text-sm font-bold text-white outline-none focus:border-[#84d8e8] disabled:cursor-not-allowed disabled:text-[#9fb2b8]"
-    >
-      <option value="">{placeholder}</option>
-      {options.map((player) => {
-        const isAlreadySelected =
-          player.id !== value && selectedIds.includes(player.id);
+  const selectedPlayer = options.find((player) => player.id === value);
 
-        return (
-          <option
-            key={player.id}
-            value={player.id}
-            disabled={isAlreadySelected}
-          >
-            {player.name}
-            {player.memberCode ? ` - ${player.memberCode}` : ""}
-            {player.email ? ` - ${player.email}` : ""}
-          </option>
-        );
-      })}
-    </select>
+  return (
+    <div className="min-w-0 flex-1 border border-[#31515a] bg-[#071516] p-3">
+      <div className="mb-2 flex items-center justify-between gap-3">
+        <span className="text-[10px] font-black uppercase tracking-[0.12em] text-[#84d8e8]">
+          {label}
+        </span>
+        {selectedPlayer?.memberCode && (
+          <span className="shrink-0 text-[10px] font-black uppercase tracking-[0.08em] text-[#789098]">
+            {selectedPlayer.memberCode}
+          </span>
+        )}
+      </div>
+      <select
+        value={value || ""}
+        onChange={(event) => onChange(Number(event.target.value))}
+        disabled={disabled}
+        className="h-10 w-full border border-[#243c43] bg-[#06161b] px-3 text-sm font-bold text-white outline-none focus:border-[#84d8e8] disabled:cursor-not-allowed disabled:text-[#9fb2b8]"
+      >
+        <option value="">{placeholder}</option>
+        {options.map((player) => {
+          const isAlreadySelected =
+            player.id !== value && selectedIds.includes(player.id);
+
+          return (
+            <option
+              key={player.id}
+              value={player.id}
+              disabled={isAlreadySelected}
+            >
+              {player.name}
+              {player.memberCode ? ` - ${player.memberCode}` : ""}
+            </option>
+          );
+        })}
+      </select>
+      <p className="mt-2 truncate text-xs font-bold text-[#789098]">
+        {selectedPlayer
+          ? selectedPlayer.email
+          : `${options.length} active players available`}
+      </p>
+    </div>
   );
 }
 

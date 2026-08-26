@@ -504,20 +504,36 @@ export class TeamsService {
       await manager.query(
         `
           UPDATE teams
-          SET name = $1
+          SET
+            name = $1,
+            updated_at = NOW()
           WHERE id = $2
         `,
         [teamName, teamId],
       );
-      await manager.query('DELETE FROM team_players WHERE team_id = $1', [
-        teamId,
-      ]);
+
+      if (rosterPlayers.length > 0) {
+        await manager.query(
+          `
+            DELETE FROM team_players
+            WHERE team_id = $1
+              AND (user_id IS NULL OR user_id != ALL($2::int[]))
+          `,
+          [teamId, rosterPlayers.map((player) => player.id)],
+        );
+      } else {
+        await manager.query('DELETE FROM team_players WHERE team_id = $1', [
+          teamId,
+        ]);
+      }
 
       for (const player of rosterPlayers) {
         await manager.query(
           `
             INSERT INTO team_players (team_id, user_id, name)
             VALUES ($1, $2, $3)
+            ON CONFLICT (team_id, user_id) WHERE user_id IS NOT NULL
+            DO UPDATE SET name = EXCLUDED.name
           `,
           [teamId, player.id, player.name],
         );

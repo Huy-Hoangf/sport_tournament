@@ -483,6 +483,12 @@ export class DashboardService {
     const matchVisibilityCondition = includePrivateTournaments
       ? ''
       : "WHERE t.visibility = 'PUBLIC'";
+    const teamVisibilityCondition = includePrivateTournaments
+      ? ''
+      : "WHERE t.visibility = 'PUBLIC'";
+    const rosterVisibilityCondition = includePrivateTournaments
+      ? ''
+      : "WHERE t.visibility = 'PUBLIC'";
 
     return `
       SELECT *
@@ -503,6 +509,26 @@ export class DashboardService {
           t.updated_at AS "createdAt"
         FROM tournaments t
         ${visibilityCondition}
+        UNION ALL
+        SELECT
+          CONCAT('team-', team.id) AS id,
+          'team' AS type,
+          CONCAT(team.name, ' team created in ', t.name) AS message,
+          team.created_at AS "createdAt"
+        FROM teams team
+        JOIN tournaments t ON t.id = team.tournament_id
+        ${teamVisibilityCondition}
+        UNION ALL
+        SELECT
+          CONCAT('team-player-', tp.id) AS id,
+          'user' AS type,
+          CONCAT(COALESCE(u.full_name, tp.name), ' added to ', team.name) AS message,
+          tp.created_at AS "createdAt"
+        FROM team_players tp
+        JOIN teams team ON team.id = tp.team_id
+        JOIN tournaments t ON t.id = team.tournament_id
+        LEFT JOIN users u ON u.id = tp.user_id
+        ${rosterVisibilityCondition}
         UNION ALL
         SELECT
           CONCAT('user-', u.id) AS id,

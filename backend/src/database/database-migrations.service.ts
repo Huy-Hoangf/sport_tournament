@@ -17,6 +17,7 @@ export class DatabaseMigrationsService implements OnModuleInit {
     await this.migrateTournamentStatuses();
     await this.ensureScoringRulesTable();
     await this.ensureStageNameConstraint();
+    await this.ensureTeamTimestampColumns();
     await this.ensureTeamPlayersTable();
     await this.cleanupLolUnknownTeams();
   }
@@ -257,6 +258,17 @@ export class DatabaseMigrationsService implements OnModuleInit {
       CREATE UNIQUE INDEX IF NOT EXISTS uq_team_players_team_user
       ON team_players(team_id, user_id)
       WHERE user_id IS NOT NULL
+    `);
+  }
+
+  private async ensureTeamTimestampColumns() {
+    await this.usersRepository.query(`
+      ALTER TABLE teams
+      ADD COLUMN IF NOT EXISTS created_at TIMESTAMPTZ NOT NULL DEFAULT NOW()
+    `);
+    await this.usersRepository.query(`
+      ALTER TABLE teams
+      ADD COLUMN IF NOT EXISTS updated_at TIMESTAMPTZ NOT NULL DEFAULT NOW()
     `);
   }
 }
