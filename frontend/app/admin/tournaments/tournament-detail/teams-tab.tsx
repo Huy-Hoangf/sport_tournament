@@ -931,9 +931,36 @@ function RosterPlayerSelect({
   onChange: (value: number) => void;
 }) {
   const selectedPlayer = options.find((player) => player.id === value);
+  const [query, setQuery] = useState("");
+  const [isOpen, setIsOpen] = useState(false);
+  const searchText = query.trim().toLowerCase();
+  const selectedLabel = selectedPlayer
+    ? `${selectedPlayer.name}${selectedPlayer.memberCode ? ` - ${selectedPlayer.memberCode}` : ""}`
+    : "";
+  const availableOptions = options.filter(
+    (player) => player.id === value || !selectedIds.includes(player.id),
+  );
+  const visibleOptions = availableOptions
+    .filter((player) => {
+      if (!searchText) {
+        return true;
+      }
+
+      return [player.name, player.memberCode, player.email]
+        .join(" ")
+        .toLowerCase()
+        .includes(searchText);
+    })
+    .slice(0, 6);
+  const shouldShowResults = isOpen && searchText.length > 0;
 
   return (
-    <div className="min-w-0 flex-1 border border-[#31515a] bg-[#071516] p-3">
+    <div
+      className="min-w-0 flex-1 border border-[#31515a] bg-[#071516] p-3"
+      onBlur={() => {
+        window.setTimeout(() => setIsOpen(false), 120);
+      }}
+    >
       <div className="mb-2 flex items-center justify-between gap-3">
         <span className="text-[10px] font-black uppercase tracking-[0.12em] text-[#84d8e8]">
           {label}
@@ -944,29 +971,83 @@ function RosterPlayerSelect({
           </span>
         )}
       </div>
-      <select
-        value={value || ""}
-        onChange={(event) => onChange(Number(event.target.value))}
-        disabled={disabled}
-        className="h-10 w-full border border-[#243c43] bg-[#06161b] px-3 text-sm font-bold text-white outline-none focus:border-[#84d8e8] disabled:cursor-not-allowed disabled:text-[#9fb2b8]"
-      >
-        <option value="">{placeholder}</option>
-        {options.map((player) => {
-          const isAlreadySelected =
-            player.id !== value && selectedIds.includes(player.id);
+      <div className="relative">
+        <Search
+          aria-hidden="true"
+          className="absolute left-3 top-1/2 -translate-y-1/2 text-[#84d8e8]"
+          size={15}
+        />
+        <input
+          type="search"
+          value={isOpen ? query : selectedLabel}
+          onChange={(event) => {
+            setQuery(event.target.value);
+            setIsOpen(true);
+          }}
+          onFocus={() => {
+            setQuery("");
+            setIsOpen(true);
+          }}
+          disabled={disabled}
+          placeholder={placeholder}
+          className="h-10 w-full border border-[#243c43] bg-[#06161b] pl-9 pr-3 text-sm font-bold text-white outline-none placeholder:text-[#dce8eb] focus:border-[#84d8e8] disabled:cursor-not-allowed disabled:text-[#9fb2b8]"
+        />
+      </div>
+      {!disabled && shouldShowResults && (
+        <div className="mt-2 max-h-40 overflow-y-auto border border-[#243c43] bg-[#06161b]">
+          {visibleOptions.map((player) => {
+            const isSelected = player.id === value;
 
-          return (
-            <option
-              key={player.id}
-              value={player.id}
-              disabled={isAlreadySelected}
-            >
-              {player.name}
-              {player.memberCode ? ` - ${player.memberCode}` : ""}
-            </option>
-          );
-        })}
-      </select>
+            return (
+              <button
+                key={player.id}
+                type="button"
+                onClick={() => {
+                  onChange(player.id);
+                  setQuery("");
+                  setIsOpen(false);
+                }}
+                className={`block w-full px-3 py-2 text-left transition ${
+                  isSelected
+                    ? "bg-[#18343d] text-[#84d8e8]"
+                    : "text-[#dce8eb] hover:bg-[#102b33]"
+                }`}
+              >
+                <span className="block truncate text-sm font-black">
+                  {player.name}
+                  {player.memberCode ? ` - ${player.memberCode}` : ""}
+                </span>
+                <span className="mt-0.5 block truncate text-[11px] font-bold text-[#789098]">
+                  {player.email}
+                </span>
+              </button>
+            );
+          })}
+          {visibleOptions.length === 0 && (
+            <p className="px-3 py-3 text-xs font-bold text-[#789098]">
+              No matching active players.
+            </p>
+          )}
+        </div>
+      )}
+      {!disabled && isOpen && !searchText && (
+        <p className="mt-2 border border-dashed border-[#243c43] px-3 py-2 text-xs font-bold text-[#789098]">
+          Type to search active players by name, email, or code.
+        </p>
+      )}
+      {value > 0 && !disabled && (
+        <button
+          type="button"
+          onClick={() => {
+            onChange(0);
+            setQuery("");
+            setIsOpen(false);
+          }}
+          className="mt-2 text-[10px] font-black uppercase tracking-[0.1em] text-[#ff9d9d] transition hover:text-[#ffb4b4]"
+        >
+          Clear player
+        </button>
+      )}
       <p className="mt-2 truncate text-xs font-bold text-[#789098]">
         {selectedPlayer
           ? selectedPlayer.email
