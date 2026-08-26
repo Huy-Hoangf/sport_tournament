@@ -57,6 +57,13 @@ type TournamentSummaryRow = {
   endDate: string | null;
 };
 
+type TournamentDeleteRow = {
+  id: number;
+  name: string;
+  status: TournamentStatus;
+  visibility: string | null;
+};
+
 const SPORT_TYPES = ['FOOTBALL', 'F1', 'LOL', 'OTHER'];
 const FORMATS = ['GROUP_AND_KNOCKOUT', 'ROUND_ROBIN', 'KNOCKOUT', 'CUSTOM'];
 const STATUSES: TournamentStatus[] = ['UPCOMING', 'ONGOING', 'COMPLETE'];
@@ -336,9 +343,9 @@ export class TournamentsService {
       throw new BadRequestException('Invalid tournament id.');
     }
 
-    const [current] = await this.usersRepository.query(
+    const [current] = await this.usersRepository.query<TournamentDeleteRow[]>(
       `
-        SELECT id, status
+        SELECT id, name, status, visibility
         FROM tournaments
         WHERE id = $1
       `,
@@ -355,18 +362,38 @@ export class TournamentsService {
       );
     }
 
-    const rows = await this.usersRepository.query(
-      `
-        DELETE FROM tournaments
-        WHERE id = $1
-        RETURNING id
-      `,
-      [id],
-    );
+    await this.usersRepository.manager.transaction(async (manager) => {
+      const rows = await manager.query(
+        `
+          DELETE FROM tournaments
+          WHERE id = $1
+          RETURNING id
+        `,
+        [id],
+      );
 
-    if (rows.length === 0) {
-      throw new NotFoundException('Tournament not found.');
-    }
+      if (rows.length === 0) {
+        throw new NotFoundException('Tournament not found.');
+      }
+
+      await manager.query(
+        `
+          INSERT INTO activity_logs (
+            type,
+            message,
+            tournament_id,
+            tournament_visibility
+          )
+          VALUES ($1, $2, $3, $4)
+        `,
+        [
+          'tournament',
+          `${current.name} tournament deleted`,
+          current.id,
+          current.visibility ?? 'PUBLIC',
+        ],
+      );
+    });
 
     return {
       message: 'Tournament deleted successfully.',

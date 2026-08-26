@@ -326,7 +326,18 @@ export class UsersService implements OnModuleInit {
       throw new BadRequestException('Cannot delete an admin account.');
     }
 
-    await this.usersRepository.remove(user);
+    const playerName = user.fullName || user.email;
+
+    await this.usersRepository.manager.transaction(async (manager) => {
+      await manager.remove(User, user);
+      await manager.query(
+        `
+          INSERT INTO activity_logs (type, message)
+          VALUES ($1, $2)
+        `,
+        ['user', `${playerName} player deleted`],
+      );
+    });
 
     return {
       message: 'User deleted successfully.',
@@ -405,6 +416,16 @@ export class UsersService implements OnModuleInit {
       `,
         [ADMIN_EMAIL],
       );
+
+      if (deletedCount > 0) {
+        await manager.query(
+          `
+            INSERT INTO activity_logs (type, message)
+            VALUES ($1, $2)
+          `,
+          ['user', `${deletedCount} players deleted`],
+        );
+      }
     });
 
     return {

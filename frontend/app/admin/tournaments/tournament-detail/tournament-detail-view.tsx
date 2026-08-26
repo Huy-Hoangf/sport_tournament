@@ -224,7 +224,7 @@ export function TournamentDetailView({
                 className="inline-flex min-h-[54px] items-center justify-center gap-4 border border-[#3a4d54] bg-[#162b32] px-5 py-3 text-center text-xs font-black uppercase tracking-[0.08em] text-[#84d8e8] transition hover:border-[#84d8e8] hover:bg-[#1b343d]"
               >
                 <FileDown size={20} />
-                Import Match
+                Import List Match
               </button>
               <input
                 ref={matchImportInputRef}

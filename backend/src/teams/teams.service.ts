@@ -45,6 +45,16 @@ type RosterConflictRow = {
   teamName: string;
 };
 
+type DeleteTeamRow = {
+  id: number;
+  name: string;
+  tournamentId: number;
+  tournamentName: string;
+  tournamentVisibility: string | null;
+  tournamentStatus: string;
+  directMatchCount: string | number | null;
+};
+
 @Injectable()
 export class TeamsService {
   constructor(
@@ -557,12 +567,14 @@ export class TeamsService {
       throw new BadRequestException('Invalid team id.');
     }
 
-    const [team] = await this.usersRepository.query(
+    const [team] = await this.usersRepository.query<DeleteTeamRow[]>(
       `
         SELECT
           team.id,
           team.name,
           team.tournament_id AS "tournamentId",
+          t.name AS "tournamentName",
+          t.visibility AS "tournamentVisibility",
           ${this.tournamentStatusExpression('t.start_date', 't.end_date', 't.status')} AS "tournamentStatus",
           (
             SELECT COUNT(*)
@@ -600,9 +612,26 @@ export class TeamsService {
       );
     }
 
-    await this.usersRepository.query('DELETE FROM teams WHERE id = $1', [
-      teamId,
-    ]);
+    await this.usersRepository.manager.transaction(async (manager) => {
+      await manager.query('DELETE FROM teams WHERE id = $1', [teamId]);
+      await manager.query(
+        `
+          INSERT INTO activity_logs (
+            type,
+            message,
+            tournament_id,
+            tournament_visibility
+          )
+          VALUES ($1, $2, $3, $4)
+        `,
+        [
+          'team',
+          `${team.name} team deleted from ${team.tournamentName}`,
+          Number(team.tournamentId),
+          team.tournamentVisibility ?? 'PUBLIC',
+        ],
+      );
+    });
 
     return {
       message: 'Team deleted successfully.',

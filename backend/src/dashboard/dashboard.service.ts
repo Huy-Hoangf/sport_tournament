@@ -489,10 +489,21 @@ export class DashboardService {
     const rosterVisibilityCondition = includePrivateTournaments
       ? ''
       : "WHERE t.visibility = 'PUBLIC'";
+    const activityLogVisibilityCondition = includePrivateTournaments
+      ? ''
+      : "WHERE COALESCE(al.tournament_visibility, 'PUBLIC') = 'PUBLIC'";
 
     return `
       SELECT *
       FROM (
+        SELECT
+          CONCAT('activity-log-', al.id) AS id,
+          al.type,
+          al.message,
+          al.created_at AS "createdAt"
+        FROM activity_logs al
+        ${activityLogVisibilityCondition}
+        UNION ALL
         SELECT
           CONCAT('match-', m.id) AS id,
           'match' AS type,
