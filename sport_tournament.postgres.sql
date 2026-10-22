@@ -99,6 +99,7 @@ CREATE TABLE matches (
     away_placeholder VARCHAR(100) NULL,
     scheduled_time TIMESTAMPTZ NOT NULL,
     lock_minutes_before_start INTEGER NOT NULL DEFAULT 15,
+    prediction_locked BOOLEAN NOT NULL DEFAULT FALSE,
     status VARCHAR(30) NOT NULL DEFAULT 'PENDING',
     actual_home_score INTEGER NULL,
     actual_away_score INTEGER NULL,
@@ -166,6 +167,9 @@ CREATE INDEX idx_teams_tournament_group ON teams(tournament_id, group_name);
 CREATE INDEX idx_matches_tournament_time ON matches(tournament_id, scheduled_time);
 CREATE INDEX idx_matches_tournament_status ON matches(tournament_id, status);
 CREATE INDEX idx_matches_external ON matches(external_source, external_match_id);
+CREATE UNIQUE INDEX uq_matches_manual_identity
+ON matches(tournament_id, stage_id, home_team_id, away_team_id, scheduled_time)
+WHERE external_source = 'MANUAL';
 CREATE INDEX idx_predictions_match ON predictions(match_id);
 CREATE INDEX idx_predictions_user ON predictions(user_id);
 CREATE INDEX idx_scoring_rules_tournament ON scoring_rules(tournament_id, sort_order, id);

@@ -21,6 +21,19 @@ export class DatabaseMigrationsService implements OnModuleInit {
     await this.ensureTeamTimestampColumns();
     await this.ensureTeamPlayersTable();
     await this.cleanupLolUnknownTeams();
+    await this.ensureMatchPredictionLock();
+  }
+
+  async ensureMatchPredictionLock() {
+    await this.usersRepository.query(`
+      ALTER TABLE matches ADD COLUMN IF NOT EXISTS prediction_locked BOOLEAN NOT NULL DEFAULT FALSE
+    `);
+    // API-created manual matches use MANUAL; external sync identities are unaffected.
+    await this.usersRepository.query(`
+      CREATE UNIQUE INDEX IF NOT EXISTS uq_matches_manual_identity
+      ON matches(tournament_id, stage_id, home_team_id, away_team_id, scheduled_time)
+      WHERE external_source = 'MANUAL'
+    `);
   }
 
   private async migrateSportTypes() {

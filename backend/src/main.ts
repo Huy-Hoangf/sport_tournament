@@ -1,6 +1,7 @@
 import type { CorsOptions } from '@nestjs/common/interfaces/external/cors-options.interface';
 import { NestFactory } from '@nestjs/core';
 import { AppModule } from './app.module';
+import { json } from 'express';
 
 function readAllowedOrigins(): CorsOptions['origin'] {
   const origins = process.env.FRONTEND_URL?.split(',')
@@ -28,13 +29,17 @@ function readAllowedOrigins(): CorsOptions['origin'] {
 
 async function bootstrap() {
   const app = await NestFactory.create(AppModule);
+  app.use(json({ limit: '8mb' }));
 
   app.enableCors({
     origin: readAllowedOrigins(),
     credentials: true,
   });
 
-  await app.listen(process.env.PORT ?? 3001);
+  await app.listen(
+    process.env.PORT ?? 3001,
+    process.env.BIND_HOST ?? '0.0.0.0',
+  );
 }
 
 void bootstrap();

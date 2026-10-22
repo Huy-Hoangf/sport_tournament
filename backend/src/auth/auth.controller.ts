@@ -66,7 +66,11 @@ export class AuthController {
   }
 
   @Post('reset-password')
-  resetPassword(@Body() body: { email: string; newPassword: string }) {
+  async resetPassword(
+    @Headers('authorization') authorization: string | undefined,
+    @Body() body: { email: string; newPassword: string },
+  ) {
+    await this.authService.verifySuperAdminToken(authorization);
     return this.authService.resetPassword(body.email, body.newPassword);
   }
 
