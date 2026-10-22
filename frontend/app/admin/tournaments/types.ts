@@ -48,10 +48,7 @@ export type TournamentStage = {
 };
 
 export type TournamentFormat =
-  | "GROUP_AND_KNOCKOUT"
-  | "ROUND_ROBIN"
-  | "KNOCKOUT"
-  | "CUSTOM";
+  "GROUP_AND_KNOCKOUT" | "ROUND_ROBIN" | "KNOCKOUT" | "CUSTOM";
 
 export type CustomStageType =
   | "GROUP_STAGE"
@@ -105,10 +102,7 @@ export type FootballCompetitionOption = {
 export type ImportSport = "FOOTBALL" | "F1" | "LOL";
 export type SyncSport = "FOOTBALL" | "F1";
 export type TournamentStatusFilter =
-  | "ALL"
-  | "ONGOING"
-  | "UPCOMING"
-  | "COMPLETE";
+  "ALL" | "ONGOING" | "UPCOMING" | "COMPLETE";
 
 export type F1MeetingOption = {
   id: number;
@@ -132,6 +126,10 @@ export type LolCompetitionOption = {
 
 export type MatchRow = {
   id: number;
+  homeTeamId?: number | null;
+  awayTeamId?: number | null;
+  lockMinutes?: number;
+  predictionLocked?: boolean;
   tournamentId?: number;
   stageId?: number;
   stageName?: string;

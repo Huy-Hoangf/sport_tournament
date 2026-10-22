@@ -1,28 +1,16 @@
 "use client";
 
-import { useEffect, useMemo, useState } from "react";
-import {
-  CalendarDays,
-  ChevronLeft,
-  ChevronRight,
-  Pencil,
-  Search,
-  Trash2,
-  Trophy,
-  Users,
-} from "lucide-react";
+import { useEffect, useState } from "react";
 import { apiRequest } from "../../api";
-import { AdminSelect } from "../shared/admin-select";
-import {
-  DashboardSourceBadge,
-  DashboardStatusBadge,
-  DashboardStatCard,
-  MatchTeams,
-} from "../shared/dashboard-ui";
-import type { MatchRow } from "../tournaments/types";
-import { formatDateTime, formatScore, isFinishedStatus } from "../tournaments/utils";
-
-const MATCHES_PAGE_SIZE = 8;
+import { DashboardStatusBadge, MatchTeams } from "../shared/dashboard-ui";
+import type {
+  MatchRow,
+  TournamentRow,
+  TournamentStage,
+} from "../tournaments/types";
+import { formatDateTime, formatScore } from "../tournaments/utils";
+import { MatchEditor } from "./match-editor";
+import { PredictionHistory, VoteDialog } from "./predictions";
 
 export type MatchesInitialFilter = {
   tournamentId?: number;
@@ -30,276 +18,372 @@ export type MatchesInitialFilter = {
   tournamentName?: string;
   stageName?: string;
 };
+type MatchPage = {
+  items: MatchRow[];
+  total: number;
+  page: number;
+  pageSize: number;
+};
+const button =
+  "rounded border border-[#3a4d54] px-3 py-2 text-sm font-bold hover:border-[#84d8e8] disabled:cursor-not-allowed disabled:opacity-40";
+const input =
+  "rounded border border-[#3a4d54] bg-[#06161b] px-3 py-2 text-white";
 
 export default function MatchesView({
   initialFilter,
   canManage,
-  onUnavailableFeature,
 }: {
   initialFilter?: MatchesInitialFilter;
   canManage: boolean;
-  onUnavailableFeature: () => void;
+  onUnavailableFeature?: () => void;
 }) {
-  const [matches, setMatches] = useState<MatchRow[]>([]);
-  const [query, setQuery] = useState("");
-  const [status, setStatus] = useState("ALL");
-  const [currentPage, setCurrentPage] = useState(1);
-  const [isLoading, setIsLoading] = useState(true);
-  const [notice, setNotice] = useState("");
-
-  const filteredMatches = useMemo(() => {
-    const keyword = query.trim().toLowerCase();
-
-    return matches
-      .filter((match) => {
-        const matchesStatus =
-          status === "ALL" || match.status.toUpperCase() === status;
-        const matchesQuery =
-          !keyword ||
-          `${match.homeName} ${match.awayName} ${match.tournamentName} ${match.stageName}`
-            .toLowerCase()
-            .includes(keyword);
-
-        return matchesStatus && matchesQuery;
-      })
-      .sort((first, second) => {
-        const firstTime = new Date(first.scheduledTime).getTime();
-        const secondTime = new Date(second.scheduledTime).getTime();
-
-        if (!Number.isFinite(firstTime) && !Number.isFinite(secondTime)) {
-          return first.id - second.id;
-        }
-
-        if (!Number.isFinite(firstTime)) {
-          return 1;
-        }
-
-        if (!Number.isFinite(secondTime)) {
-          return -1;
-        }
-
-        return firstTime - secondTime;
-      });
-  }, [matches, query, status]);
-  const totalPages = Math.max(1, Math.ceil(filteredMatches.length / MATCHES_PAGE_SIZE));
-  const activePage = Math.min(currentPage, totalPages);
-  const firstVisibleIndex = (activePage - 1) * MATCHES_PAGE_SIZE;
-  const visibleMatches = filteredMatches.slice(
-    firstVisibleIndex,
-    firstVisibleIndex + MATCHES_PAGE_SIZE,
+  const [data, setData] = useState<MatchPage>({
+    items: [],
+    total: 0,
+    page: 1,
+    pageSize: 20,
+  });
+  const [query, setQuery] = useState(""),
+    [status, setStatus] = useState("ALL");
+  const [tournamentId, setTournamentId] = useState(
+    String(initialFilter?.tournamentId ?? ""),
   );
-  const visibleRangeStart =
-    filteredMatches.length === 0 ? 0 : firstVisibleIndex + 1;
-  const visibleRangeEnd = Math.min(
-    firstVisibleIndex + MATCHES_PAGE_SIZE,
-    filteredMatches.length,
-  );
-
-  const todayCount = matches.filter((match) => {
-    const matchDate = new Date(match.scheduledTime);
-    const today = new Date();
-    return matchDate.toDateString() === today.toDateString();
-  }).length;
-  const pendingCount = matches.filter(
-    (match) => !isFinishedStatus(match.status),
-  ).length;
-  const finishedCount = matches.filter((match) =>
-    isFinishedStatus(match.status),
-  ).length;
+  const [stageId, setStageId] = useState(String(initialFilter?.stageId ?? ""));
+  const [tournaments, setTournaments] = useState<TournamentRow[]>([]);
+  const [stages, setStages] = useState<TournamentStage[]>([]);
+  const [page, setPage] = useState(1),
+    [refresh, setRefresh] = useState(0);
+  const [loading, setLoading] = useState(true),
+    [busy, setBusy] = useState(false);
+  const [notice, setNotice] = useState(""),
+    [error, setError] = useState("");
+  const [editor, setEditor] = useState<{
+    match?: MatchRow;
+    importing?: boolean;
+  } | null>(null);
+  const [vote, setVote] = useState<MatchRow | null>(null);
+  const [now, setNow] = useState(() => Date.now());
 
   useEffect(() => {
-    const params = new URLSearchParams();
+    apiRequest<TournamentRow[]>("/tournaments")
+      .then(setTournaments)
+      .catch((e) => setError(e.message));
+    const timer = setInterval(() => setNow(Date.now()), 15000);
+    return () => clearInterval(timer);
+  }, []);
+  useEffect(() => {
+    let active = true;
+    if (tournamentId)
+      apiRequest<TournamentStage[]>(`/stages?tournamentId=${tournamentId}`)
+        .then((items) => {
+          if (active) setStages(items);
+        })
+        .catch((e) => {
+          if (active) setError(e.message);
+        });
+    return () => {
+      active = false;
+    };
+  }, [tournamentId]);
+  useEffect(() => {
+    let active = true;
+    const timer = setTimeout(() => {
+      const params = new URLSearchParams({
+        page: String(page),
+        pageSize: "20",
+        status,
+        search: query,
+      });
+      if (tournamentId) params.set("tournamentId", tournamentId);
+      if (stageId) params.set("stageId", stageId);
+      apiRequest<MatchPage>(`/matches/page?${params}`)
+        .then((next) => {
+          if (active) {
+            setData(next);
+            setError("");
+          }
+        })
+        .catch((e) => {
+          if (active) setError(e.message);
+        })
+        .finally(() => {
+          if (active) setLoading(false);
+        });
+    }, 250);
+    return () => {
+      active = false;
+      clearTimeout(timer);
+    };
+  }, [page, query, status, tournamentId, stageId, refresh]);
 
-    if (initialFilter?.tournamentId) {
-      params.set("tournamentId", String(initialFilter.tournamentId));
+  function reload() {
+    setPage(1);
+    setRefresh((value) => value + 1);
+  }
+  async function mutate(path: string, method: string, body?: unknown) {
+    setBusy(true);
+    setError("");
+    setNotice("");
+    try {
+      await apiRequest(path, {
+        method,
+        ...(body === undefined ? {} : { body: JSON.stringify(body) }),
+      });
+      setNotice("Saved successfully.");
+      reload();
+    } catch (e) {
+      setError(e instanceof Error ? e.message : "Request failed.");
+    } finally {
+      setBusy(false);
     }
-
-    if (initialFilter?.stageId) {
-      params.set("stageId", String(initialFilter.stageId));
-    }
-
-    apiRequest<MatchRow[]>(`/matches${params.size ? `?${params}` : ""}`)
-      .then((data) => {
-        setMatches(data);
-        setCurrentPage(1);
-        setNotice("");
-      })
-      .catch((error) => {
-        setNotice(error instanceof Error ? error.message : "Cannot load matches.");
-      })
-      .finally(() => setIsLoading(false));
-  }, [initialFilter?.stageId, initialFilter?.tournamentId]);
+  }
 
   return (
-    <div className="px-4 py-6 sm:px-6 xl:px-8 xl:py-9">
-      <div className="mb-7 flex flex-wrap items-end justify-between gap-4">
+    <div className="px-4 py-6 text-white sm:px-6 xl:px-8">
+      <div className="mb-6 flex flex-wrap items-center justify-between gap-3">
         <div>
-          <h2 className="text-[34px] font-black leading-none text-white">
-            Matches
-          </h2>
-          {(initialFilter?.tournamentName || initialFilter?.stageName) && (
-            <p className="mt-3 text-sm font-bold text-[#9fb2b8]">
-              {initialFilter.tournamentName ?? "All tournaments"}
-              {initialFilter.stageName ? ` / ${initialFilter.stageName}` : ""}
-            </p>
-          )}
+          <h2 className="text-3xl font-black">Matches</h2>
+          <p className="mt-2 text-sm text-[#b6cbd1]">
+            {data.total} matches · Search and filter all matches
+          </p>
         </div>
         {canManage && (
-          <button
-            type="button"
-            onClick={onUnavailableFeature}
-            className="h-12 rounded bg-[#84d8e8] px-6 font-black text-[#06161b]"
-          >
-            + Add Match
-          </button>
+          <div className="flex gap-2">
+            <button
+              className={button}
+              onClick={() => setEditor({ importing: true })}
+            >
+              Import Matches
+            </button>
+            <button
+              className="rounded bg-[#84d8e8] px-4 py-2 font-bold text-[#06161b]"
+              onClick={() => setEditor({})}
+            >
+              + Add Match
+            </button>
+          </div>
         )}
       </div>
-
-      <section className="mb-5 grid gap-3 xl:grid-cols-[minmax(280px,1fr)_180px_180px]">
-        <label className="flex h-12 min-w-0 items-center gap-3 border border-[#3a4d54] bg-[#06161b] px-4 text-[#9fb2b8] focus-within:border-[#84d8e8]">
-          <Search size={18} className="shrink-0 text-[#84d8e8]" />
+      {error && (
+        <p
+          role="alert"
+          className="mb-4 rounded border border-red-400 p-3 text-red-200"
+        >
+          {error}
+        </p>
+      )}
+      {notice && (
+        <p role="status" className="mb-4 text-[#84d8e8]">
+          {notice}
+        </p>
+      )}
+      <div className="mb-5 grid gap-3 sm:grid-cols-2 xl:grid-cols-4">
+        <label className="grid gap-1 text-sm">
+          Search
           <input
+            aria-label="Search matches"
+            className={input}
+            maxLength={200}
             value={query}
-            onChange={(event) => {
-              setQuery(event.target.value);
-              setCurrentPage(1);
+            placeholder="Team, tournament or stage"
+            onChange={(e) => {
+              setQuery(e.target.value);
+              setPage(1);
             }}
-            placeholder="Search team or tournament..."
-            className="h-full min-w-0 flex-1 bg-transparent text-sm font-bold text-white outline-none placeholder:text-[#789098]"
           />
         </label>
-        <AdminSelect
-          value={status}
-          onChange={(nextStatus) => {
-            setStatus(nextStatus);
-            setCurrentPage(1);
-          }}
-          options={[
-            { value: "ALL", label: "All Status" },
-            { value: "PENDING", label: "Pending" },
-            { value: "LIVE", label: "Live" },
-            { value: "FINISHED", label: "Finished" },
-            { value: "CANCELLED", label: "Cancelled" },
-          ]}
-          ariaLabel="Filter matches by status"
-        />
-        <div className="flex h-12 items-center justify-center border border-[#3a4d54] bg-[#14272e] text-xs font-black uppercase tracking-[0.08em] text-[#84d8e8]">
-          {filteredMatches.length} matches
-        </div>
-      </section>
-
-      <section className="mb-5 grid grid-cols-[repeat(auto-fit,minmax(220px,1fr))] gap-4">
-        <DashboardStatCard title="Today" value={todayCount} icon={<CalendarDays size={21} />} />
-        <DashboardStatCard title="Pending" value={pendingCount} icon={<Users size={21} />} />
-        <DashboardStatCard title="Finished" value={finishedCount} icon={<Trophy size={21} />} />
-      </section>
-
-      <section className="overflow-hidden rounded border border-[#3a4d54] bg-[#0d252d]">
-        <div className="hidden grid-cols-[minmax(340px,1.45fr)_minmax(190px,0.85fr)_180px_112px_92px_150px] border-b border-[#3a4d54] bg-[#14272e] px-5 py-4 text-xs font-black uppercase tracking-[0.08em] text-[#84d8e8] xl:grid">
-          <span>Match</span>
-          <span>Tournament</span>
-          <span>Time</span>
-          <span>Status</span>
-          <span>Score</span>
-          <span>{canManage ? "Action" : "Source"}</span>
-        </div>
-        <div className="divide-y divide-[#243c43]">
-          {visibleMatches.map((match) => (
+        <label className="grid gap-1 text-sm">
+          Status
+          <select
+            className={input}
+            value={status}
+            onChange={(e) => {
+              setStatus(e.target.value);
+              setPage(1);
+            }}
+          >
+            {["ALL", "PENDING", "LIVE", "FINISHED", "CANCELLED"].map((s) => (
+              <option key={s} value={s}>
+                {s}
+              </option>
+            ))}
+          </select>
+        </label>
+        <label className="grid gap-1 text-sm">
+          Tournament
+          <select
+            className={input}
+            value={tournamentId}
+            onChange={(e) => {
+              setTournamentId(e.target.value);
+              setStageId("");
+              setStages([]);
+              setPage(1);
+            }}
+          >
+            <option value="">All tournaments</option>
+            {tournaments.map((t) => (
+              <option key={t.id} value={t.id}>
+                {t.name}
+              </option>
+            ))}
+          </select>
+        </label>
+        <label className="grid gap-1 text-sm">
+          Stage
+          <select
+            className={input}
+            value={stageId}
+            onChange={(e) => {
+              setStageId(e.target.value);
+              setPage(1);
+            }}
+          >
+            <option value="">All stages</option>
+            {stages.map((s) => (
+              <option key={s.id} value={s.id}>
+                {s.name}
+              </option>
+            ))}
+          </select>
+        </label>
+      </div>
+      <section
+        aria-busy={loading || busy}
+        className="overflow-hidden rounded border border-[#3a4d54] bg-[#10242b]"
+      >
+        {data.items.map((match) => {
+          const closed =
+            Boolean(match.predictionLocked) ||
+            match.status !== "PENDING" ||
+            new Date(match.deadline).getTime() <= now;
+          return (
             <article
               key={match.id}
-              className="grid min-w-0 gap-4 px-5 py-5 text-sm xl:grid-cols-[minmax(340px,1.45fr)_minmax(190px,0.85fr)_180px_112px_92px_150px] xl:items-center"
+              className="grid gap-4 border-b border-[#3a4d54] p-4 xl:grid-cols-[minmax(220px,1.3fr)_minmax(180px,1fr)_minmax(160px,1fr)_minmax(260px,1.2fr)] xl:items-center"
             >
-              <div className="min-w-0">
+              <div>
                 <MatchTeams match={match} />
-              </div>
-              <div className="min-w-0">
-                <p className="truncate font-black text-white">
-                  {match.tournamentName}
-                </p>
-                <p className="mt-1 truncate text-xs font-bold text-[#84d8e8]">
-                  {match.stageName ?? "Stage TBD"}
+                <p className="mt-2 text-xs text-[#b6cbd1]">
+                  {match.tournamentName} / {match.stageName}
                 </p>
               </div>
-              <p className="truncate whitespace-nowrap font-bold text-[#dce8eb]">
-                {formatDateTime(match.scheduledTime)}
-              </p>
-              <div className="flex min-w-0">
+              <div>
+                <p>{formatDateTime(match.scheduledTime)}</p>
+                <p className="mt-1 text-xs text-[#b6cbd1]">
+                  Vote deadline: {formatDateTime(match.deadline)}
+                </p>
+              </div>
+              <div>
                 <DashboardStatusBadge status={match.status} />
+                <p className="mt-2 text-sm">
+                  {formatScore(match)} · {closed ? "Locked" : "Unlocked"}
+                  {match.predictionLocked ? " (manual)" : ""}
+                </p>
               </div>
-              <p className="truncate whitespace-nowrap font-black text-white">{formatScore(match)}</p>
-              <div className="flex min-w-0 items-center gap-2">
-                <div className="min-w-0 flex-1">
-                  <DashboardSourceBadge source={match.source} />
-                </div>
-                {canManage && (
+              <div className="flex flex-wrap gap-2">
+                {canManage ? (
                   <>
                     <button
-                      type="button"
-                      onClick={onUnavailableFeature}
-                      title="Edit match"
-                      className="grid h-9 w-9 shrink-0 place-items-center rounded border border-[#3a4d54] bg-[#102d35] text-[#84d8e8] transition hover:border-[#84d8e8] hover:bg-[#143943] focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-[#84d8e8]"
+                      className={button}
+                      disabled={busy || match.status !== "PENDING"}
+                      onClick={() => setEditor({ match })}
                     >
-                      <Pencil size={15} />
+                      Edit
                     </button>
                     <button
-                      type="button"
-                      onClick={onUnavailableFeature}
-                      title="Delete match"
-                      className="grid h-9 w-9 shrink-0 place-items-center rounded border border-[#5d3037] bg-[#2a1115] text-[#ff8a8a] transition hover:border-[#ff8a8a] hover:bg-[#35171b] focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-[#ff8a8a]"
+                      className={button}
+                      disabled={busy}
+                      onClick={() => {
+                        if (
+                          window.confirm(
+                            `Delete ${match.homeName} vs ${match.awayName}?`,
+                          )
+                        )
+                          void mutate(`/matches/${match.id}`, "DELETE");
+                      }}
                     >
-                      <Trash2 size={15} />
+                      Delete
+                    </button>
+                    <button
+                      className={button}
+                      disabled={busy}
+                      onClick={() =>
+                        void mutate(
+                          `/matches/${match.id}/prediction-lock`,
+                          "PUT",
+                          { locked: !match.predictionLocked },
+                        )
+                      }
+                    >
+                      {match.predictionLocked ? "Unlock" : "Lock"}
                     </button>
                   </>
+                ) : (
+                  <button
+                    disabled={closed}
+                    className={button}
+                    onClick={() => setVote(match)}
+                  >
+                    {closed ? "Voting closed" : "Vote / Edit prediction"}
+                  </button>
                 )}
               </div>
             </article>
-          ))}
-          {!isLoading && filteredMatches.length === 0 && (
-            <p className="px-6 py-16 text-center text-sm font-bold text-[#9fb2b8]">
-              No matches found.
-            </p>
-          )}
-          {isLoading && (
-            <p className="px-6 py-16 text-center text-sm font-bold text-[#9fb2b8]">
-              Loading matches...
-            </p>
-          )}
-        </div>
-        {!isLoading && filteredMatches.length > 0 && (
-          <div className="flex flex-col gap-3 border-t border-[#3a4d54] bg-[#14272e] px-5 py-4 text-xs font-black uppercase tracking-[0.08em] text-[#9fb2b8] sm:flex-row sm:items-center sm:justify-between">
-            <span className="whitespace-nowrap">
-              Showing {visibleRangeStart}-{visibleRangeEnd} of{" "}
-              {filteredMatches.length}
-            </span>
-            <div className="flex items-center gap-2">
-              <button
-                type="button"
-                onClick={() => setCurrentPage((page) => Math.max(1, page - 1))}
-                disabled={activePage === 1}
-                className="grid h-9 w-9 place-items-center rounded border border-[#3a4d54] text-[#84d8e8] transition hover:border-[#84d8e8] disabled:cursor-not-allowed disabled:opacity-40"
-                aria-label="Previous matches page"
-              >
-                <ChevronLeft size={16} />
-              </button>
-              <span className="flex h-9 min-w-[82px] items-center justify-center rounded border border-[#243c43] bg-[#06161b] text-[#dce8eb]">
-                {activePage} / {totalPages}
-              </span>
-              <button
-                type="button"
-                onClick={() =>
-                  setCurrentPage((page) => Math.min(totalPages, page + 1))
-                }
-                disabled={activePage === totalPages}
-                className="grid h-9 w-9 place-items-center rounded border border-[#3a4d54] text-[#84d8e8] transition hover:border-[#84d8e8] disabled:cursor-not-allowed disabled:opacity-40"
-                aria-label="Next matches page"
-              >
-                <ChevronRight size={16} />
-              </button>
-            </div>
-          </div>
+          );
+        })}
+        {!data.items.length && (
+          <p className="p-8 text-center text-[#b6cbd1]">
+            {loading ? "Loading matches…" : "No matches found."}
+          </p>
         )}
+        <div className="flex items-center justify-end gap-3 p-4">
+          <button
+            className={button}
+            disabled={page <= 1}
+            onClick={() => setPage((p) => p - 1)}
+          >
+            Previous
+          </button>
+          <span>
+            Page {page} / {Math.max(1, Math.ceil(data.total / 20))}
+          </span>
+          <button
+            className={button}
+            disabled={page * 20 >= data.total}
+            onClick={() => setPage((p) => p + 1)}
+          >
+            Next
+          </button>
+        </div>
       </section>
-      {notice && <p className="mt-4 text-sm font-bold text-[#ff8a8a]">{notice}</p>}
+      <PredictionHistory
+        key={tournamentId || "all-tournaments"}
+        tournamentId={tournamentId ? Number(tournamentId) : undefined}
+        refresh={refresh}
+      />
+      {editor && (
+        <MatchEditor
+          match={editor.match}
+          importing={editor.importing}
+          tournamentId={tournamentId ? Number(tournamentId) : undefined}
+          onClose={() => setEditor(null)}
+          onSaved={() => {
+            setNotice("Saved successfully.");
+            reload();
+          }}
+        />
+      )}
+      {vote && (
+        <VoteDialog
+          match={vote}
+          onClose={() => setVote(null)}
+          onSaved={() => {
+            setNotice("Prediction saved.");
+            reload();
+          }}
+        />
+      )}
     </div>
   );
 }

@@ -3,15 +3,14 @@ import {
   CalendarDays,
   ChevronLeft,
   FileDown,
-  Search,
   Trophy,
   Users,
   Zap,
 } from "lucide-react";
 import { useEffect } from "react";
-import { useRef } from "react";
-import type { ChangeEvent } from "react";
 import { apiRequest } from "../../../api";
+import { MatchEditor } from "../../matches/match-editor";
+import { PredictionHistory } from "../../matches/predictions";
 import { ScoringRulesView } from "./scoring-rules-tab";
 import { StageStrip } from "./stage-strip";
 import { TeamsTab } from "./teams-tab";
@@ -21,7 +20,6 @@ import {
   DashboardStatusBadge,
   MatchTeams,
 } from "../../shared/dashboard-ui";
-import { AdminSelect } from "../../shared/admin-select";
 import type { MatchRow, TournamentRow, TournamentStage } from "../types";
 import {
   formatDateOnly,
@@ -68,7 +66,10 @@ export function TournamentDetailView({
   canManage: boolean;
   onOpenStageMatches: (stage: TournamentStage) => void;
 }) {
-  const sortedMatches = [...matches].sort(
+  const [loadedMatches, setLoadedMatches] = useState<MatchRow[] | null>(null);
+  const [predictionCount, setPredictionCount] = useState(0);
+  const activeMatches = loadedMatches ?? matches;
+  const sortedMatches = [...activeMatches].sort(
     (first, second) =>
       new Date(first.scheduledTime).getTime() -
       new Date(second.scheduledTime).getTime(),
@@ -81,13 +82,13 @@ export function TournamentDetailView({
     (match) => !isFinishedStatus(match.status),
   );
   const completedCount = finishedMatches.length;
-  const progress = matches.length
-    ? Math.round((completedCount / matches.length) * 100)
+  const progress = activeMatches.length
+    ? Math.round((completedCount / activeMatches.length) * 100)
     : 0;
   const dateRange = getTournamentDateRange(sortedMatches);
   const firstUpcoming = upcomingMatches[0];
   const schedulePageSize = 8;
-  const matchImportInputRef = useRef<HTMLInputElement>(null);
+  const [importOpen, setImportOpen] = useState(false);
   const [schedulePage, setSchedulePage] = useState(1);
   const [activeTab, setActiveTab] = useState("Overview");
   const [matchImportMessage, setMatchImportMessage] = useState("");
@@ -123,26 +124,15 @@ export function TournamentDetailView({
     ? `${tournament.name} has no matches scheduled today.`
     : "No schedule has been imported for this tournament.";
 
-  function importMatchFile(event: ChangeEvent<HTMLInputElement>) {
-    const file = event.target.files?.[0];
-
-    if (!file) {
-      return;
-    }
-
-    if (!isExcelFile(file)) {
-      setMatchImportMessage("Only Excel files are allowed for match import.");
-      event.target.value = "";
-      return;
-    }
-
-    setMatchImportMessage(`${file.name} selected.`);
-    event.target.value = "";
-    onUnavailableFeature();
-  }
-
   useEffect(() => {
     let isMounted = true;
+    apiRequest<{ total: number }>(`/predictions?tournamentId=${tournament.id}`)
+      .then((data) => {
+        if (isMounted) setPredictionCount(data.total);
+      })
+      .catch(() => {
+        if (isMounted) setPredictionCount(0);
+      });
 
     apiRequest<TournamentStage[]>(`/stages?tournamentId=${tournament.id}`)
       .then((data) => {
@@ -194,11 +184,10 @@ export function TournamentDetailView({
                 <Users size={15} /> {tournament.teams.toLocaleString()} Teams
               </span>
               <span className="inline-flex items-center gap-2">
-                <Trophy size={15} /> {matches.length.toLocaleString()} Matches
+                <Trophy size={15} /> {activeMatches.length.toLocaleString()} Matches
               </span>
               <span className="inline-flex items-center gap-2">
-                <Zap size={15} />{" "}
-                {Math.max(matches.length * 3, 0).toLocaleString()} Predictions
+                <Zap size={15} /> {predictionCount.toLocaleString()} Predictions
               </span>
               <span className="inline-flex items-center gap-2">
                 <CalendarDays size={15} /> {dateRange}
@@ -220,19 +209,12 @@ export function TournamentDetailView({
             <div>
               <button
                 type="button"
-                onClick={() => matchImportInputRef.current?.click()}
+                onClick={() => setImportOpen(true)}
                 className="inline-flex min-h-[54px] items-center justify-center gap-4 border border-[#3a4d54] bg-[#162b32] px-5 py-3 text-center text-xs font-black uppercase tracking-[0.08em] text-[#84d8e8] transition hover:border-[#84d8e8] hover:bg-[#1b343d]"
               >
                 <FileDown size={20} />
                 Import List Match
               </button>
-              <input
-                ref={matchImportInputRef}
-                type="file"
-                accept=".xlsx,.xls,application/vnd.openxmlformats-officedocument.spreadsheetml.sheet,application/vnd.ms-excel"
-                onChange={importMatchFile}
-                className="hidden"
-              />
               {matchImportMessage && (
                 <p className="mt-2 max-w-[230px] text-xs font-bold text-[#84d8e8]">
                   {matchImportMessage}
@@ -267,11 +249,11 @@ export function TournamentDetailView({
       {activeTab === "Scoring Rules" ? (
         <ScoringRulesView tournament={tournament} canManage={canManage} />
       ) : activeTab === "Predictions" ? (
-        <PredictionAnalyticsView tournament={tournament} matches={matches} />
+        <PredictionHistory key={tournament.id} tournamentId={tournament.id} />
       ) : activeTab === "Teams" ? (
         <TeamsTab
           tournament={tournament}
-          matches={matches}
+          matches={activeMatches}
           canManage={canManage}
           onUnavailableFeature={onUnavailableFeature}
         />
@@ -302,12 +284,12 @@ export function TournamentDetailView({
                 </div>
               </div>
               <p className="mt-6 text-xl font-black text-white">
-                {completedCount} of {matches.length} Matches Completed
+                {completedCount} of {activeMatches.length} Matches Completed
               </p>
               <p className="mt-3 text-lg leading-relaxed text-[#c8d6db]">
                 {firstUpcoming
                   ? `Next match starts ${formatDateTime(firstUpcoming.scheduledTime)}.`
-                  : matches.length > 0
+                  : activeMatches.length > 0
                     ? "All imported matches are completed."
                     : emptyScheduleMessage}
               </p>
@@ -463,387 +445,21 @@ export function TournamentDetailView({
           </section>
         </>
       )}
+      {importOpen && (
+        <MatchEditor
+          importing
+          tournamentId={tournament.id}
+          onClose={() => setImportOpen(false)}
+          onSaved={() => {
+            setMatchImportMessage("Import complete. Match schedule refreshed.");
+            apiRequest<MatchRow[]>(`/matches?tournamentId=${tournament.id}`)
+              .then(setLoadedMatches)
+              .catch((error) => setMatchImportMessage(error.message));
+          }}
+        />
+      )}
     </section>
   );
-}
-
-type PredictionRow = {
-  id: string;
-  playerCode: string;
-  player: string;
-  match: string;
-  prediction: string;
-  points: number | null;
-  status: "CORRECT" | "INCORRECT" | "PENDING";
-};
-
-function PredictionAnalyticsView({
-  tournament,
-  matches,
-}: {
-  tournament: TournamentRow;
-  matches: MatchRow[];
-}) {
-  const [playerSearch, setPlayerSearch] = useState("");
-  const [stageFilter, setStageFilter] = useState("GROUP_STAGE");
-  const [pointFilter, setPointFilter] = useState("ALL");
-  const [statusFilter, setStatusFilter] = useState("ALL");
-  const predictionRows = buildPredictionRows(matches);
-  const stageOptions = [
-    { value: "GROUP_STAGE", label: "Group Stage" },
-    { value: "KNOCKOUT", label: "Knockout" },
-    { value: "FINAL", label: "Final" },
-  ];
-  const pointOptions = [
-    { value: "ALL", label: "All Points" },
-    { value: "POSITIVE", label: "Point Awarded" },
-    { value: "ZERO", label: "Zero Point" },
-    { value: "PENDING", label: "Pending Point" },
-  ];
-  const statusOptions = ["ALL", "CORRECT", "INCORRECT", "PENDING"];
-  const visibleRows = predictionRows.filter((row) => {
-    const searchValue = playerSearch.trim().toLowerCase();
-    const matchesSearch = `${row.player} ${row.match}`
-      .toLowerCase()
-      .includes(searchValue);
-    const matchesStatus = statusFilter === "ALL" || row.status === statusFilter;
-    const matchesPoint =
-      pointFilter === "ALL" ||
-      (pointFilter === "POSITIVE" && row.points != null && row.points > 0) ||
-      (pointFilter === "ZERO" && row.points === 0) ||
-      (pointFilter === "PENDING" && row.points == null);
-
-    return matchesSearch && matchesStatus && matchesPoint;
-  });
-  const totalPredictions = Math.max(predictionRows.length, matches.length * 9);
-  const mostPredictedTeam =
-    getMostPredictedTeam(predictionRows) ??
-    matches.find((match) => match.homeName)?.homeName ??
-    "No team data";
-  const resultMatch = matches.find((match) => isFinishedStatus(match.status));
-  const resultText = resultMatch
-    ? getWinnerText(resultMatch)
-    : "Awaiting Result";
-  const resultMeta = resultMatch
-    ? `${formatScore(resultMatch)} final`
-    : "No completed matches yet";
-
-  return (
-    <section className="border-t border-[#314850] bg-[#06161b] p-4 sm:p-7 lg:p-8">
-      <div className="mb-6 flex flex-wrap items-start justify-between gap-4">
-        <div>
-          <p className="text-lg font-black text-[#84d8e8]">Predictions</p>
-          <h4 className="mt-4 text-2xl font-black text-white">
-            {tournament.name}
-          </h4>
-          <p className="mt-1 text-sm font-bold text-[#789098]">
-            Prediction Data & Analytics
-          </p>
-        </div>
-        <button
-          type="button"
-          className="inline-flex h-10 items-center gap-2 border border-[#243c43] bg-[#07181d] px-4 text-[10px] font-black uppercase tracking-[0.08em] text-[#dce8eb] transition hover:border-[#84d8e8] hover:text-[#84d8e8]"
-        >
-          <FileDown size={14} /> Export Data
-        </button>
-      </div>
-
-      <div className="grid grid-cols-[repeat(auto-fit,minmax(230px,1fr))] gap-4">
-        <PredictionMetricCard
-          title="Total Predictions"
-          value={totalPredictions.toLocaleString()}
-          meta="+15% vs last round"
-          icon={<Zap size={18} />}
-        />
-        <PredictionMetricCard
-          title="Most Predicted Team"
-          value={mostPredictedTeam}
-          meta="62% of users picked to win"
-          icon={<Users size={18} />}
-        />
-        <PredictionMetricCard
-          title="Result"
-          value={resultText}
-          meta={resultMeta}
-          icon={<Trophy size={18} />}
-        />
-      </div>
-
-      <section className="mt-6 overflow-hidden border border-[#243c43] bg-[#0d252d]">
-        <div className="border-b border-[#243c43] bg-[#07181d] px-4 py-4 sm:px-5">
-          <div className="grid gap-3 lg:grid-cols-[minmax(170px,1fr)_minmax(170px,1fr)_minmax(170px,1fr)_minmax(220px,1.2fr)]">
-            <PredictionFilterField label="Stage">
-              <AdminSelect
-                value={stageFilter}
-                onChange={setStageFilter}
-                options={stageOptions}
-                ariaLabel="Filter prediction stage"
-                size="compact"
-                className="h-10"
-              />
-            </PredictionFilterField>
-            <PredictionFilterField label="Point Filter">
-              <AdminSelect
-                value={pointFilter}
-                onChange={setPointFilter}
-                options={pointOptions}
-                ariaLabel="Filter prediction points"
-                size="compact"
-                className="h-10"
-              />
-            </PredictionFilterField>
-            <PredictionFilterField label="Status">
-              <AdminSelect
-                value={statusFilter}
-                onChange={setStatusFilter}
-                options={statusOptions.map((status) => ({
-                  value: status,
-                  label: status === "ALL" ? "All Status" : status,
-                }))}
-                ariaLabel="Filter prediction status"
-                size="compact"
-                className="h-10"
-                menuClassName="right-0 left-auto min-w-[170px]"
-              />
-            </PredictionFilterField>
-            <PredictionFilterField label="Search">
-              <div className="grid grid-cols-[minmax(0,1fr)_42px]">
-                <input
-                  value={playerSearch}
-                  onChange={(event) => setPlayerSearch(event.target.value)}
-                  placeholder="Search player or match..."
-                  className="h-10 min-w-0 border border-r-0 border-[#243c43] bg-[#07181d] px-4 text-xs font-bold text-white outline-none placeholder:text-[#789098] focus:border-[#84d8e8]"
-                />
-                <button
-                  type="button"
-                  aria-label="Search predictions"
-                  className="grid h-10 place-items-center border border-[#243c43] bg-[#0d252d] text-[#dce8eb] transition hover:border-[#84d8e8] hover:text-[#84d8e8]"
-                >
-                  <Search size={16} />
-                </button>
-              </div>
-            </PredictionFilterField>
-          </div>
-        </div>
-
-        <div className="overflow-x-auto">
-          <div className="min-w-[900px]">
-            <div className="grid grid-cols-[190px_minmax(260px,1fr)_160px_90px_110px] gap-x-6 border-b border-[#243c43] bg-[#10242b] px-4 py-3 text-[10px] font-black uppercase tracking-[0.08em] text-[#789098]">
-              <span>Player</span>
-              <span>Match</span>
-              <span>Prediction</span>
-              <span>Points</span>
-              <span>Status</span>
-            </div>
-            <div className="divide-y divide-[#243c43]">
-              {visibleRows.slice(0, 8).map((row, index) => (
-                <div
-                  key={row.id}
-                  className={`grid grid-cols-[190px_minmax(260px,1fr)_160px_90px_110px] items-center gap-x-6 px-4 py-4 text-sm ${
-                    index % 2 === 0 ? "bg-[#0d252d]" : "bg-[#14272e]"
-                  }`}
-                >
-                  <div className="flex min-w-0 items-center gap-2">
-                    <span className="grid h-7 w-7 place-items-center rounded-sm bg-[#163943] text-[10px] font-black text-[#84d8e8]">
-                      {row.playerCode}
-                    </span>
-                    <span className="min-w-0 truncate font-black text-[#dce8eb]">
-                      {row.player}
-                    </span>
-                  </div>
-                  <span className="min-w-0 truncate font-bold text-[#9fb2b8]">
-                    {row.match}
-                  </span>
-                  <span className="min-w-0 truncate font-black lowercase text-[#dce8eb]">
-                    {row.prediction}
-                  </span>
-                  <span
-                    className={`font-black ${
-                      row.points && row.points > 0
-                        ? "text-[#84d8e8]"
-                        : "text-[#9fb2b8]"
-                    }`}
-                  >
-                    {row.points == null
-                      ? "--"
-                      : row.points > 0
-                        ? `+${row.points}`
-                        : row.points}
-                  </span>
-                  <PredictionStatusBadge status={row.status} />
-                </div>
-              ))}
-              {visibleRows.length === 0 && (
-                <p className="px-4 py-14 text-center text-sm text-[#9fb2b8]">
-                  No predictions match your filter.
-                </p>
-              )}
-            </div>
-          </div>
-        </div>
-
-        <div className="flex flex-wrap items-center justify-between gap-3 border-t border-[#243c43] px-4 py-4 text-xs font-bold text-[#9fb2b8]">
-          <span>
-            Showing {visibleRows.length ? 1 : 0} to{" "}
-            {Math.min(8, visibleRows.length)} of {predictionRows.length} entries
-          </span>
-          <div className="flex gap-2">
-            <button className="grid h-9 w-9 place-items-center border border-[#243c43] text-[#789098]">
-              ‹
-            </button>
-            <button className="grid h-9 w-9 place-items-center border border-[#243c43] text-[#789098]">
-              ›
-            </button>
-          </div>
-        </div>
-      </section>
-    </section>
-  );
-}
-
-function PredictionFilterField({
-  label,
-  children,
-}: {
-  label: string;
-  children: React.ReactNode;
-}) {
-  return (
-    <label className="grid gap-1">
-      <span className="text-[10px] font-black text-[#84d8e8]">{label}</span>
-      {children}
-    </label>
-  );
-}
-
-function PredictionMetricCard({
-  title,
-  value,
-  meta,
-  icon,
-}: {
-  title: string;
-  value: string;
-  meta: string;
-  icon: React.ReactNode;
-}) {
-  return (
-    <article className="min-w-0 overflow-hidden border border-[#243c43] bg-[#0d252d] p-5">
-      <div className="grid min-w-0 grid-cols-[minmax(0,1fr)_24px] items-start gap-4">
-        <div className="min-w-0">
-          <p
-            title={title}
-            className="truncate whitespace-nowrap text-[10px] font-black uppercase tracking-[0.12em] text-[#789098]"
-          >
-            {title}
-          </p>
-          <p
-            title={value}
-            className="mt-5 truncate whitespace-nowrap text-2xl font-black tabular-nums text-white"
-          >
-            {value}
-          </p>
-          <p
-            title={meta}
-            className="mt-2 truncate whitespace-nowrap text-xs font-black text-[#84d8e8]"
-          >
-            {meta}
-          </p>
-        </div>
-        <span className="flex h-6 w-6 shrink-0 items-start justify-center text-[#84d8e8]">
-          {icon}
-        </span>
-      </div>
-    </article>
-  );
-}
-
-function PredictionStatusBadge({
-  status,
-}: {
-  status: PredictionRow["status"];
-}) {
-  const className =
-    status === "CORRECT"
-      ? "bg-[#183229] text-[#a7e8c0]"
-      : status === "INCORRECT"
-        ? "bg-[#35171b] text-[#ff8a8a]"
-        : "bg-[#14272e] text-[#9fb2b8]";
-
-  return (
-    <span
-      className={`inline-flex h-7 w-fit items-center rounded-sm px-3 text-[10px] font-black uppercase ${className}`}
-    >
-      {status}
-    </span>
-  );
-}
-
-function buildPredictionRows(matches: MatchRow[]): PredictionRow[] {
-  const players = [
-    { code: "X7", name: "Xeno77" },
-    { code: "BL", name: "BladeRunner99" },
-    { code: "GZ", name: "GhostZero" },
-    { code: "AR", name: "ArcRider" },
-    { code: "NP", name: "NeonPulse" },
-  ];
-
-  return matches.slice(0, 6).flatMap((match, matchIndex) => {
-    const matchName = `${match.homeName ?? "TBD"} vs. ${match.awayName ?? "TBD"}`;
-    const predictions = [
-      `${match.homeName ?? "home"} win`,
-      "draw",
-      `${match.awayName ?? "away"} win`,
-    ];
-
-    return players.slice(0, 3).map((player, playerIndex) => ({
-      id: `${match.id}-${player.code}-${playerIndex}`,
-      playerCode: player.code,
-      player: players[(matchIndex + playerIndex) % players.length].name,
-      match: matchName,
-      prediction: predictions[playerIndex],
-      points:
-        playerIndex === 2 && !isFinishedStatus(match.status)
-          ? null
-          : playerIndex === 0
-            ? 50
-            : 0,
-      status:
-        playerIndex === 2 && !isFinishedStatus(match.status)
-          ? "PENDING"
-          : playerIndex === 0
-            ? "CORRECT"
-            : "INCORRECT",
-    }));
-  });
-}
-
-function getMostPredictedTeam(rows: PredictionRow[]) {
-  const counts = new Map<string, number>();
-
-  rows.forEach((row) => {
-    const team = row.prediction.replace(/\s+win$/i, "");
-
-    if (team !== "draw") {
-      counts.set(team, (counts.get(team) ?? 0) + 1);
-    }
-  });
-
-  return [...counts.entries()].sort((a, b) => b[1] - a[1])[0]?.[0];
-}
-
-function getWinnerText(match: MatchRow) {
-  if (
-    match.actualHomeScore == null ||
-    match.actualAwayScore == null ||
-    match.actualHomeScore === match.actualAwayScore
-  ) {
-    return "Draw";
-  }
-
-  return match.actualHomeScore > match.actualAwayScore
-    ? `${match.homeName ?? "Home"} Win`
-    : `${match.awayName ?? "Away"} Win`;
 }
 
 function CompactMatchRow({ match }: { match: MatchRow }) {
@@ -914,18 +530,6 @@ function ResultMatchRow({ match }: { match: MatchRow }) {
       </div>
       <div className="font-black text-white">{match.awayName ?? "TBD"}</div>
     </article>
-  );
-}
-
-function isExcelFile(file: File) {
-  const fileName = file.name.toLowerCase();
-
-  return (
-    fileName.endsWith(".xlsx") ||
-    fileName.endsWith(".xls") ||
-    file.type ===
-      "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet" ||
-    file.type === "application/vnd.ms-excel"
   );
 }
 

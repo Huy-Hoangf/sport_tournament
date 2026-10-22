@@ -167,7 +167,6 @@ export function TeamsTab({
 
   useEffect(() => {
     if (!canManage) {
-      setPlayerOptions([]);
       return;
     }
 
