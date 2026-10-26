@@ -10,8 +10,9 @@ type Prediction = {
   player: string;
   match: string;
   stage: string;
-  homeScore: number;
-  awayScore: number;
+  homeScore: number | null;
+  awayScore: number | null;
+  outcome: "HOME_WIN" | "DRAW" | "AWAY_WIN";
   prediction: string;
   status: string;
   points: number | null;
@@ -154,8 +155,7 @@ export function VoteDialog({
   onSaved: () => void;
 }) {
   const dialog = useRef<HTMLDialogElement>(null);
-  const [home, setHome] = useState(0),
-    [away, setAway] = useState(0);
+  const [outcome, setOutcome] = useState<Prediction["outcome"] | null>(null);
   const [busy, setBusy] = useState(false),
     [loading, setLoading] = useState(true);
   const [error, setError] = useState("");
@@ -166,8 +166,7 @@ export function VoteDialog({
     apiRequest<PredictionPage>(`/predictions?matchId=${match.id}`)
       .then((data) => {
         if (active && data.items[0]) {
-          setHome(data.items[0].homeScore);
-          setAway(data.items[0].awayScore);
+          setOutcome(data.items[0].outcome);
           setSaved(true);
         }
       })
@@ -183,12 +182,16 @@ export function VoteDialog({
   }, [match.id]);
   async function submit(e: FormEvent) {
     e.preventDefault();
+    if (!outcome) {
+      setError("Choose a team to win or a draw.");
+      return;
+    }
     setBusy(true);
     setError("");
     try {
       await apiRequest(`/predictions/${match.id}`, {
         method: "PUT",
-        body: JSON.stringify({ homeScore: home, awayScore: away }),
+        body: JSON.stringify({ outcome }),
       });
       onSaved();
       onClose();
@@ -223,36 +226,26 @@ export function VoteDialog({
             {error}
           </p>
         )}
-        <div className="grid grid-cols-2 gap-4">
-          <label>
-            {match.homeName}
-            <input
-              aria-label="Home score"
-              required
-              type="number"
-              min={0}
-              max={100}
-              value={home}
-              disabled={busy || loading}
-              onChange={(e) => setHome(Number(e.target.value))}
-              className="w-full rounded border border-[#3a4d54] bg-[#06161b] p-3"
-            />
-          </label>
-          <label>
-            {match.awayName}
-            <input
-              aria-label="Away score"
-              required
-              type="number"
-              min={0}
-              max={100}
-              value={away}
-              disabled={busy || loading}
-              onChange={(e) => setAway(Number(e.target.value))}
-              className="w-full rounded border border-[#3a4d54] bg-[#06161b] p-3"
-            />
-          </label>
-        </div>
+        <fieldset disabled={busy || loading} className="grid gap-2">
+          <legend className="mb-2 font-bold">Who will win?</legend>
+          {([
+            ["HOME_WIN", `${match.homeName} wins`],
+            ["DRAW", "Draw"],
+            ["AWAY_WIN", `${match.awayName} wins`],
+          ] as const).map(([value, label]) => (
+            <label key={value} className="flex cursor-pointer items-center gap-3 rounded border border-[#3a4d54] bg-[#06161b] p-3 has-[:checked]:border-[#84d8e8] has-[:checked]:bg-[#17363d]">
+              <input
+                type="radio"
+                name="outcome"
+                value={value}
+                checked={outcome === value}
+                onChange={() => setOutcome(value)}
+                className="accent-[#84d8e8]"
+              />
+              {label}
+            </label>
+          ))}
+        </fieldset>
         <p className="text-sm text-[#b6cbd1]">
           You can change your prediction before voting is locked.
         </p>
@@ -269,7 +262,7 @@ export function VoteDialog({
             disabled={busy || loading}
             className="rounded bg-[#84d8e8] px-4 py-2 font-bold text-[#06161b] disabled:opacity-40"
           >
-            {busy ? "Saving…" : "Save prediction"}
+            {busy ? "Saving…" : "Save vote"}
           </button>
         </div>
       </form>

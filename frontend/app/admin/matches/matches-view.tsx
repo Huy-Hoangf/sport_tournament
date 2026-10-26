@@ -44,7 +44,7 @@ export default function MatchesView({
     pageSize: 20,
   });
   const [query, setQuery] = useState(""),
-    [status, setStatus] = useState("ALL");
+    [status, setStatus] = useState(canManage ? "ALL" : "OPEN");
   const [tournamentId, setTournamentId] = useState(
     String(initialFilter?.tournamentId ?? ""),
   );
@@ -91,9 +91,10 @@ export default function MatchesView({
       const params = new URLSearchParams({
         page: String(page),
         pageSize: "20",
-        status,
         search: query,
       });
+      if (status === "OPEN") params.set("openForVoting", "true");
+      else params.set("status", status);
       if (tournamentId) params.set("tournamentId", tournamentId);
       if (stageId) params.set("stageId", stageId);
       apiRequest<MatchPage>(`/matches/page?${params}`)
@@ -144,7 +145,7 @@ export default function MatchesView({
         <div>
           <h2 className="text-3xl font-black">Matches</h2>
           <p className="mt-2 text-sm text-[#b6cbd1]">
-            {data.total} matches · Search and filter all matches
+            {data.total} matches · Search and filter matches
           </p>
         </div>
         {canManage && (
@@ -202,6 +203,7 @@ export default function MatchesView({
               setPage(1);
             }}
           >
+            {!canManage && <option value="OPEN">Open for voting</option>}
             {["ALL", "PENDING", "LIVE", "FINISHED", "CANCELLED"].map((s) => (
               <option key={s} value={s}>
                 {s}
@@ -334,7 +336,11 @@ export default function MatchesView({
         })}
         {!data.items.length && (
           <p className="p-8 text-center text-[#b6cbd1]">
-            {loading ? "Loading matches…" : "No matches found."}
+            {loading
+              ? "Loading matches…"
+              : status === "OPEN"
+                ? "No matches are open for voting. Choose All to see other matches."
+                : "No matches found."}
           </p>
         )}
         <div className="flex items-center justify-end gap-3 p-4">

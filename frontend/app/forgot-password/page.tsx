@@ -1,173 +1,39 @@
-"use client";
-
-import { useState } from "react";
-import { useRouter } from "next/navigation";
-import { ArrowLeft, KeyRound, Lock, Mail } from "lucide-react";
+import { ArrowLeft, LockKeyhole } from "lucide-react";
 import Link from "next/link";
-import { apiRequest } from "../api";
-import NoticeBanner, { type Notice } from "../notice-banner";
 
 export default function ForgotPasswordPage() {
-  const router = useRouter();
-
-  const [email, setEmail] = useState("");
-  const [isVerified, setIsVerified] = useState(false);
-  const [newPassword, setNewPassword] = useState("");
-  const [confirmPassword, setConfirmPassword] = useState("");
-  const [isLoading, setIsLoading] = useState(false);
-  const [notice, setNotice] = useState<Notice | null>(null);
-
-  function showNotice(message: string, tone: Notice["tone"] = "info") {
-    setNotice({ message, tone });
-  }
-
-  async function verifyEmail() {
-    const normalizedEmail = email.trim().toLowerCase();
-
-    if (!normalizedEmail) {
-      showNotice("Please enter your email.", "error");
-      return;
-    }
-
-    setIsLoading(true);
-
-    try {
-      await apiRequest<{ message: string; email: string }>("/auth/forgot-password", {
-        method: "POST",
-        body: JSON.stringify({ email: normalizedEmail }),
-      });
-
-      setEmail(normalizedEmail);
-      setIsVerified(true);
-    } catch (error) {
-      showNotice(
-        error instanceof Error ? error.message : "Email verification failed.",
-        "error",
-      );
-    } finally {
-      setIsLoading(false);
-    }
-  }
-
-  async function resetPassword() {
-    if (!newPassword || !confirmPassword) {
-      showNotice("Please enter and confirm the new password.", "error");
-      return;
-    }
-
-    if (newPassword !== confirmPassword) {
-      showNotice("Confirm password does not match.", "error");
-      return;
-    }
-
-    setIsLoading(true);
-
-    try {
-      await apiRequest<{ message: string }>("/auth/reset-password", {
-        method: "POST",
-        body: JSON.stringify({
-          email,
-          newPassword,
-        }),
-      });
-
-      showNotice("Password reset successfully.", "success");
-      router.push("/login");
-    } catch (error) {
-      showNotice(
-        error instanceof Error ? error.message : "Reset password failed.",
-        "error",
-      );
-    } finally {
-      setIsLoading(false);
-    }
-  }
-
   return (
-    <main className="auth-page flex min-h-screen flex-col overflow-hidden bg-[#0c1111] text-zinc-200">
-      <NoticeBanner notice={notice} onClose={() => setNotice(null)} />
-      <header className="flex h-[90px] shrink-0 items-center justify-between border-b border-white/10 px-8">
-        <h1 className="text-[30px] font-black tracking-[-0.06em] text-[#84d8e8] drop-shadow-[0_0_10px_rgba(132,216,232,0.35)]">
+    <main className="auth-page flex min-h-screen flex-col bg-[#0c1111] text-zinc-200">
+      <header className="flex min-h-[90px] items-center justify-between gap-4 border-b border-white/10 px-5 sm:px-8">
+        <h1 className="text-2xl font-black tracking-[-0.04em] text-[#84d8e8] sm:text-[30px]">
           TWENTY-TECH
         </h1>
-
         <Link
           href="/login"
-          className="flex items-center gap-2 text-sm font-bold uppercase tracking-[0.18em] text-zinc-300 hover:text-[#84d8e8]"
+          className="flex items-center gap-2 text-sm font-bold text-zinc-200 underline-offset-4 hover:text-[#84d8e8] focus-visible:outline focus-visible:outline-2 focus-visible:outline-[#84d8e8]"
         >
-          <ArrowLeft size={18} />
+          <ArrowLeft size={18} aria-hidden="true" />
           Back to login
         </Link>
       </header>
 
       <section className="flex flex-1 items-center justify-center px-5 py-12">
-        <div className="w-full max-w-[560px] rounded-lg border border-[#84d8e844] bg-[#0d1b1ecc] px-10 py-11 shadow-[0_0_45px_rgba(132,216,232,0.1)] backdrop-blur">
-          <h2 className="mb-3 text-center text-[38px] font-bold tracking-[-0.02em] text-zinc-200">
-            Forgot Password
+        <div className="w-full max-w-[560px] rounded-lg border border-[#3a4d54] bg-[#0d1b1e] px-6 py-10 sm:px-10">
+          <LockKeyhole size={28} className="mb-6 text-[#84d8e8]" aria-hidden="true" />
+          <h2 className="text-3xl font-bold tracking-[-0.02em]">
+            Forgot your password?
           </h2>
-
-          <p className="mb-10 text-center text-zinc-400">
-            Reset password for admin or player accounts
+          <p className="mt-5 leading-7 text-zinc-300">
+            Contact your tournament administrator to request a password reset.
+            For account security, entering an email here cannot verify that you
+            own it.
           </p>
-
-          <label className="mb-3 flex items-center gap-2 text-sm font-bold uppercase tracking-[0.18em] text-zinc-400">
-            <Mail size={17} />
-            Email
-          </label>
-
-          <input
-            value={email}
-            onChange={(event) => setEmail(event.target.value)}
-            disabled={isVerified}
-            placeholder="YOUR EMAIL"
-            className="mb-6 h-[64px] w-full rounded border border-white/10 bg-[#080f0f] px-5 text-lg font-bold text-zinc-200 outline-none transition placeholder:text-zinc-600 focus:border-[#84d8e888] disabled:opacity-60"
-          />
-
-          {!isVerified ? (
-            <button
-              onClick={verifyEmail}
-              disabled={isLoading}
-              className="flex h-[64px] w-full items-center justify-center gap-3 rounded bg-[#84d8e8] text-[16px] font-black uppercase tracking-[0.22em] text-[#102026] shadow-[0_0_20px_rgba(132,216,232,0.28)] transition hover:bg-[#a5e9f3] disabled:opacity-60"
-            >
-              {isLoading ? "Verifying..." : "Verify Email"}
-              <KeyRound size={22} />
-            </button>
-          ) : (
-            <>
-              <label className="mb-3 flex items-center gap-2 text-sm font-bold uppercase tracking-[0.18em] text-zinc-400">
-                <Lock size={17} />
-                New Password
-              </label>
-
-              <input
-                type="password"
-                value={newPassword}
-                onChange={(event) => setNewPassword(event.target.value)}
-                className="mb-6 h-[64px] w-full rounded border border-white/10 bg-[#080f0f] px-5 text-lg font-bold text-zinc-200 outline-none transition focus:border-[#84d8e888]"
-              />
-
-              <label className="mb-3 flex items-center gap-2 text-sm font-bold uppercase tracking-[0.18em] text-zinc-400">
-                <Lock size={17} />
-                Confirm Password
-              </label>
-
-              <input
-                type="password"
-                value={confirmPassword}
-                onChange={(event) => setConfirmPassword(event.target.value)}
-                className="mb-8 h-[64px] w-full rounded border border-white/10 bg-[#080f0f] px-5 text-lg font-bold text-zinc-200 outline-none transition focus:border-[#84d8e888]"
-              />
-
-              <button
-                onClick={resetPassword}
-                disabled={isLoading}
-                className="flex h-[64px] w-full items-center justify-center gap-3 rounded bg-[#84d8e8] text-[16px] font-black uppercase tracking-[0.22em] text-[#102026] shadow-[0_0_20px_rgba(132,216,232,0.28)] transition hover:bg-[#a5e9f3] disabled:opacity-60"
-              >
-                {isLoading ? "Resetting..." : "Reset Password"}
-                <KeyRound size={22} />
-              </button>
-            </>
-          )}
+          <Link
+            href="/login"
+            className="mt-8 inline-flex min-h-12 items-center justify-center rounded bg-[#84d8e8] px-6 font-bold text-[#102026] hover:bg-[#a5e9f3] focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-white"
+          >
+            Return to login
+          </Link>
         </div>
       </section>
     </main>
