@@ -26,8 +26,8 @@ export class PredictionsController {
     @Body() input: Record<string, unknown>,
   ) {
     const user = await this.auth.verifyAccessToken(authorization);
-    if (user.role !== 'PLAYER')
-      throw new ForbiddenException('Only players can vote.');
+    if (!['PLAYER', 'ADMIN', 'SUPER_ADMIN'].includes(user.role))
+      throw new ForbiddenException('Cannot vote.');
     return this.predictions.vote(user.sub, positiveId(matchId), input ?? {});
   }
 
@@ -39,7 +39,7 @@ export class PredictionsController {
     const user = await this.auth.verifyAccessToken(authorization);
     return this.predictions.list(
       user.sub,
-      ['ADMIN', 'SUPER_ADMIN'].includes(user.role),
+      ['ADMIN', 'SUPER_ADMIN'].includes(user.role) && query.mine !== 'true',
       query.tournamentId ? positiveId(query.tournamentId) : undefined,
       query.matchId ? positiveId(query.matchId) : undefined,
       query.page ? positiveId(query.page) : 1,

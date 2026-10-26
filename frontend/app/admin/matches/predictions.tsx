@@ -163,7 +163,7 @@ export function VoteDialog({
   useEffect(() => {
     dialog.current?.showModal();
     let active = true;
-    apiRequest<PredictionPage>(`/predictions?matchId=${match.id}`)
+    apiRequest<PredictionPage>(`/predictions?matchId=${match.id}&mine=true`)
       .then((data) => {
         if (active && data.items[0]) {
           setOutcome(data.items[0].outcome);
@@ -247,7 +247,7 @@ export function VoteDialog({
           ))}
         </fieldset>
         <p className="text-sm text-[#b6cbd1]">
-          You can change your prediction before voting is locked.
+          You can change your own prediction before voting is locked.
         </p>
         <div className="flex justify-end gap-3">
           <button

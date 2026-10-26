@@ -320,6 +320,13 @@ export default function MatchesView({
                     >
                       {match.predictionLocked ? "Unlock" : "Lock"}
                     </button>
+                    <button
+                      className={button}
+                      disabled={busy || closed}
+                      onClick={() => setVote(match)}
+                    >
+                      {closed ? "Voting closed" : "Vote / Edit my vote"}
+                    </button>
                   </>
                 ) : (
                   <button

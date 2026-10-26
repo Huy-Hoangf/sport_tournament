@@ -70,4 +70,13 @@ describe('PredictionsService', () => {
       [1, 2, 'HOME_WIN', 2, 1],
     );
   });
+
+  it('checks that the current active user may vote, regardless of voting role', async () => {
+    await service.vote(1, 2, { outcome: 'DRAW' });
+    expect(query.mock.calls[1][0]).toContain(
+      "role IN ('PLAYER', 'ADMIN', 'SUPER_ADMIN')",
+    );
+    expect(query.mock.calls[1][1]).toEqual([1]);
+    expect(query.mock.calls[3][1][0]).toBe(1);
+  });
 });

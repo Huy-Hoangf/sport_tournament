@@ -43,7 +43,7 @@ export class PredictionsService {
       if (!rows.length) throw new NotFoundException('Match not found.');
       const match = rows[0];
       const players = await manager.query(
-        "SELECT id FROM users WHERE id=$1 AND role='PLAYER' AND user_status='ACTIVE'",
+        "SELECT id FROM users WHERE id=$1 AND role IN ('PLAYER', 'ADMIN', 'SUPER_ADMIN') AND user_status='ACTIVE'",
         [userId],
       );
       if (!players.length || match.visibility !== 'PUBLIC')
