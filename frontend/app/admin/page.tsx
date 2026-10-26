@@ -5,6 +5,7 @@ import { logoutAll, readCurrentUser, redirectToLogin } from "../auth-sync";
 import NoticeBanner, { type Notice } from "../notice-banner";
 import DashboardView from "./dashboard/dashboard-view";
 import { AdminShell } from "./layout/admin-shell";
+import { LeaderboardView } from "./leaderboard/leaderboard-view";
 import { RecentActivityDrawer } from "./layout/recent-activity-drawer";
 import MatchesView, { type MatchesInitialFilter } from "./matches/matches-view";
 import { PlayerModals, type PlayerModalType } from "./players/player-modals";
@@ -35,6 +36,7 @@ const ADMIN_VIEW_HASHES: Record<AdminView, string> = {
   tournaments: "#tournaments",
   matches: "#matches",
   players: "#players",
+  leaderboard: "#leaderboard",
 };
 
 const ADMIN_VIEWS = new Set<AdminView>([
@@ -42,6 +44,7 @@ const ADMIN_VIEWS = new Set<AdminView>([
   "tournaments",
   "matches",
   "players",
+  "leaderboard",
 ]);
 
 function getViewFromHash(): AdminView {
@@ -653,7 +656,6 @@ export default function AdminPage() {
         onOpenMobileMenu={() => setIsMobileMenuOpen(true)}
         onOpenRecentActivity={() => void openRecentActivityPanel()}
         onOpenView={openAdminView}
-        onUnavailableLeaderboard={() => showNotice("this feature is not ready")}
       >
         {activeView === "dashboard" ? (
           <DashboardView
@@ -682,6 +684,8 @@ export default function AdminPage() {
             canManage={isAdmin}
             onUnavailableFeature={() => showNotice("this feature is not ready")}
           />
+        ) : activeView === "leaderboard" ? (
+          <LeaderboardView />
         ) : (
           <PlayersView
             activeCount={activeCount}

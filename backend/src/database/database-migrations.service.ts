@@ -20,7 +20,7 @@ export class DatabaseMigrationsService implements OnModuleInit {
     await this.ensureActivityLogsTable();
     await this.ensureTeamTimestampColumns();
     await this.ensureTeamPlayersTable();
-    await this.cleanupLolUnknownTeams();
+    await this.ensureLeaderboardView();
     await this.ensureMatchPredictionLock();
   }
 
@@ -210,36 +210,6 @@ export class DatabaseMigrationsService implements OnModuleInit {
     `);
   }
 
-  private async cleanupLolUnknownTeams() {
-    const unknownNames = ['tbd', 'team 1', 'team 2', 'home team', 'away team'];
-
-    await this.usersRepository.query(
-      `
-        DELETE FROM matches m
-        USING tournaments t
-        WHERE t.id = m.tournament_id
-          AND t.sport_type = 'LOL'
-          AND COALESCE(m.external_source, 'MANUAL') = 'CITO_LOL'
-          AND (
-            LOWER(TRIM(COALESCE((SELECT home.name FROM teams home WHERE home.id = m.home_team_id), m.home_placeholder, ''))) = ANY($1)
-            OR LOWER(TRIM(COALESCE((SELECT away.name FROM teams away WHERE away.id = m.away_team_id), m.away_placeholder, ''))) = ANY($1)
-          )
-      `,
-      [unknownNames],
-    );
-
-    await this.usersRepository.query(
-      `
-        DELETE FROM teams team
-        USING tournaments t
-        WHERE t.id = team.tournament_id
-          AND t.sport_type = 'LOL'
-          AND LOWER(TRIM(team.name)) = ANY($1)
-      `,
-      [unknownNames],
-    );
-  }
-
   private async ensureTeamPlayersTable() {
     await this.usersRepository.query(`
       CREATE TABLE IF NOT EXISTS team_players (
@@ -289,6 +259,61 @@ export class DatabaseMigrationsService implements OnModuleInit {
     await this.usersRepository.query(`
       CREATE INDEX IF NOT EXISTS idx_activity_logs_created_at
       ON activity_logs(created_at DESC)
+    `);
+  }
+
+  private async ensureLeaderboardView() {
+    await this.usersRepository.query(`
+      CREATE OR REPLACE VIEW vw_leaderboard AS
+      WITH scored AS (
+        SELECT
+          t.id AS tournament_id,
+          u.id AS user_id,
+          u.full_name,
+          u.email,
+          p.id AS prediction_id,
+          p.predicted_outcome,
+          p.predicted_home_score,
+          p.predicted_away_score,
+          m.actual_home_score,
+          m.actual_away_score,
+          s.correct_points,
+          s.exact_score_bonus,
+          CASE
+            WHEN m.status = 'FINISHED'
+              AND m.actual_home_score IS NOT NULL
+              AND m.actual_away_score IS NOT NULL
+            THEN CASE
+              WHEN m.actual_home_score > m.actual_away_score THEN 'HOME_WIN'
+              WHEN m.actual_home_score < m.actual_away_score THEN 'AWAY_WIN'
+              ELSE 'DRAW'
+            END
+            ELSE NULL
+          END AS actual_outcome
+        FROM predictions p
+        JOIN users u ON u.id = p.user_id
+        JOIN matches m ON m.id = p.match_id
+        JOIN tournaments t ON t.id = m.tournament_id
+        JOIN stages s ON s.id = m.stage_id
+      )
+      SELECT
+        tournament_id,
+        user_id,
+        full_name,
+        email,
+        SUM(
+          CASE WHEN predicted_outcome = actual_outcome
+            THEN correct_points ELSE 0 END
+          + CASE WHEN actual_outcome IS NOT NULL
+              AND predicted_home_score = actual_home_score
+              AND predicted_away_score = actual_away_score
+            THEN exact_score_bonus ELSE 0 END
+        ) AS total_points,
+        COUNT(prediction_id) AS total_predictions,
+        SUM(CASE WHEN predicted_outcome = actual_outcome THEN 1 ELSE 0 END)
+          AS correct_predictions
+      FROM scored
+      GROUP BY tournament_id, user_id, full_name, email
     `);
   }
 

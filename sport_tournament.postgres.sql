@@ -191,16 +191,52 @@ LEFT JOIN tournament_participants tp ON tp.user_id = u.id
 GROUP BY u.id, u.member_code, u.email, u.full_name, u.role, u.user_status, u.created_at, u.updated_at;
 
 CREATE VIEW vw_leaderboard AS
+WITH scored AS (
+    SELECT
+        t.id AS tournament_id,
+        u.id AS user_id,
+        u.full_name,
+        u.email,
+        p.id AS prediction_id,
+        p.predicted_outcome,
+        p.predicted_home_score,
+        p.predicted_away_score,
+        m.actual_home_score,
+        m.actual_away_score,
+        s.correct_points,
+        s.exact_score_bonus,
+        CASE
+            WHEN m.status = 'FINISHED'
+                AND m.actual_home_score IS NOT NULL
+                AND m.actual_away_score IS NOT NULL
+            THEN CASE
+                WHEN m.actual_home_score > m.actual_away_score THEN 'HOME_WIN'
+                WHEN m.actual_home_score < m.actual_away_score THEN 'AWAY_WIN'
+                ELSE 'DRAW'
+            END
+            ELSE NULL
+        END AS actual_outcome
+    FROM predictions p
+    JOIN users u ON u.id = p.user_id
+    JOIN matches m ON m.id = p.match_id
+    JOIN tournaments t ON t.id = m.tournament_id
+    JOIN stages s ON s.id = m.stage_id
+)
 SELECT
-    t.id AS tournament_id,
-    u.id AS user_id,
-    u.full_name,
-    u.email,
-    SUM(p.points_earned) AS total_points,
-    COUNT(p.id) AS total_predictions,
-    SUM(CASE WHEN p.points_earned > 0 THEN 1 ELSE 0 END) AS correct_predictions
-FROM users u
-JOIN predictions p ON p.user_id = u.id
-JOIN matches m ON m.id = p.match_id
-JOIN tournaments t ON t.id = m.tournament_id
-GROUP BY t.id, u.id, u.full_name, u.email;
+    tournament_id,
+    user_id,
+    full_name,
+    email,
+    SUM(
+        CASE WHEN predicted_outcome = actual_outcome
+            THEN correct_points ELSE 0 END
+        + CASE WHEN actual_outcome IS NOT NULL
+            AND predicted_home_score = actual_home_score
+            AND predicted_away_score = actual_away_score
+            THEN exact_score_bonus ELSE 0 END
+    ) AS total_points,
+    COUNT(prediction_id) AS total_predictions,
+    SUM(CASE WHEN predicted_outcome = actual_outcome THEN 1 ELSE 0 END)
+        AS correct_predictions
+FROM scored
+GROUP BY tournament_id, user_id, full_name, email;

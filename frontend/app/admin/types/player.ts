@@ -1,4 +1,9 @@
-export type AdminView = "dashboard" | "tournaments" | "matches" | "players";
+export type AdminView =
+  | "dashboard"
+  | "tournaments"
+  | "matches"
+  | "players"
+  | "leaderboard";
 
 export type BackendUser = {
   id: number;

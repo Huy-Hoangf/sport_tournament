@@ -11,6 +11,7 @@ import { useEffect } from "react";
 import { apiRequest } from "../../../api";
 import { MatchEditor } from "../../matches/match-editor";
 import { PredictionHistory } from "../../matches/predictions";
+import type { LeaderboardEntry } from "../../leaderboard/types";
 import { ScoringRulesView } from "./scoring-rules-tab";
 import { StageStrip } from "./stage-strip";
 import { TeamsTab } from "./teams-tab";
@@ -68,6 +69,12 @@ export function TournamentDetailView({
 }) {
   const [loadedMatches, setLoadedMatches] = useState<MatchRow[] | null>(null);
   const [predictionCount, setPredictionCount] = useState(0);
+  const [leaderboardResult, setLeaderboardResult] = useState<{
+    tournamentId: number;
+    entries: LeaderboardEntry[];
+    error: boolean;
+  } | null>(null);
+  const [now, setNow] = useState<number | null>(null);
   const activeMatches = loadedMatches ?? matches;
   const sortedMatches = [...activeMatches].sort(
     (first, second) =>
@@ -79,8 +86,15 @@ export function TournamentDetailView({
     .slice()
     .reverse();
   const upcomingMatches = sortedMatches.filter(
-    (match) => !isFinishedStatus(match.status),
+    (match) =>
+      match.status === "PENDING" &&
+      now !== null &&
+      new Date(match.scheduledTime).getTime() > now,
   );
+  const visibleLeaderboard =
+    leaderboardResult?.tournamentId === tournament.id
+      ? leaderboardResult
+      : null;
   const completedCount = finishedMatches.length;
   const progress = activeMatches.length
     ? Math.round((completedCount / activeMatches.length) * 100)
@@ -125,6 +139,15 @@ export function TournamentDetailView({
     : "No schedule has been imported for this tournament.";
 
   useEffect(() => {
+    const initialTick = window.setTimeout(() => setNow(Date.now()), 0);
+    const interval = window.setInterval(() => setNow(Date.now()), 60_000);
+    return () => {
+      window.clearTimeout(initialTick);
+      window.clearInterval(interval);
+    };
+  }, []);
+
+  useEffect(() => {
     let isMounted = true;
     apiRequest<{ total: number }>(`/predictions?tournamentId=${tournament.id}`)
       .then((data) => {
@@ -143,6 +166,18 @@ export function TournamentDetailView({
       .catch(() => {
         if (isMounted) {
           setStages([]);
+        }
+      });
+
+    apiRequest<LeaderboardEntry[]>(`/leaderboard?tournamentId=${tournament.id}`)
+      .then((entries) => {
+        if (isMounted) {
+          setLeaderboardResult({ tournamentId: tournament.id, entries, error: false });
+        }
+      })
+      .catch(() => {
+        if (isMounted) {
+          setLeaderboardResult({ tournamentId: tournament.id, entries: [], error: true });
         }
       });
 
@@ -289,8 +324,10 @@ export function TournamentDetailView({
               <p className="mt-3 text-lg leading-relaxed text-[#c8d6db]">
                 {firstUpcoming
                   ? `Next match starts ${formatDateTime(firstUpcoming.scheduledTime)}.`
+                  : now === null
+                    ? "Loading schedule…"
                   : activeMatches.length > 0
-                    ? "All imported matches are completed."
+                    ? "No future matches are scheduled."
                     : emptyScheduleMessage}
               </p>
             </section>
@@ -306,7 +343,11 @@ export function TournamentDetailView({
                 ))}
                 {upcomingMatches.length === 0 && (
                   <p className="px-6 py-16 text-center text-[#9fb2b8]">
-                    {emptyScheduleMessage}
+                    {now === null
+                      ? "Loading upcoming matches…"
+                      : activeMatches.length > 0
+                        ? "No future matches are scheduled."
+                        : emptyScheduleMessage}
                   </p>
                 )}
               </div>
@@ -332,27 +373,42 @@ export function TournamentDetailView({
             <section className="overflow-hidden border border-[#3a4d54] bg-[#0d252d]">
               <DashboardPanelTitle
                 title="Leaderboard Top 3"
-                right="View Full"
               />
               <div className="space-y-4 p-5">
-                {["Rank 01", "Rank 02", "Rank 03"].map((rank, index) => (
+                {visibleLeaderboard?.entries.slice(0, 3).map((entry, index) => (
                   <div
-                    key={rank}
+                    key={entry.userId}
                     className={`flex items-center justify-between border border-[#243c43] bg-[#10242b] p-4 ${
                       index === 0 ? "border-l-4 border-l-[#84d8e8]" : ""
                     }`}
                   >
                     <div>
                       <p className="text-xs font-black uppercase text-[#84d8e8]">
-                        {rank}
+                        Rank {String(index + 1).padStart(2, "0")}
                       </p>
                       <p className="mt-1 font-black text-white">
-                        No player data
+                        {entry.fullName}
                       </p>
                     </div>
-                    <span className="text-lg font-black text-[#dce8eb]">0</span>
+                    <span className="text-lg font-black text-[#dce8eb]">
+                      {entry.totalPoints}
+                    </span>
                   </div>
                 ))}
+                {!visibleLeaderboard && (
+                  <p className="py-8 text-center text-[#9fb2b8]">Loading leaderboard…</p>
+                )}
+                {visibleLeaderboard?.error && (
+                  <p role="alert" className="py-8 text-center text-[#ffb4a8]">
+                    Cannot load leaderboard.
+                  </p>
+                )}
+                {visibleLeaderboard && !visibleLeaderboard.error &&
+                  visibleLeaderboard.entries.length === 0 && (
+                    <p className="py-8 text-center text-[#9fb2b8]">
+                      No predictions yet.
+                    </p>
+                  )}
               </div>
             </section>
           </div>

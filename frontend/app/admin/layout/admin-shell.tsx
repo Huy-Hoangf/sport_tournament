@@ -26,7 +26,6 @@ export function AdminShell({
   onOpenMobileMenu,
   onOpenRecentActivity,
   onOpenView,
-  onUnavailableLeaderboard,
 }: {
   activeView: AdminView;
   children: ReactNode;
@@ -39,7 +38,6 @@ export function AdminShell({
   onOpenMobileMenu: () => void;
   onOpenRecentActivity: () => void;
   onOpenView: (view: AdminView) => void;
-  onUnavailableLeaderboard: () => void;
 }) {
   return (
     <>
@@ -123,7 +121,6 @@ export function AdminShell({
               activeView={activeView}
               isAdmin={isAdmin}
               onOpenView={onOpenView}
-              onUnavailableLeaderboard={onUnavailableLeaderboard}
             />
 
             <div className="mt-auto border-t border-[#3c5056] p-5">
@@ -184,7 +181,6 @@ export function AdminShell({
           activeView={activeView}
           isAdmin={isAdmin}
           onOpenView={onOpenView}
-          onUnavailableLeaderboard={onUnavailableLeaderboard}
         />
 
         <div className="hidden xl:mt-auto xl:block xl:border-t xl:border-[#3c5056] xl:p-6">
@@ -217,12 +213,10 @@ function AdminNav({
   activeView,
   isAdmin,
   onOpenView,
-  onUnavailableLeaderboard,
 }: {
   activeView: AdminView;
   isAdmin: boolean;
   onOpenView: (view: AdminView) => void;
-  onUnavailableLeaderboard: () => void;
 }) {
   return (
     <nav className="mt-6 flex overflow-x-auto text-sm font-bold xl:mt-8 xl:block xl:space-y-2 xl:overflow-visible">
@@ -253,9 +247,10 @@ function AdminNav({
         />
       )}
       <MenuItem
+        active={activeView === "leaderboard"}
         icon={<BarChart3 size={21} />}
         label="Leaderboard"
-        onClick={onUnavailableLeaderboard}
+        onClick={() => onOpenView("leaderboard")}
       />
     </nav>
   );
