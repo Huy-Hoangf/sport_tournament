@@ -49,6 +49,8 @@ export class MatchesController {
       )
     )
       throw new BadRequestException('Invalid status.');
+    if (query.openForVoting && query.openForVoting !== 'true')
+      throw new BadRequestException('Invalid openForVoting filter.');
     const items = await this.matchesService.findAll({
       includePrivateTournaments: ['ADMIN', 'SUPER_ADMIN'].includes(user.role),
       tournamentId: query.tournamentId
@@ -56,6 +58,7 @@ export class MatchesController {
         : undefined,
       stageId: query.stageId ? positiveId(query.stageId) : undefined,
       status: query.status,
+      openForVoting: query.openForVoting === 'true',
       search: query.search,
       page,
       pageSize,

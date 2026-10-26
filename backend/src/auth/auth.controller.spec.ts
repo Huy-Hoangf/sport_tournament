@@ -30,4 +30,10 @@ describe('AuthController', () => {
   it('should be defined', () => {
     expect(controller).toBeDefined();
   });
+
+  it('does not reveal whether an email address has an account', () => {
+    expect(controller.forgotPassword()).toEqual({
+      message: 'Contact your tournament administrator to reset your password.',
+    });
+  });
 });

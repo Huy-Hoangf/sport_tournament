@@ -5,12 +5,39 @@ import { User } from '../users/user.entity';
 
 describe('PredictionsService', () => {
   let service: PredictionsService;
+  let query: jest.Mock;
 
   beforeEach(async () => {
+    query = jest
+      .fn()
+      .mockResolvedValueOnce([
+        {
+          scheduled_time: '2030-01-01T00:00:00Z',
+          lock_minutes_before_start: 0,
+          prediction_locked: false,
+          status: 'PENDING',
+          visibility: 'PUBLIC',
+        },
+      ])
+      .mockResolvedValueOnce([{ id: 1 }])
+      .mockResolvedValueOnce([{ now: '2029-01-01T00:00:00Z' }])
+      .mockResolvedValueOnce([
+        { id: 1, matchId: 2, homeScore: null, awayScore: null },
+      ]);
     const module: TestingModule = await Test.createTestingModule({
       providers: [
         PredictionsService,
-        { provide: getRepositoryToken(User), useValue: { query: jest.fn() } },
+        {
+          provide: getRepositoryToken(User),
+          useValue: {
+            query: jest.fn(),
+            manager: {
+              transaction: (
+                callback: (manager: { query: jest.Mock }) => unknown,
+              ) => callback({ query }),
+            },
+          },
+        },
       ],
     }).compile();
 
@@ -19,5 +46,28 @@ describe('PredictionsService', () => {
 
   it('should be defined', () => {
     expect(service).toBeDefined();
+  });
+
+  it.each(['HOME_WIN', 'DRAW', 'AWAY_WIN'])(
+    'stores an outcome vote without scores: %s',
+    async (outcome) => {
+      await service.vote(1, 2, { outcome });
+      expect(query).toHaveBeenLastCalledWith(
+        expect.stringContaining('INSERT INTO predictions'),
+        [1, 2, outcome, null, null],
+      );
+    },
+  );
+
+  it('rejects an invalid outcome', async () => {
+    await expect(service.vote(1, 2, { outcome: 'INVALID' })).rejects.toThrow();
+  });
+
+  it('keeps score-based requests working during the frontend rollout', async () => {
+    await service.vote(1, 2, { homeScore: 2, awayScore: 1 });
+    expect(query).toHaveBeenLastCalledWith(
+      expect.stringContaining('INSERT INTO predictions'),
+      [1, 2, 'HOME_WIN', 2, 1],
+    );
   });
 });

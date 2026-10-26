@@ -52,7 +52,7 @@ export class AuthService {
 
     const user = await this.usersService.findByEmail(normalizedEmail);
 
-    if (!user || !user.passwordHash) {
+    if (!user || !user.passwordHash || user.status !== 'ACTIVE') {
       throw new UnauthorizedException('Invalid email or password.');
     }
 
@@ -267,7 +267,14 @@ export class AuthService {
         );
       }
 
-      return payload;
+      if (!Number.isSafeInteger(payload.sub) || payload.sub <= 0) {
+        throw new UnauthorizedException('Invalid access token.');
+      }
+      const user = await this.usersService.findById(payload.sub);
+      if (!user || user.status !== 'ACTIVE') {
+        throw new UnauthorizedException('Account is not active.');
+      }
+      return { sub: user.id, email: user.email, role: user.role };
     } catch (error) {
       if (error instanceof UnauthorizedException) {
         throw error;

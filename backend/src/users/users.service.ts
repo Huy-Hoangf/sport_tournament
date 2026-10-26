@@ -76,6 +76,10 @@ export class UsersService implements OnModuleInit {
     });
   }
 
+  async findById(id: number) {
+    return this.usersRepository.findOne({ where: { id } });
+  }
+
   async findByGoogleId(googleId: string) {
     return this.usersRepository.findOne({
       where: {
@@ -99,6 +103,9 @@ export class UsersService implements OnModuleInit {
     const existingGoogleUser = await this.findByGoogleId(data.googleId);
 
     if (existingGoogleUser) {
+      if (existingGoogleUser.status === 'INACTIVE') {
+        throw new ForbiddenException('Account is inactive.');
+      }
       existingGoogleUser.email = email;
       existingGoogleUser.fullName =
         existingGoogleUser.fullName || data.fullName;
@@ -111,6 +118,9 @@ export class UsersService implements OnModuleInit {
     const existingEmailUser = await this.findByEmail(email);
 
     if (existingEmailUser) {
+      if (existingEmailUser.status === 'INACTIVE') {
+        throw new ForbiddenException('Account is inactive.');
+      }
       existingEmailUser.googleId = data.googleId;
       existingEmailUser.avatarUrl = data.avatarUrl;
       existingEmailUser.status = 'ACTIVE';

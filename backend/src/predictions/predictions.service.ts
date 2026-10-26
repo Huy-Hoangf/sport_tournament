@@ -1,4 +1,5 @@
 import {
+  BadRequestException,
   ConflictException,
   ForbiddenException,
   Injectable,
@@ -17,7 +18,16 @@ export class PredictionsService {
 
   async vote(userId: number, matchId: number, input: Record<string, unknown>) {
     positiveId(matchId);
-    const scores = validateScores(input);
+    const vote =
+      input.outcome === undefined
+        ? validateScores(input)
+        : { outcome: input.outcome, home: null, away: null };
+    if (
+      typeof vote.outcome !== 'string' ||
+      !['HOME_WIN', 'DRAW', 'AWAY_WIN'].includes(vote.outcome)
+    ) {
+      throw new BadRequestException('Vote must be HOME_WIN, DRAW or AWAY_WIN.');
+    }
     return this.users.manager.transaction(async (manager) => {
       const rows: Array<{
         scheduled_time: string | Date;
@@ -60,8 +70,9 @@ export class PredictionsService {
         ON CONFLICT (user_id,match_id) DO UPDATE SET predicted_outcome=EXCLUDED.predicted_outcome,
           predicted_home_score=EXCLUDED.predicted_home_score, predicted_away_score=EXCLUDED.predicted_away_score,
           updated_at=clock_timestamp()
-        RETURNING id, match_id AS "matchId", predicted_home_score AS "homeScore", predicted_away_score AS "awayScore"`,
-        [userId, matchId, scores.outcome, scores.home, scores.away],
+        RETURNING id, match_id AS "matchId", predicted_outcome AS outcome,
+          predicted_home_score AS "homeScore", predicted_away_score AS "awayScore"`,
+        [userId, matchId, vote.outcome, vote.home, vote.away],
       );
       return saved[0];
     });
@@ -126,7 +137,12 @@ export class PredictionsService {
         matchId: Number(row.matchId),
         userId: Number(row.userId),
         match: `${row.homeName} vs ${row.awayName}`,
-        prediction: `${row.homeScore} - ${row.awayScore}`,
+        prediction:
+          row.outcome === 'DRAW'
+            ? 'Draw'
+            : row.outcome === 'HOME_WIN'
+              ? `${row.homeName} wins`
+              : `${row.awayName} wins`,
         status: !finished ? 'PENDING' : correct ? 'CORRECT' : 'INCORRECT',
         points: finished
           ? (correct ? Number(row.correctPoints) : 0) +

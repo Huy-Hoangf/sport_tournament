@@ -9,6 +9,7 @@ describe('AuthService', () => {
   let service: AuthService;
   let usersService: {
     findByEmail: jest.Mock;
+    findById: jest.Mock;
     updatePassword: jest.Mock;
   };
   let jwtService: {
@@ -19,6 +20,7 @@ describe('AuthService', () => {
   beforeEach(async () => {
     usersService = {
       findByEmail: jest.fn(),
+      findById: jest.fn(),
       updatePassword: jest.fn(),
     };
     jwtService = {
@@ -53,6 +55,7 @@ describe('AuthService', () => {
       email: 'player@tech.com',
       fullName: 'First Player',
       role: 'PLAYER',
+      status: 'ACTIVE',
       passwordHash: await bcrypt.hash(DEFAULT_PLAYER_PASSWORD, 10),
     });
     jwtService.signAsync.mockResolvedValue('temporary-token');
@@ -106,6 +109,52 @@ describe('AuthService', () => {
       sub: player.id,
       email: player.email,
       role: player.role,
+    });
+  });
+
+  it('uses the current database role instead of a stale admin role in the token', async () => {
+    jwtService.verifyAsync.mockResolvedValue({
+      sub: 7,
+      email: 'player@tech.com',
+      role: 'ADMIN',
+    });
+    usersService.findById.mockResolvedValue({
+      id: 7,
+      email: 'player@tech.com',
+      role: 'PLAYER',
+      status: 'ACTIVE',
+    });
+
+    await expect(service.verifyAdminToken('Bearer valid')).rejects.toThrow();
+    expect(usersService.findById).toHaveBeenCalledWith(7);
+  });
+
+  it('rejects an access token when its account is inactive', async () => {
+    jwtService.verifyAsync.mockResolvedValue({ sub: 7, role: 'PLAYER' });
+    usersService.findById.mockResolvedValue({
+      id: 7,
+      email: 'player@tech.com',
+      role: 'PLAYER',
+      status: 'INACTIVE',
+    });
+
+    await expect(service.verifyAccessToken('Bearer valid')).rejects.toThrow();
+  });
+
+  it('allows an active admin using the current database role', async () => {
+    jwtService.verifyAsync.mockResolvedValue({ sub: 3, role: 'PLAYER' });
+    usersService.findById.mockResolvedValue({
+      id: 3,
+      email: 'admin@tech.com',
+      role: 'ADMIN',
+      status: 'ACTIVE',
+    });
+
+    await expect(
+      service.verifyAdminToken('Bearer valid'),
+    ).resolves.toMatchObject({
+      sub: 3,
+      role: 'ADMIN',
     });
   });
 });

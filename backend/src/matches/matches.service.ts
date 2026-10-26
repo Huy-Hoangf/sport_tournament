@@ -228,6 +228,7 @@ export class MatchesService {
     tournamentId?: number;
     stageId?: number;
     status?: string;
+    openForVoting?: boolean;
     search?: string;
     page?: number;
     pageSize?: number;
@@ -252,6 +253,15 @@ export class MatchesService {
     if (filters.status && filters.status !== 'ALL') {
       values.push(filters.status.toUpperCase());
       where.push(`m.status = $${values.length}`);
+    }
+
+    if (filters.openForVoting) {
+      where.push("m.status = 'PENDING'");
+      where.push('m.prediction_locked = FALSE');
+      where.push(
+        "m.scheduled_time - (m.lock_minutes_before_start * INTERVAL '1 minute') > clock_timestamp()",
+      );
+      where.push('m.home_team_id IS NOT NULL AND m.away_team_id IS NOT NULL');
     }
 
     const search = filters.search?.trim();

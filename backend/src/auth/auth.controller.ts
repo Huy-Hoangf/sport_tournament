@@ -61,8 +61,10 @@ export class AuthController {
   }
 
   @Post('forgot-password')
-  forgotPassword(@Body() body: { email: string }) {
-    return this.authService.verifyForgotPasswordEmail(body.email);
+  forgotPassword() {
+    return {
+      message: 'Contact your tournament administrator to reset your password.',
+    };
   }
 
   @Post('reset-password')
