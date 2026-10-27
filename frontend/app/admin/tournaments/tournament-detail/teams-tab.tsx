@@ -956,8 +956,10 @@ function RosterPlayerSelect({
   return (
     <div
       className="min-w-0 flex-1 border border-[#31515a] bg-[#071516] p-3"
-      onBlur={() => {
-        window.setTimeout(() => setIsOpen(false), 120);
+      onBlur={(event) => {
+        if (!event.currentTarget.contains(event.relatedTarget)) {
+          setIsOpen(false);
+        }
       }}
     >
       <div className="mb-2 flex items-center justify-between gap-3">
