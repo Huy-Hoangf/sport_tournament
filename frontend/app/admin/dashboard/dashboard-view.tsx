@@ -5,12 +5,10 @@ import AdminDashboardContent from "../admin-dashboard-content";
 export default function DashboardView({
   isAdmin,
   refreshKey,
-  onOpenTournamentManagement,
   onOpenMatches,
 }: {
   isAdmin: boolean;
   refreshKey: number;
-  onOpenTournamentManagement: () => void;
   onOpenMatches: (filters: {
     tournamentId?: number;
     stageId?: number;
@@ -23,7 +21,6 @@ export default function DashboardView({
       isAdmin={isAdmin}
       refreshKey={refreshKey}
       view="dashboard"
-      onOpenTournamentManagement={onOpenTournamentManagement}
       onOpenMatches={onOpenMatches}
     />
   );

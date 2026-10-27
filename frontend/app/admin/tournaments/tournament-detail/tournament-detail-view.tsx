@@ -1,4 +1,5 @@
 ﻿import { useState } from "react";
+import type { TournamentTab } from "../../lib/navigation";
 import {
   CalendarDays,
   ChevronLeft,
@@ -52,6 +53,8 @@ const formatLabels: Record<NonNullable<TournamentRow["format"]>, string> = {
 };
 export function TournamentDetailView({
   tournament,
+  activeTab,
+  onTabChange,
   matches,
   isTodayScope,
   onBack,
@@ -60,6 +63,8 @@ export function TournamentDetailView({
   onOpenStageMatches,
 }: {
   tournament: TournamentRow;
+  activeTab: TournamentTab;
+  onTabChange: (tab: TournamentTab) => void;
   matches: MatchRow[];
   isTodayScope: boolean;
   onBack: () => void;
@@ -104,7 +109,6 @@ export function TournamentDetailView({
   const schedulePageSize = 8;
   const [importOpen, setImportOpen] = useState(false);
   const [schedulePage, setSchedulePage] = useState(1);
-  const [activeTab, setActiveTab] = useState("Overview");
   const [matchImportMessage, setMatchImportMessage] = useState("");
   const [stages, setStages] = useState<TournamentStage[]>([]);
   const tournamentFormat = tournament.format ?? "ROUND_ROBIN";
@@ -264,11 +268,11 @@ export function TournamentDetailView({
         </div>
 
         <div className="mt-7 flex flex-wrap gap-5 border-b border-[#3a4d54]">
-          {["Overview", "Teams", "Predictions", "Scoring Rules"].map((tab) => (
+          {(["Overview", "Teams", "Predictions", "Scoring Rules"] as TournamentTab[]).map((tab) => (
             <button
               key={tab}
               type="button"
-              onClick={() => setActiveTab(tab)}
+              onClick={() => onTabChange(tab)}
               className={`pb-4 text-xs font-black uppercase tracking-[0.08em] ${
                 activeTab === tab
                   ? "border-b-2 border-[#84d8e8] text-[#84d8e8]"

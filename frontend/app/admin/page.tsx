@@ -13,6 +13,7 @@ import { PlayersView } from "./players/players-view";
 import TournamentView from "./tournaments/tournament-management-view";
 import type { ActivityRow } from "./tournaments/types";
 import { PLAYERS_PER_PAGE } from "./lib/constants";
+import { navigate, parseNavigation } from "./lib/navigation";
 import { canRenameUser } from "./lib/permissions";
 import { mapUserToPlayer, parsePlayersFromRows } from "./lib/player-utils";
 import type {
@@ -30,44 +31,6 @@ import * as XLSX from "xlsx";
 type RecentActivityResponse = {
   recentActivity?: ActivityRow[];
 };
-
-const ADMIN_VIEW_HASHES: Record<AdminView, string> = {
-  dashboard: "#dashboard",
-  tournaments: "#tournaments",
-  matches: "#matches",
-  players: "#players",
-  leaderboard: "#leaderboard",
-};
-
-const ADMIN_VIEWS = new Set<AdminView>([
-  "dashboard",
-  "tournaments",
-  "matches",
-  "players",
-  "leaderboard",
-]);
-
-function getViewFromHash(): AdminView {
-  if (typeof window === "undefined") {
-    return "dashboard";
-  }
-
-  const view = window.location.hash.replace("#", "") as AdminView;
-
-  return ADMIN_VIEWS.has(view) ? view : "dashboard";
-}
-
-function pushAdminViewHistory(view: AdminView) {
-  if (typeof window === "undefined") {
-    return;
-  }
-
-  const nextHash = ADMIN_VIEW_HASHES[view];
-
-  if (window.location.hash !== nextHash) {
-    window.history.pushState(null, "", nextHash);
-  }
-}
 
 export default function AdminPage() {
   const router = useRouter();
@@ -135,7 +98,7 @@ export default function AdminPage() {
 
     queueMicrotask(() => {
       setCurrentUser(currentUser);
-      setActiveView(getViewFromHash());
+      setActiveView(parseNavigation(window.location.hash).view);
 
       if (currentUser.role !== "PLAYER") {
         void fetchPlayers();
@@ -159,24 +122,24 @@ export default function AdminPage() {
 
   useEffect(() => {
     function handleHistoryChange() {
-      const nextView = getViewFromHash();
-      setActiveView(nextView);
-
-      if (nextView === "matches") {
-        setMatchesInitialFilter({});
-      }
+      const navigation = parseNavigation(window.location.hash);
+      setActiveView(navigation.view);
+      setMatchesInitialFilter(navigation.matchFilters ?? {});
     }
 
+    handleHistoryChange();
     window.addEventListener("hashchange", handleHistoryChange);
     window.addEventListener("popstate", handleHistoryChange);
+    window.addEventListener("admin-navigation", handleHistoryChange);
 
     if (!window.location.hash) {
-      window.history.replaceState(null, "", ADMIN_VIEW_HASHES.dashboard);
+      window.history.replaceState(null, "", "#dashboard");
     }
 
     return () => {
       window.removeEventListener("hashchange", handleHistoryChange);
       window.removeEventListener("popstate", handleHistoryChange);
+      window.removeEventListener("admin-navigation", handleHistoryChange);
     };
   }, []);
 
@@ -614,7 +577,7 @@ export default function AdminPage() {
       setMatchesInitialFilter({});
     }
     setActiveView(view);
-    pushAdminViewHistory(view);
+    navigate({ view });
     setIsMobileMenuOpen(false);
     setOpenPlayerActionId(null);
   }
@@ -661,11 +624,10 @@ export default function AdminPage() {
           <DashboardView
             isAdmin={isAdmin}
             refreshKey={dashboardRefreshKey}
-            onOpenTournamentManagement={() => openAdminView("tournaments")}
             onOpenMatches={(filters) => {
               setMatchesInitialFilter(filters);
               setActiveView("matches");
-              pushAdminViewHistory("matches");
+              navigate({ view: "matches", matchFilters: filters });
             }}
           />
         ) : activeView === "tournaments" ? (
@@ -675,11 +637,12 @@ export default function AdminPage() {
             onOpenMatches={(filters) => {
               setMatchesInitialFilter(filters);
               setActiveView("matches");
-              pushAdminViewHistory("matches");
+              navigate({ view: "matches", matchFilters: filters });
             }}
           />
         ) : activeView === "matches" ? (
           <MatchesView
+            key={JSON.stringify(matchesInitialFilter)}
             initialFilter={matchesInitialFilter}
             canManage={isAdmin}
             onUnavailableFeature={() => showNotice("this feature is not ready")}

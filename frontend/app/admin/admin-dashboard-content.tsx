@@ -2,7 +2,8 @@
 
 import { apiRequest } from "../api";
 import NoticeBanner, { type Notice } from "../notice-banner";
-import { useCallback, useEffect, useState } from "react";
+import { useCallback, useEffect, useState, useSyncExternalStore } from "react";
+import { navigate, parseNavigation } from "./lib/navigation";
 import { AdminSelect } from "./shared/admin-select";
 import { DashboardActionButton } from "./shared/dashboard-ui";
 import {
@@ -100,13 +101,11 @@ export default function AdminDashboardContent({
   isAdmin,
   refreshKey,
   view = "dashboard",
-  onOpenTournamentManagement,
   onOpenMatches,
 }: {
   isAdmin: boolean;
   refreshKey: number;
   view?: "dashboard" | "tournaments";
-  onOpenTournamentManagement?: () => void;
   onOpenMatches?: (filters: {
     tournamentId?: number;
     stageId?: number;
@@ -148,9 +147,26 @@ export default function AdminDashboardContent({
   );
   const [tournamentToDelete, setTournamentToDelete] =
     useState<TournamentRow | null>(null);
-  const [selectedTournamentId, setSelectedTournamentId] = useState<
-    number | null
-  >(null);
+  const navigationHash = useSyncExternalStore(
+    (notify) => {
+      window.addEventListener("popstate", notify);
+      window.addEventListener("hashchange", notify);
+      window.addEventListener("admin-navigation", notify);
+      return () => {
+        window.removeEventListener("popstate", notify);
+        window.removeEventListener("hashchange", notify);
+        window.removeEventListener("admin-navigation", notify);
+      };
+    },
+    () => window.location.hash,
+    () => "#dashboard",
+  );
+  const navigation = parseNavigation(navigationHash);
+  const selectedTournamentId = navigation.view === view ? navigation.tournamentId ?? null : null;
+  const setSelectedTournamentId: React.Dispatch<React.SetStateAction<number | null>> = (value) => {
+    const id = typeof value === "function" ? value(selectedTournamentId) : value;
+    navigate(id ? { view, tournamentId: id } : { view });
+  };
   const [tournamentSearch, setTournamentSearch] = useState("");
   const [dashboardSportFilter, setDashboardSportFilter] = useState("ALL");
   const [tournamentForm, setTournamentForm] =
@@ -869,13 +885,12 @@ export default function AdminDashboardContent({
       {selectedTournament ? (
         <TournamentDetailView
           tournament={selectedTournament}
+          activeTab={navigation.tournamentTab ?? "Overview"}
+          onTabChange={(tab) => navigate({ view, tournamentId: selectedTournament.id, tournamentTab: tab })}
           matches={selectedTournamentMatches}
           isTodayScope={!isTournamentView}
           onBack={() => {
             setSelectedTournamentId(null);
-            if (!isTournamentView) {
-              onOpenTournamentManagement?.();
-            }
           }}
           onUnavailableFeature={() =>
             showNotice("this feature not available", "info")
