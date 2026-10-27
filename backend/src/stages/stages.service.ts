@@ -1,7 +1,8 @@
 import { Injectable } from '@nestjs/common';
 import { InjectRepository } from '@nestjs/typeorm';
 import { Repository } from 'typeorm';
-import { User } from '../users/user.entity';
+import { User, type UserRole } from '../users/user.entity';
+import { requireVisibleTournament } from '../tournaments/visibility';
 
 @Injectable()
 export class StagesService {
@@ -10,7 +11,8 @@ export class StagesService {
     private readonly usersRepository: Repository<User>,
   ) {}
 
-  async findByTournament(tournamentId: number) {
+  async findByTournament(tournamentId: number, role: UserRole) {
+    await requireVisibleTournament(this.usersRepository, tournamentId, role);
     const rows = await this.usersRepository.query(
       `
         SELECT

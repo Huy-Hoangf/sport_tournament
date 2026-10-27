@@ -1,9 +1,11 @@
 import { BadRequestException, Injectable } from '@nestjs/common';
 import { InjectRepository } from '@nestjs/typeorm';
 import { Repository } from 'typeorm';
-import { User } from '../users/user.entity';
+import { User, type UserRole } from '../users/user.entity';
+import { requireVisibleTournament } from '../tournaments/visibility';
 
 type ScoringRuleInput = {
+  code?: string | null;
   category?: string;
   title?: string;
   content?: string;
@@ -11,29 +13,14 @@ type ScoringRuleInput = {
   sortOrder?: number;
 };
 
-const DEFAULT_RULES: ScoringRuleInput[] = [
-  {
-    category: 'PREDICTION',
-    title: 'Correct Match Winner',
-    content: 'User correctly predicts which team wins the match.',
-    points: 3,
-    sortOrder: 1,
-  },
-  {
-    category: 'PREDICTION',
-    title: 'Exact Scoreline',
-    content: 'User predicts the exact final match or round score.',
-    points: 5,
-    sortOrder: 2,
-  },
-  {
-    category: 'IN-GAME EVENT',
-    title: 'First Blood Prediction',
-    content: 'User predicts which player secures the first elimination.',
-    points: 2,
-    sortOrder: 3,
-  },
-];
+const DEFAULT_RULE: ScoringRuleInput = {
+  code: 'CORRECT_OUTCOME',
+  category: 'PREDICTION',
+  title: 'Correct Match Outcome',
+  content: 'User correctly predicts a home win, away win, or draw.',
+  points: 3,
+  sortOrder: 1,
+};
 
 @Injectable()
 export class ScoringRulesService {
@@ -42,8 +29,8 @@ export class ScoringRulesService {
     private readonly usersRepository: Repository<User>,
   ) {}
 
-  async findByTournament(tournamentId: number) {
-    await this.ensureTournamentExists(tournamentId);
+  async findByTournament(tournamentId: number, role: UserRole) {
+    await requireVisibleTournament(this.usersRepository, tournamentId, role);
     await this.seedDefaultRules(tournamentId);
 
     const rows = await this.usersRepository.query(
@@ -52,6 +39,7 @@ export class ScoringRulesService {
           id,
           tournament_id AS "tournamentId",
           category,
+          rule_code AS code,
           title,
           content,
           points,
@@ -85,8 +73,19 @@ export class ScoringRulesService {
     const normalized = rules.map((rule, index) =>
       this.normalizeRule(rule, index + 1),
     );
+    if (
+      normalized.filter((rule) => rule.code === 'CORRECT_OUTCOME').length !== 1
+    ) {
+      throw new BadRequestException(
+        'Rules must contain exactly one correct outcome rule.',
+      );
+    }
 
     await this.usersRepository.manager.transaction(async (manager) => {
+      await manager.query(
+        'SELECT id FROM tournaments WHERE id = $1 FOR UPDATE',
+        [tournamentId],
+      );
       await manager.query(
         'DELETE FROM scoring_rules WHERE tournament_id = $1',
         [tournamentId],
@@ -96,8 +95,8 @@ export class ScoringRulesService {
         await manager.query(
           `
             INSERT INTO scoring_rules
-              (tournament_id, category, title, content, points, sort_order)
-            VALUES ($1, $2, $3, $4, $5, $6)
+              (tournament_id, category, title, content, points, sort_order, rule_code)
+            VALUES ($1, $2, $3, $4, $5, $6, $7)
           `,
           [
             tournamentId,
@@ -106,42 +105,40 @@ export class ScoringRulesService {
             rule.content,
             rule.points,
             rule.sortOrder,
+            rule.code,
           ],
         );
       }
     });
 
-    return this.findByTournament(tournamentId);
+    return this.findByTournament(tournamentId, 'ADMIN');
   }
 
   private async seedDefaultRules(tournamentId: number) {
-    const [{ count }] = await this.usersRepository.query(
-      'SELECT COUNT(*) AS count FROM scoring_rules WHERE tournament_id = $1',
-      [tournamentId],
-    );
-
-    if (Number(count ?? 0) > 0) {
-      return;
-    }
-
-    for (const rule of DEFAULT_RULES) {
-      const normalized = this.normalizeRule(rule, rule.sortOrder ?? 0);
-      await this.usersRepository.query(
-        `
-          INSERT INTO scoring_rules
-            (tournament_id, category, title, content, points, sort_order)
-          VALUES ($1, $2, $3, $4, $5, $6)
-        `,
+    await this.usersRepository.manager.transaction(async (manager) => {
+      await manager.query(
+        'SELECT id FROM tournaments WHERE id = $1 FOR UPDATE',
+        [tournamentId],
+      );
+      const [{ count }] = await manager.query(
+        'SELECT COUNT(*) AS count FROM scoring_rules WHERE tournament_id = $1 AND rule_code = $2',
+        [tournamentId, 'CORRECT_OUTCOME'],
+      );
+      if (Number(count) > 0) return;
+      const rule = this.normalizeRule(DEFAULT_RULE, 1);
+      await manager.query(
+        'INSERT INTO scoring_rules (tournament_id, category, title, content, points, sort_order, rule_code) VALUES ($1,$2,$3,$4,$5,$6,$7)',
         [
           tournamentId,
-          normalized.category,
-          normalized.title,
-          normalized.content,
-          normalized.points,
-          normalized.sortOrder,
+          rule.category,
+          rule.title,
+          rule.content,
+          rule.points,
+          rule.sortOrder,
+          rule.code,
         ],
       );
-    }
+    });
   }
 
   private normalizeRule(rule: ScoringRuleInput, sortOrder: number) {
@@ -157,6 +154,7 @@ export class ScoringRulesService {
     }
 
     return {
+      code: rule.code === 'CORRECT_OUTCOME' ? rule.code : null,
       category: category || 'CUSTOM',
       title,
       content: content || 'Describe when users receive these points.',

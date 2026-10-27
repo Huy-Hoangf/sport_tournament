@@ -14,7 +14,7 @@ export class StagesController {
     @Headers('authorization') authorization: string | undefined,
     @Query('tournamentId') tournamentId: string,
   ) {
-    await this.authService.verifyAccessToken(authorization);
-    return this.stagesService.findByTournament(Number(tournamentId));
+    const user = await this.authService.verifyAccessToken(authorization);
+    return this.stagesService.findByTournament(Number(tournamentId), user.role);
   }
 }

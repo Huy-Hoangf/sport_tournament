@@ -79,4 +79,25 @@ describe('PredictionsService', () => {
     expect(query.mock.calls[1][1]).toEqual([1]);
     expect(query.mock.calls[3][1][0]).toBe(1);
   });
+  it('awards only outcome points even when old score fields exist', async () => {
+    const repo = (service as any).users;
+    repo.query.mockResolvedValue([
+      {
+        id: 1,
+        matchId: 2,
+        userId: 1,
+        matchStatus: 'FINISHED',
+        actualHomeScore: 2,
+        actualAwayScore: 1,
+        homeScore: 2,
+        awayScore: 1,
+        outcome: 'HOME_WIN',
+        correctPoints: 3,
+        exactBonus: 5,
+        total: 1,
+      },
+    ]);
+    const result = await service.list(1, false);
+    expect(result.items[0].points).toBe(3);
+  });
 });

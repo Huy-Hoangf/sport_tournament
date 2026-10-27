@@ -43,3 +43,20 @@ test('back and forward restore the preceding navigation entries', () => {
   assert.deepEqual(parseNavigation(stack[++index]), { view: 'tournaments', tournamentId: 42, tournamentTab: 'Teams' });
   delete global.window;
 });
+test('matches filters survive in the current history entry', () => {
+  let state = {existing: true};
+  global.window = { history: { get state() { return state; }, replaceState(value) { state = value; } }, location: { href: 'https://example.test/admin#matches' } };
+  mod.exports.saveMatchesState({query:'final', status:'FINISHED', tournamentId:'5', stageId:'2', page:3});
+  assert.deepEqual(mod.exports.readMatchesState(), {query:'final', status:'FINISHED', tournamentId:'5', stageId:'2', page:3});
+  delete global.window;
+});
+test('in-page back uses a known prior entry and falls back for direct links', () => {
+  let backCount = 0; let pushed = '';
+  global.window = { location: {hash:'#tournaments?tournament=42'}, history: {state:{adminPreviousHash:'#tournaments'}, back(){backCount++;}, pushState(_s,_t,h){pushed=h;}}, dispatchEvent(){} };
+  mod.exports.backToAdminView('tournaments');
+  assert.equal(backCount, 1);
+  window.history.state = null;
+  mod.exports.backToAdminView('tournaments');
+  assert.equal(pushed, '#tournaments');
+  delete global.window;
+});

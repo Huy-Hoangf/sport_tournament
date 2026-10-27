@@ -3,7 +3,7 @@
 import { apiRequest } from "../api";
 import NoticeBanner, { type Notice } from "../notice-banner";
 import { useCallback, useEffect, useState, useSyncExternalStore } from "react";
-import { navigate, parseNavigation } from "./lib/navigation";
+import { backToAdminView, navigate, parseNavigation } from "./lib/navigation";
 import { AdminSelect } from "./shared/admin-select";
 import { DashboardActionButton } from "./shared/dashboard-ui";
 import {
@@ -890,7 +890,7 @@ export default function AdminDashboardContent({
           matches={selectedTournamentMatches}
           isTodayScope={!isTournamentView}
           onBack={() => {
-            setSelectedTournamentId(null);
+            backToAdminView(view);
           }}
           onUnavailableFeature={() =>
             showNotice("this feature not available", "info")

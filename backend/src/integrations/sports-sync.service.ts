@@ -474,6 +474,9 @@ export class SportsApiSyncService {
             tournamentStatus,
             fixtureRange?.start ?? null,
             fixtureRange?.end ?? null,
+            isAseanChampionship ? 'ESPN_ASEAN' : 'FOOTBALL_DATA',
+            String(league.id),
+            String(league.season),
           );
           competitionCount += 1;
           continue;
@@ -485,6 +488,7 @@ export class SportsApiSyncService {
           isAseanChampionship ? 'ESPN_ASEAN' : 'FOOTBALL_DATA',
           tournamentStatus,
           fixtureRange,
+          { competitionId: String(league.id), season: String(league.season) },
         );
 
         if (importedMatches > 0) {
@@ -719,6 +723,9 @@ export class SportsApiSyncService {
       }
 
       const tournamentId = await this.upsertTournament({
+        provider: 'CITO_LOL',
+        competitionId: String(competition.id),
+        season: String(competition.start ?? '').slice(0, 4) || 'unknown',
         name: competition.name,
         sportType: 'LOL',
         status: this.mapTournamentStatusFromDates(
@@ -852,6 +859,10 @@ export class SportsApiSyncService {
         'FOOTBALL_DATA',
         tournamentStatus,
         fixtureRange,
+        {
+          competitionId: String(competition.id),
+          season: String(competition.season),
+        },
       );
 
       if (importedMatches > 0) {
@@ -876,6 +887,7 @@ export class SportsApiSyncService {
     source: 'FOOTBALL_DATA' | 'ESPN_ASEAN' = 'FOOTBALL_DATA',
     tournamentStatusOverride?: TournamentStatus,
     tournamentDateRange?: { start: string; end: string } | null,
+    identity?: { competitionId: string; season: string },
   ) {
     await this.ensureTeamLogoColumn();
     let matchCount = 0;
@@ -886,6 +898,9 @@ export class SportsApiSyncService {
       }
 
       const tournamentId = await this.upsertTournament({
+        provider: source,
+        competitionId: identity?.competitionId ?? String(match.league.id ?? ''),
+        season: identity?.season ?? String(match.league.season ?? ''),
         name: match.league.name,
         sportType: 'FOOTBALL',
         status:
@@ -1273,6 +1288,9 @@ export class SportsApiSyncService {
     sessions: OpenF1Session[],
   ) {
     const tournamentId = await this.upsertTournament({
+      provider: 'OPENF1',
+      competitionId: String(meeting.meeting_key),
+      season: meeting.date_start.slice(0, 4),
       name:
         meeting.meeting_name || meeting.meeting_official_name || 'Formula 1',
       sportType: 'F1',
@@ -1319,6 +1337,9 @@ export class SportsApiSyncService {
   }
 
   private async upsertTournament(data: {
+    provider: string;
+    competitionId: string;
+    season: string;
     name: string;
     sportType: 'FOOTBALL' | 'F1' | 'LOL' | 'OTHER';
     status: TournamentStatus;
@@ -1326,66 +1347,62 @@ export class SportsApiSyncService {
     endDate?: string | null;
     adminId: number;
   }) {
-    const [existing] = await this.usersRepository.query(
-      `
-        SELECT id
-        FROM tournaments
-        WHERE LOWER(name) = LOWER($1)
-          AND sport_type = $2
-        LIMIT 1
-      `,
-      [data.name, data.sportType],
-    );
-
-    if (existing) {
-      await this.usersRepository.query(
-        `
-          UPDATE tournaments
-          SET
-            status = $1,
-            start_date = COALESCE($2, start_date),
-            end_date = COALESCE($3, end_date),
-            updated_at = NOW()
-          WHERE id = $4
-        `,
+    if (!data.provider || !data.competitionId || !data.season)
+      throw new Error('Missing external tournament identity.');
+    return this.usersRepository.manager.transaction(async (manager) => {
+      await manager.query(
+        'SELECT pg_advisory_xact_lock(hashtextextended($1, 0))',
+        [JSON.stringify([data.provider, data.competitionId, data.season])],
+      );
+      const [existing] = await manager.query(
+        'SELECT tournament_id AS id FROM tournament_external_identities WHERE provider = $1 AND competition_id = $2 AND season = $3 FOR UPDATE',
+        [data.provider, data.competitionId, data.season],
+      );
+      if (existing) {
+        await manager.query(
+          'UPDATE tournaments SET status = $1, start_date = COALESCE($2, start_date), end_date = COALESCE($3, end_date), updated_at = NOW() WHERE id = $4',
+          [
+            data.status,
+            data.startDate ?? null,
+            data.endDate ?? null,
+            existing.id,
+          ],
+        );
+        return Number(existing.id);
+      }
+      const [created] = await manager.query(
+        "INSERT INTO tournaments (name, sport_type, format, status, visibility, start_date, end_date, created_by) VALUES ($1, $2, 'ROUND_ROBIN', $3, 'PUBLIC', $4, $5, $6) RETURNING id",
         [
+          data.name,
+          data.sportType,
           data.status,
           data.startDate ?? null,
           data.endDate ?? null,
-          existing.id,
+          data.adminId,
         ],
       );
-      return Number(existing.id);
-    }
-
-    const [created] = await this.usersRepository.query(
-      `
-        INSERT INTO tournaments
-          (name, sport_type, format, status, visibility, start_date, end_date, created_by)
-        VALUES ($1, $2, 'ROUND_ROBIN', $3, 'PUBLIC', $4, $5, $6)
-        RETURNING id
-      `,
-      [
-        data.name,
-        data.sportType,
-        data.status,
-        data.startDate ?? null,
-        data.endDate ?? null,
-        data.adminId,
-      ],
-    );
-
-    return Number(created.id);
+      await manager.query(
+        'INSERT INTO tournament_external_identities (provider, competition_id, season, tournament_id) VALUES ($1, $2, $3, $4)',
+        [data.provider, data.competitionId, data.season, created.id],
+      );
+      return Number(created.id);
+    });
   }
 
   private async upsertEmptyFootballTournament(
     adminId: number,
     name: string,
     status: TournamentStatus,
-    startDate?: string | null,
-    endDate?: string | null,
+    startDate: string | null | undefined,
+    endDate: string | null | undefined,
+    provider: string,
+    competitionId: string,
+    season: string,
   ) {
     const tournamentId = await this.upsertTournament({
+      provider,
+      competitionId,
+      season,
       name,
       sportType: 'FOOTBALL',
       status,
@@ -1509,7 +1526,7 @@ export class SportsApiSyncService {
   }) {
     const [existing] = await this.usersRepository.query(
       `
-        SELECT id
+        SELECT id, tournament_id
         FROM matches
         WHERE external_source = $1
           AND external_match_id = $2
@@ -1555,6 +1572,12 @@ export class SportsApiSyncService {
         ],
       );
       return;
+    }
+
+    if (Number(existing.tournament_id) !== data.tournamentId) {
+      throw new Error(
+        'Existing imported match belongs to another tournament; reconcile its external identity before importing.',
+      );
     }
 
     await this.usersRepository.query(

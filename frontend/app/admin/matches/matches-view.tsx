@@ -1,6 +1,7 @@
 "use client";
 
 import { useEffect, useState } from "react";
+import { readMatchesState, saveMatchesState } from "../lib/navigation";
 import { apiRequest } from "../../api";
 import { DashboardStatusBadge, MatchTeams } from "../shared/dashboard-ui";
 import type {
@@ -43,15 +44,16 @@ export default function MatchesView({
     page: 1,
     pageSize: 20,
   });
-  const [query, setQuery] = useState(""),
-    [status, setStatus] = useState(canManage ? "ALL" : "OPEN");
+  const [savedNavigation] = useState(() => readMatchesState());
+  const [query, setQuery] = useState(savedNavigation?.query ?? ""),
+    [status, setStatus] = useState(savedNavigation?.status ?? (canManage ? "ALL" : "OPEN"));
   const [tournamentId, setTournamentId] = useState(
-    String(initialFilter?.tournamentId ?? ""),
+    savedNavigation?.tournamentId ?? String(initialFilter?.tournamentId ?? ""),
   );
-  const [stageId, setStageId] = useState(String(initialFilter?.stageId ?? ""));
+  const [stageId, setStageId] = useState(savedNavigation?.stageId ?? String(initialFilter?.stageId ?? ""));
   const [tournaments, setTournaments] = useState<TournamentRow[]>([]);
   const [stages, setStages] = useState<TournamentStage[]>([]);
-  const [page, setPage] = useState(1),
+  const [page, setPage] = useState(savedNavigation?.page ?? 1),
     [refresh, setRefresh] = useState(0);
   const [loading, setLoading] = useState(true),
     [busy, setBusy] = useState(false);
@@ -63,6 +65,10 @@ export default function MatchesView({
   } | null>(null);
   const [vote, setVote] = useState<MatchRow | null>(null);
   const [now, setNow] = useState(() => Date.now());
+
+  useEffect(() => {
+    saveMatchesState({ query, status, tournamentId, stageId, page });
+  }, [query, status, tournamentId, stageId, page]);
 
   useEffect(() => {
     apiRequest<TournamentRow[]>("/tournaments")

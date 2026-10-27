@@ -24,4 +24,11 @@ describe('StagesController', () => {
   it('should be defined', () => {
     expect(controller).toBeDefined();
   });
+  it('passes the user role to tournament visibility checks', async () => {
+    const auth = (controller as any).authService;
+    const stages = (controller as any).stagesService;
+    auth.verifyAccessToken.mockResolvedValue({ role: 'PLAYER' });
+    await controller.findByTournament('Bearer token', '12');
+    expect(stages.findByTournament).toHaveBeenCalledWith(12, 'PLAYER');
+  });
 });

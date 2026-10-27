@@ -14,8 +14,11 @@ export class ScoringRulesController {
     @Headers('authorization') authorization: string | undefined,
     @Query('tournamentId') tournamentId: string,
   ) {
-    await this.authService.verifyAccessToken(authorization);
-    return this.scoringRulesService.findByTournament(Number(tournamentId));
+    const user = await this.authService.verifyAccessToken(authorization);
+    return this.scoringRulesService.findByTournament(
+      Number(tournamentId),
+      user.role,
+    );
   }
 
   @Put()

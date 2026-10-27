@@ -36,6 +36,9 @@ export class User {
   })
   passwordHash: string | null;
 
+  @Column({ name: 'token_version', type: 'integer', default: 0 })
+  tokenVersion: number;
+
   @Column({ name: 'google_id', type: 'varchar', length: 255, nullable: true })
   googleId: string | null;
 

@@ -20,6 +20,7 @@ type AccessTokenPayload = {
   email: string;
   role: UserRole;
   purpose?: string;
+  tokenVersion: number;
 };
 
 type GoogleTokenResponse = {
@@ -81,10 +82,11 @@ export class AuthService {
               email: responseUser.email,
               role: responseUser.role,
               purpose: 'PASSWORD_CHANGE',
+              tokenVersion: user.tokenVersion,
             },
             { expiresIn: '15m' },
           )
-        : await this.signAccessToken(responseUser),
+        : await this.signAccessToken(responseUser, user.tokenVersion),
     };
   }
 
@@ -153,7 +155,10 @@ export class AuthService {
         fullName: user.fullName,
         role: user.email === ADMIN_EMAIL ? 'SUPER_ADMIN' : user.role,
       };
-      const accessToken = await this.signAccessToken(responseUser);
+      const accessToken = await this.signAccessToken(
+        responseUser,
+        user.tokenVersion,
+      );
 
       return this.buildGoogleRedirect(frontendUrl, {
         accessToken,
@@ -232,7 +237,12 @@ export class AuthService {
       throw new BadRequestException('Password has already been changed.');
     }
 
-    await this.usersService.updatePassword(user.email, newPassword);
+    const updatedUser = await this.usersService.updatePassword(
+      user.email,
+      newPassword,
+    );
+    if (!updatedUser)
+      throw new UnauthorizedException('Invalid player account.');
 
     const responseUser = {
       id: user.id,
@@ -244,7 +254,10 @@ export class AuthService {
     return {
       message: 'Password changed successfully.',
       user: responseUser,
-      accessToken: await this.signAccessToken(responseUser),
+      accessToken: await this.signAccessToken(
+        responseUser,
+        updatedUser.tokenVersion,
+      ),
     };
   }
 
@@ -271,7 +284,12 @@ export class AuthService {
         throw new UnauthorizedException('Invalid access token.');
       }
       const user = await this.usersService.findById(payload.sub);
-      if (!user || user.status !== 'ACTIVE') {
+      if (
+        !user ||
+        user.status !== 'ACTIVE' ||
+        !Number.isInteger(payload.tokenVersion) ||
+        payload.tokenVersion !== user.tokenVersion
+      ) {
         throw new UnauthorizedException('Account is not active.');
       }
       return { sub: user.id, email: user.email, role: user.role };
@@ -389,11 +407,15 @@ export class AuthService {
     };
   }
 
-  private signAccessToken(user: { id: number; email: string; role: UserRole }) {
+  private signAccessToken(
+    user: { id: number; email: string; role: UserRole },
+    tokenVersion: number,
+  ) {
     return this.jwtService.signAsync({
       sub: user.id,
       email: user.email,
       role: user.role,
+      tokenVersion,
     });
   }
 

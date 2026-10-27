@@ -41,7 +41,21 @@ export function formatNavigation(state: Navigation): string {
 export function navigate(state: Navigation) {
   const hash = formatNavigation(state);
   if (window.location.hash !== hash) {
-    window.history.pushState(null, '', hash);
+    window.history.pushState({ adminPreviousHash: window.location.hash }, '', hash);
     window.dispatchEvent(new Event('admin-navigation'));
   }
+}
+export type MatchesNavigationState = { query: string; status: string; tournamentId: string; stageId: string; page: number };
+export function saveMatchesState(state: MatchesNavigationState) {
+  window.history.replaceState({ ...window.history.state, matchesState: state }, '', window.location.href);
+}
+export function readMatchesState(): MatchesNavigationState | null {
+  if (typeof window === 'undefined') return null;
+  const state = window.history.state?.matchesState;
+  return state && typeof state.query === 'string' && typeof state.status === 'string' && typeof state.tournamentId === 'string' && typeof state.stageId === 'string' && Number.isSafeInteger(state.page) && state.page > 0 ? state : null;
+}
+export function backToAdminView(view: AdminView) {
+  const previous = window.history.state?.adminPreviousHash;
+  if (typeof previous === 'string' && parseNavigation(previous).view === view) window.history.back();
+  else navigate({ view });
 }

@@ -28,6 +28,9 @@ export class UsersService implements OnModuleInit {
   ) {}
 
   async onModuleInit() {
+    await this.usersRepository.query(
+      'ALTER TABLE users ADD COLUMN IF NOT EXISTS token_version INTEGER NOT NULL DEFAULT 0',
+    );
     await this.ensureUserRoleConstraint();
     await this.ensureGoogleAuthColumns();
     await this.seedDefaultAdmin();
@@ -451,8 +454,12 @@ export class UsersService implements OnModuleInit {
       return null;
     }
 
-    user.passwordHash = await bcrypt.hash(password, 10);
-    return this.usersRepository.save(user);
+    const passwordHash = await bcrypt.hash(password, 10);
+    await this.usersRepository.query(
+      'UPDATE users SET password_hash = $1, token_version = token_version + 1 WHERE id = $2',
+      [passwordHash, user.id],
+    );
+    return this.findById(user.id);
   }
 
   private async ensureUserRoleConstraint() {

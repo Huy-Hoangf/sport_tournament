@@ -19,6 +19,7 @@ import { apiRequest } from "../../../api";
 
 type ScoringRule = {
   id: string;
+  code?: string | null;
   category: string;
   name: string;
   description: string;
@@ -29,29 +30,7 @@ type RuleDraft = Pick<ScoringRule, "category" | "name" | "description"> & {
   points: string;
 };
 
-const defaultRules: ScoringRule[] = [
-  {
-    id: "correct-match-winner",
-    category: "PREDICTION",
-    name: "Correct Match Winner",
-    description: "User correctly predicts which team wins the match.",
-    points: 3,
-  },
-  {
-    id: "exact-scoreline",
-    category: "PREDICTION",
-    name: "Exact Scoreline",
-    description: "User predicts the exact final match or round score.",
-    points: 5,
-  },
-  {
-    id: "first-blood",
-    category: "IN-GAME EVENT",
-    name: "First Blood Prediction",
-    description: "User predicts which player secures the first elimination.",
-    points: 2,
-  },
-];
+const defaultRules: ScoringRule[] = [];
 
 export function ScoringRulesView({
   tournament,
@@ -82,6 +61,7 @@ export function ScoringRulesView({
     apiRequest<
       Array<{
         id: number;
+        code?: string | null;
         category: string;
         title: string;
         content: string;
@@ -94,6 +74,7 @@ export function ScoringRulesView({
         setRules(
           data.map((rule) => ({
             id: String(rule.id),
+            code: rule.code,
             category: rule.category,
             name: rule.title,
             description: rule.content,
@@ -271,6 +252,7 @@ export function ScoringRulesView({
       const savedRules = await apiRequest<
         Array<{
           id: number;
+          code?: string | null;
           category: string;
           title: string;
           content: string;
@@ -281,6 +263,7 @@ export function ScoringRulesView({
         body: JSON.stringify({
           rules: rules.map((rule, index) => ({
             category: rule.category,
+            code: rule.code,
             title: rule.name,
             content: rule.description,
             points: rule.points,
@@ -292,6 +275,7 @@ export function ScoringRulesView({
       setRules(
         savedRules.map((rule) => ({
           id: String(rule.id),
+          code: rule.code,
           category: rule.category,
           name: rule.title,
           description: rule.content,
@@ -324,7 +308,7 @@ export function ScoringRulesView({
             Scoring Configuration
           </h4>
           <p className="mt-2 text-sm text-[#9fb2b8]">
-            Manage points distribution and prediction rules for this tournament.
+            Only the correct outcome rule affects points. Other rules are informational.
           </p>
         </div>
         {canManage ? (
@@ -580,15 +564,17 @@ export function ScoringRulesView({
                               <Pencil size={14} /> Edit
                             </button>
                           )}
-                          <button
-                            type="button"
-                            onClick={() => removeRule(rule.id)}
-                            aria-label={`Remove ${rule.name}`}
-                            title="Delete rule"
-                            className="grid h-9 w-9 place-items-center border border-[#3a4d54] text-[#789098] hover:border-[#ff8f8f] hover:bg-[#302327] hover:text-[#ff8f8f]"
-                          >
-                            <Trash2 size={15} />
-                          </button>
+                          {rule.code !== "CORRECT_OUTCOME" && (
+                            <button
+                              type="button"
+                              onClick={() => removeRule(rule.id)}
+                              aria-label={`Remove ${rule.name}`}
+                              title="Delete rule"
+                              className="grid h-9 w-9 place-items-center border border-[#3a4d54] text-[#789098] hover:border-[#ff8f8f] hover:bg-[#302327] hover:text-[#ff8f8f]"
+                            >
+                              <Trash2 size={15} />
+                            </button>
+                          )}
                         </div>
                       </div>
                     )}

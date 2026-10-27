@@ -11,8 +11,8 @@ describe('DatabaseMigrationsService', () => {
     expect(startupSql).not.toMatch(/DELETE\s+FROM\s+(matches|teams)\b/i);
     expect(startupSql).toContain('CREATE OR REPLACE VIEW vw_leaderboard');
     expect(startupSql).toContain("m.status = 'FINISHED'");
-    expect(startupSql).toContain('s.correct_points');
-    expect(startupSql).toContain('s.exact_score_bonus');
+    expect(startupSql).toContain("sr.rule_code = 'CORRECT_OUTCOME'");
+    expect(startupSql).not.toContain('THEN exact_score_bonus');
     expect(startupSql).not.toContain('SUM(p.points_earned)');
   });
 });

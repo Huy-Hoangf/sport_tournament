@@ -10,6 +10,7 @@ import {
 } from "lucide-react";
 import { useEffect } from "react";
 import { apiRequest } from "../../../api";
+import { loadAllMatchPages } from "../../matches/load-tournament-matches";
 import { MatchEditor } from "../../matches/match-editor";
 import { PredictionHistory } from "../../matches/predictions";
 import type { LeaderboardEntry } from "../../leaderboard/types";
@@ -512,7 +513,7 @@ export function TournamentDetailView({
           onClose={() => setImportOpen(false)}
           onSaved={() => {
             setMatchImportMessage("Import complete. Match schedule refreshed.");
-            apiRequest<MatchRow[]>(`/matches?tournamentId=${tournament.id}`)
+            loadAllMatchPages((page) => apiRequest<{ items: MatchRow[]; total: number }>(`/matches/page?tournamentId=${tournament.id}&page=${page}&pageSize=100`))
               .then(setLoadedMatches)
               .catch((error) => setMatchImportMessage(error.message));
           }}

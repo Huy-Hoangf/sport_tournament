@@ -15,7 +15,9 @@ export class DatabaseMigrationsService implements OnModuleInit {
     await this.migrateTournamentFormats();
     await this.ensureTournamentDateColumns();
     await this.migrateTournamentStatuses();
+    await this.ensureExternalTournamentIdentities();
     await this.ensureScoringRulesTable();
+    await this.ensureOutcomeRuleCodes();
     await this.ensureStageNameConstraint();
     await this.ensureActivityLogsTable();
     await this.ensureTeamTimestampColumns();
@@ -85,6 +87,15 @@ export class DatabaseMigrationsService implements OnModuleInit {
     `);
   }
 
+  private async ensureExternalTournamentIdentities() {
+    await this.usersRepository
+      .query(`CREATE TABLE IF NOT EXISTS tournament_external_identities (
+      provider VARCHAR(50) NOT NULL, competition_id VARCHAR(255) NOT NULL,
+      season VARCHAR(100) NOT NULL, tournament_id INTEGER NOT NULL REFERENCES tournaments(id) ON DELETE CASCADE,
+      PRIMARY KEY (provider, competition_id, season)
+    )`);
+  }
+
   private async ensureScoringRulesTable() {
     await this.usersRepository.query(`
       CREATE TABLE IF NOT EXISTS scoring_rules (
@@ -104,6 +115,20 @@ export class DatabaseMigrationsService implements OnModuleInit {
       CREATE INDEX IF NOT EXISTS idx_scoring_rules_tournament
       ON scoring_rules(tournament_id, sort_order, id)
     `);
+  }
+
+  private async ensureOutcomeRuleCodes() {
+    await this.usersRepository.query(
+      `ALTER TABLE scoring_rules ADD COLUMN IF NOT EXISTS rule_code VARCHAR(40)`,
+    );
+    await this.usersRepository.query(`WITH candidates AS (
+      SELECT id, row_number() OVER (PARTITION BY tournament_id ORDER BY id) AS n
+      FROM scoring_rules WHERE lower(title) = 'correct match winner'
+      AND NOT EXISTS (SELECT 1 FROM scoring_rules existing WHERE existing.tournament_id = scoring_rules.tournament_id AND existing.rule_code = 'CORRECT_OUTCOME')
+    ) UPDATE scoring_rules SET rule_code = 'CORRECT_OUTCOME' FROM candidates WHERE scoring_rules.id = candidates.id AND candidates.n = 1`);
+    await this.usersRepository.query(
+      `CREATE UNIQUE INDEX IF NOT EXISTS uq_scoring_rules_outcome ON scoring_rules(tournament_id, rule_code) WHERE rule_code IS NOT NULL`,
+    );
   }
 
   private async ensureStageNameConstraint() {
@@ -277,8 +302,7 @@ export class DatabaseMigrationsService implements OnModuleInit {
           p.predicted_away_score,
           m.actual_home_score,
           m.actual_away_score,
-          s.correct_points,
-          s.exact_score_bonus,
+          COALESCE((SELECT sr.points FROM scoring_rules sr WHERE sr.tournament_id = t.id AND sr.rule_code = 'CORRECT_OUTCOME' LIMIT 1), 3) AS correct_points,
           CASE
             WHEN m.status = 'FINISHED'
               AND m.actual_home_score IS NOT NULL
@@ -304,10 +328,7 @@ export class DatabaseMigrationsService implements OnModuleInit {
         SUM(
           CASE WHEN predicted_outcome = actual_outcome
             THEN correct_points ELSE 0 END
-          + CASE WHEN actual_outcome IS NOT NULL
-              AND predicted_home_score = actual_home_score
-              AND predicted_away_score = actual_away_score
-            THEN exact_score_bonus ELSE 0 END
+
         ) AS total_points,
         COUNT(prediction_id) AS total_predictions,
         SUM(CASE WHEN predicted_outcome = actual_outcome THEN 1 ELSE 0 END)

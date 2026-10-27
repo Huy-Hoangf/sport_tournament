@@ -43,4 +43,11 @@ describe('MatchesController', () => {
       controller.page('Bearer valid', { openForVoting: 'yes' }),
     ).rejects.toThrow();
   });
+  it('keeps the total when a requested page is empty', async () => {
+    matchesService.findAll
+      .mockResolvedValueOnce([])
+      .mockResolvedValueOnce([{ totalCount: 25 }]);
+    const result = await controller.page('Bearer valid', { page: '9' });
+    expect(result.total).toBe(25);
+  });
 });

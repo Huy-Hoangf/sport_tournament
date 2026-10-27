@@ -83,6 +83,7 @@ describe('AuthService', () => {
       email: 'player@tech.com',
       fullName: 'First Player',
       role: 'PLAYER' as const,
+      tokenVersion: 1,
       passwordHash: await bcrypt.hash(DEFAULT_PLAYER_PASSWORD, 10),
     };
     jwtService.verifyAsync.mockResolvedValue({
@@ -109,6 +110,7 @@ describe('AuthService', () => {
       sub: player.id,
       email: player.email,
       role: player.role,
+      tokenVersion: 1,
     });
   });
 
@@ -142,12 +144,17 @@ describe('AuthService', () => {
   });
 
   it('allows an active admin using the current database role', async () => {
-    jwtService.verifyAsync.mockResolvedValue({ sub: 3, role: 'PLAYER' });
+    jwtService.verifyAsync.mockResolvedValue({
+      sub: 3,
+      role: 'PLAYER',
+      tokenVersion: 0,
+    });
     usersService.findById.mockResolvedValue({
       id: 3,
       email: 'admin@tech.com',
       role: 'ADMIN',
       status: 'ACTIVE',
+      tokenVersion: 0,
     });
 
     await expect(
@@ -156,5 +163,15 @@ describe('AuthService', () => {
       sub: 3,
       role: 'ADMIN',
     });
+  });
+  it('rejects a token issued before a password change', async () => {
+    jwtService.verifyAsync.mockResolvedValue({ sub: 7, tokenVersion: 0 });
+    usersService.findById.mockResolvedValue({
+      id: 7,
+      status: 'ACTIVE',
+      role: 'PLAYER',
+      tokenVersion: 1,
+    });
+    await expect(service.verifyAccessToken('Bearer old')).rejects.toThrow();
   });
 });

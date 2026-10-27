@@ -106,7 +106,7 @@ export class PredictionsService {
       p.predicted_home_score AS "homeScore", p.predicted_away_score AS "awayScore",
       p.predicted_outcome AS outcome, p.updated_at AS "updatedAt", m.status AS "matchStatus",
       m.actual_home_score AS "actualHomeScore", m.actual_away_score AS "actualAwayScore",
-      s.correct_points AS "correctPoints", s.exact_score_bonus AS "exactBonus", COUNT(*) OVER() AS total
+      COALESCE((SELECT sr.points FROM scoring_rules sr WHERE sr.tournament_id = t.id AND sr.rule_code = 'CORRECT_OUTCOME' LIMIT 1), 3) AS "correctPoints", COUNT(*) OVER() AS total
       FROM predictions p JOIN users u ON u.id=p.user_id JOIN matches m ON m.id=p.match_id
       JOIN tournaments t ON t.id=m.tournament_id JOIN stages s ON s.id=m.stage_id
       LEFT JOIN teams h ON h.id=m.home_team_id LEFT JOIN teams a ON a.id=m.away_team_id
@@ -127,10 +127,6 @@ export class PredictionsService {
             ? 'HOME_WIN'
             : 'AWAY_WIN';
       const correct = finished && row.outcome === outcome;
-      const exact =
-        finished &&
-        row.homeScore === row.actualHomeScore &&
-        row.awayScore === row.actualAwayScore;
       return {
         ...row,
         id: Number(row.id),
@@ -144,10 +140,7 @@ export class PredictionsService {
               ? `${row.homeName} wins`
               : `${row.awayName} wins`,
         status: !finished ? 'PENDING' : correct ? 'CORRECT' : 'INCORRECT',
-        points: finished
-          ? (correct ? Number(row.correctPoints) : 0) +
-            (exact ? Number(row.exactBonus) : 0)
-          : null,
+        points: finished ? (correct ? Number(row.correctPoints) : 0) : null,
       };
     });
     return { items, total: Number(rows[0]?.total ?? 0), page, pageSize: 100 };
