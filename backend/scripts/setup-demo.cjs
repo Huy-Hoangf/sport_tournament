@@ -22,7 +22,7 @@ async function main() {
     if (!existing.rows[0].name) {
       await client.query(
         readFileSync(
-          path.resolve(__dirname, '../../sport_tournament.postgres.sql'),
+          path.resolve(__dirname, '../schema/postgres.sql'),
           'utf8',
         ).replace(/^\uFEFF/, ''),
       );
@@ -98,7 +98,7 @@ async function main() {
         [tid, sid, teams[i], teams[(i + 1) % 4], kickoff(i + 2)],
       );
     }
-    const directory = path.resolve(__dirname, '../../demo');
+    const directory = path.resolve(__dirname, '../../docs/demo');
     mkdirSync(directory, { recursive: true });
     for (const [file, count, invalid] of [
       ['matches-valid-20.xlsx', 20, 0],
@@ -109,7 +109,7 @@ async function main() {
       sheet.addRow(['Home Team', 'Away Team', 'Kickoff Time']);
       for (let i = 0; i < count; i++)
         sheet.addRow([
-          i >= count - invalid ? 'Missing Team' : 'Team A',
+          i >= count - invalid ? 'Team B' : 'Team A',
           'Team B',
           new Date(
             new Date(kickoff(i + (invalid ? 40 : 10))).getTime() +
@@ -125,7 +125,7 @@ async function main() {
     console.log('Admin: mentor.admin@tech.com / DemoAdmin1!');
     console.log('Player: mentor.player@tech.com / DemoPlayer1!');
     console.log(
-      'Excel samples: demo/ (import partial sample before valid sample to avoid duplicate rows).',
+      'Excel samples: docs/demo/ (import partial sample before valid sample to avoid duplicate rows).',
     );
   } finally {
     await client.end();

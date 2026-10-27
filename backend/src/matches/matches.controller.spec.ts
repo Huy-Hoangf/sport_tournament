@@ -5,13 +5,20 @@ import { MatchesService } from './matches.service';
 
 describe('MatchesController', () => {
   let controller: MatchesController;
-  let matchesService: { findAll: jest.Mock };
-  let authService: { verifyAccessToken: jest.Mock };
+  let matchesService: { findAll: jest.Mock; importWorkbook: jest.Mock };
+  let authService: {
+    verifyAccessToken: jest.Mock;
+    verifyAdminToken: jest.Mock;
+  };
 
   beforeEach(async () => {
-    matchesService = { findAll: jest.fn().mockResolvedValue([]) };
+    matchesService = {
+      findAll: jest.fn().mockResolvedValue([]),
+      importWorkbook: jest.fn().mockResolvedValue({ imported: 1, rejected: 0 }),
+    };
     authService = {
       verifyAccessToken: jest.fn().mockResolvedValue({ role: 'PLAYER' }),
+      verifyAdminToken: jest.fn().mockResolvedValue({ sub: 42, role: 'ADMIN' }),
     };
     const module: TestingModule = await Test.createTestingModule({
       controllers: [MatchesController],
@@ -49,5 +56,10 @@ describe('MatchesController', () => {
       .mockResolvedValueOnce([{ totalCount: 25 }]);
     const result = await controller.page('Bearer valid', { page: '9' });
     expect(result.total).toBe(25);
+  });
+  it('passes the authenticated admin id to the Excel importer', async () => {
+    const body = { fileName: 'matches.xlsx', contentBase64: 'data' };
+    await controller.import('Bearer valid', body);
+    expect(matchesService.importWorkbook).toHaveBeenCalledWith(body, 42);
   });
 });

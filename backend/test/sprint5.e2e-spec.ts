@@ -14,6 +14,7 @@ import { UsersService } from '../src/users/users.service';
 import { User } from '../src/users/user.entity';
 import { MatchesController } from '../src/matches/matches.controller';
 import { MatchesService } from '../src/matches/matches.service';
+import { MATCH_HEADERS } from '../src/matches/match-workbook';
 import { PredictionsController } from '../src/predictions/predictions.controller';
 import { PredictionsService } from '../src/predictions/predictions.service';
 
@@ -54,7 +55,7 @@ describe('Sprint 5 HTTP + PostgreSQL', () => {
     await db.initialize();
     await db.query(
       readFileSync(
-        resolve(__dirname, '../../sport_tournament.postgres.sql'),
+        resolve(__dirname, '../schema/postgres.sql'),
         'utf8',
       ).replace(/^\uFEFF/, ''),
     );
@@ -109,10 +110,13 @@ describe('Sprint 5 HTTP + PostgreSQL', () => {
         .expect(201)
     ).body.id as number;
   }
-  async function workbook(rows: unknown[][]) {
+  async function workbook(
+    rows: unknown[][],
+    headers = ['Home Team', 'Away Team', 'Kickoff Time'],
+  ) {
     const book = new Workbook();
     const sheet = book.addWorksheet('Matches');
-    sheet.addRow(['Home Team', 'Away Team', 'Kickoff Time']);
+    sheet.addRow(headers);
     rows.forEach((row) => sheet.addRow(row));
     return {
       tournamentId: 1,
@@ -197,6 +201,52 @@ describe('Sprint 5 HTTP + PostgreSQL', () => {
       ),
     ).toEqual([{ count: 20 }]);
   });
+  it('creates tournament dates, teams and a match from the seven-column Excel file', async () => {
+    const start = future(1).slice(0, 10);
+    const end = future(30).slice(0, 10);
+    const payload = await workbook(
+      [
+        [
+          'Excel Cup E2E',
+          start,
+          end,
+          'Group Stage',
+          'New A',
+          'New B',
+          future(2),
+        ],
+      ],
+      MATCH_HEADERS,
+    );
+    const result = await http()
+      .post('/matches/import')
+      .set('Authorization', bearer(admin))
+      .send(payload)
+      .expect(201);
+    expect(result.body).toMatchObject({ imported: 1, rejected: 0 });
+    const [tournament] = await db.query(
+      `SELECT id, to_char(start_date AT TIME ZONE 'Asia/Ho_Chi_Minh', 'YYYY-MM-DD') AS start,
+        to_char(end_date AT TIME ZONE 'Asia/Ho_Chi_Minh', 'YYYY-MM-DD') AS "end"
+       FROM tournaments WHERE name='Excel Cup E2E'`,
+    );
+    expect(tournament).toMatchObject({ start, end });
+    expect(
+      (
+        await db.query(
+          'SELECT COUNT(*)::int AS count FROM teams WHERE tournament_id=$1',
+          [tournament.id],
+        )
+      )[0].count,
+    ).toBe(2);
+    expect(
+      (
+        await db.query(
+          'SELECT COUNT(*)::int AS count FROM matches WHERE tournament_id=$1',
+          [tournament.id],
+        )
+      )[0].count,
+    ).toBe(1);
+  });
   it('imports 8 of 10 rows and returns the 2 invalid row numbers', async () => {
     const payload = await workbook([
       ...Array.from({ length: 8 }, (_, i) => [
@@ -204,8 +254,8 @@ describe('Sprint 5 HTTP + PostgreSQL', () => {
         'Team B',
         future(i + 2),
       ]),
-      ['Missing', 'Team B', future()],
-      ['Team A', 'Missing', future()],
+      ['Team B', 'Team B', future()],
+      ['Team A', 'Team A', future()],
     ]);
     const result = await http()
       .post('/matches/import')

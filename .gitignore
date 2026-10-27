@@ -7,4 +7,7 @@ build
 .env.*.local
 .DS_Store
 Thumbs.db
-.demo/
+.ua/
+graphify-out/
+docs/demo/
+docs/review/

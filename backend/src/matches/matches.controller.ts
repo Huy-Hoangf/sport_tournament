@@ -80,8 +80,8 @@ export class MatchesController {
     @Headers('authorization') authorization: string | undefined,
     @Body() body: Record<string, unknown>,
   ) {
-    await this.authService.verifyAdminToken(authorization);
-    return this.matchesService.importWorkbook(body ?? {});
+    const admin = await this.authService.verifyAdminToken(authorization);
+    return this.matchesService.importWorkbook(body ?? {}, admin.sub);
   }
 
   @Post()

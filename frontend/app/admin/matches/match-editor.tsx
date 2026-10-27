@@ -62,6 +62,7 @@ export function MatchEditor({
   });
   const [minutes, setMinutes] = useState(match?.lockMinutes ?? 15);
   const [file, setFile] = useState<File | null>(null);
+  const [legacyImport, setLegacyImport] = useState(false);
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState("");
   const [result, setResult] = useState<ImportResult | null>(null);
@@ -117,8 +118,8 @@ export function MatchEditor({
         const data = await apiRequest<ImportResult>("/matches/import", {
           method: "POST",
           body: JSON.stringify({
-            tournamentId: Number(tournamentId),
-            stageId: Number(stageId),
+            tournamentId: tournamentId ? Number(tournamentId) : undefined,
+            stageId: stageId ? Number(stageId) : undefined,
             fileName: file.name,
             contentBase64,
           }),
@@ -171,54 +172,72 @@ export function MatchEditor({
             {error}
           </p>
         )}
-        <label>
-          Tournament
-          <select
-            required
-            className={fieldClass}
-            value={tournamentId}
-            disabled={busy}
-            onChange={(e) => {
-              setTournamentId(e.target.value);
-              setStages([]);
-              setTeams([]);
-              setStageId("");
-              setHome("");
-              setAway("");
-              setResult(null);
-            }}
-          >
-            <option value="">Select tournament</option>
-            {tournaments.map((t) => (
-              <option key={t.id} value={t.id}>
-                {t.name}
-              </option>
-            ))}
-          </select>
-        </label>
-        <label>
-          Stage
-          <select
-            required
-            className={fieldClass}
-            value={stageId}
-            disabled={busy}
-            onChange={(e) => setStageId(e.target.value)}
-          >
-            <option value="">Select stage</option>
-            {stages.map((s) => (
-              <option key={s.id} value={s.id}>
-                {s.name}
-              </option>
-            ))}
-          </select>
-        </label>
+        {importing && (
+          <label className="flex items-center gap-2 text-sm text-[#b6cbd1]">
+            <input
+              type="checkbox"
+              checked={legacyImport}
+              disabled={busy}
+              onChange={(event) => setLegacyImport(event.target.checked)}
+            />
+            My file has only the old 3 columns
+          </label>
+        )}
+        {(!importing || legacyImport) && (
+          <>
+            <label>
+              Tournament
+              <select
+                required
+                className={fieldClass}
+                value={tournamentId}
+                disabled={busy}
+                onChange={(e) => {
+                  setTournamentId(e.target.value);
+                  setStages([]);
+                  setTeams([]);
+                  setStageId("");
+                  setHome("");
+                  setAway("");
+                  setResult(null);
+                }}
+              >
+                <option value="">Select tournament</option>
+                {tournaments.map((t) => (
+                  <option key={t.id} value={t.id}>
+                    {t.name}
+                  </option>
+                ))}
+              </select>
+            </label>
+            <label>
+              Stage
+              <select
+                required
+                className={fieldClass}
+                value={stageId}
+                disabled={busy}
+                onChange={(e) => setStageId(e.target.value)}
+              >
+                <option value="">Select stage</option>
+                {stages.map((s) => (
+                  <option key={s.id} value={s.id}>
+                    {s.name}
+                  </option>
+                ))}
+              </select>
+            </label>
+          </>
+        )}
         {importing ? (
           <>
             <p className="text-sm text-[#b6cbd1]">
-              One sheet, columns: Home Team, Away Team, Kickoff Time. Use
-              existing team names and ISO time with timezone, e.g.
-              2026-11-01T19:00:00+07:00. Maximum 2000 rows.
+              New template: Tournament, Start Date, End Date, Stage, Home Team,
+              Away Team, Kickoff Time. Dates use YYYY-MM-DD in Vietnam time
+              (UTC+07); kickoff uses ISO
+              time with timezone (for example 2027-11-01T19:00:00+07:00).
+              Missing tournaments, stages and teams are created automatically.
+              Player accounts are not required. Maximum 2000 rows.
             </p>
             <button
               type="button"

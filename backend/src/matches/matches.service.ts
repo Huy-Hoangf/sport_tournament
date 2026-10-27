@@ -152,44 +152,76 @@ export class MatchesService {
     return rows[0];
   }
 
-  async importWorkbook(input: Record<string, unknown>) {
-    const tournamentId = positiveId(input.tournamentId, 'tournamentId');
-    const stageId = positiveId(input.stageId, 'stageId');
+  async importWorkbook(input: Record<string, unknown>, adminId: number) {
     const rows = await readMatchWorkbook(input.fileName, input.contentBase64);
+    const legacy = rows[0].tournament === undefined;
+    const tournamentId = legacy
+      ? positiveId(input.tournamentId, 'tournamentId')
+      : undefined;
+    const stageId = legacy ? positiveId(input.stageId, 'stageId') : undefined;
     return this.usersRepository.manager.transaction(async (manager) => {
-      const stage = await manager.query(
-        'SELECT id FROM stages WHERE id=$1 AND tournament_id=$2',
-        [stageId, tournamentId],
-      );
-      if (!stage.length)
-        throw new BadRequestException('Stage not found in tournament.');
-      const teams: Array<{ id: number; name: string }> = await manager.query(
-        'SELECT id, name FROM teams WHERE tournament_id=$1',
-        [tournamentId],
-      );
-      const findTeam = (name: string) => {
-        const found = teams.filter(
-          (team) => team.name.trim().toLowerCase() === name.toLowerCase(),
+      const tournamentIds = new Map<string, number>();
+      const stageIds = new Map<string, number>();
+      const teamIds = new Map<string, number>();
+      if (legacy) {
+        await manager.query(
+          'SELECT id FROM tournaments WHERE id=$1 FOR UPDATE',
+          [tournamentId],
         );
-        return found.length === 1 ? Number(found[0].id) : undefined;
-      };
+        const stage = await manager.query(
+          'SELECT id FROM stages WHERE id=$1 AND tournament_id=$2',
+          [stageId, tournamentId],
+        );
+        if (!stage.length)
+          throw new BadRequestException('Stage not found in tournament.');
+      }
       const errors: Array<{ row: number; message: string }> = [];
       let imported = 0;
       for (const row of rows) {
         await manager.query('SAVEPOINT import_row');
         try {
           if (row.error) throw new BadRequestException(row.error);
-          const homeTeamId = findTeam(row.home),
-            awayTeamId = findTeam(row.away);
-          if (!homeTeamId || !awayTeamId)
-            throw new BadRequestException('Team không tồn tại.');
+          const tournamentKey = `${row.tournament?.toLowerCase()}\0${row.startDate ?? ''}\0${row.endDate ?? ''}`;
+          const rowTournamentId = legacy
+            ? tournamentId!
+            : (tournamentIds.get(tournamentKey) ??
+              (await this.findOrCreateTournament(
+                manager,
+                row.tournament!,
+                adminId,
+                row.startDate,
+                row.endDate,
+              )));
+          const stageKey = `${rowTournamentId}\0${row.stage?.toLowerCase()}`;
+          const rowStageId = legacy
+            ? stageId!
+            : (stageIds.get(stageKey) ??
+              (await this.findOrCreateStage(
+                manager,
+                rowTournamentId,
+                row.stage!,
+              )));
+          const homeKey = `${rowTournamentId}\0${row.home.toLowerCase()}`;
+          const awayKey = `${rowTournamentId}\0${row.away.toLowerCase()}`;
+          const homeTeamId =
+            teamIds.get(homeKey) ??
+            (await this.findOrCreateTeam(manager, rowTournamentId, row.home));
+          const awayTeamId =
+            teamIds.get(awayKey) ??
+            (await this.findOrCreateTeam(manager, rowTournamentId, row.away));
           await this.insert(manager, {
-            tournamentId,
-            stageId,
+            tournamentId: rowTournamentId,
+            stageId: rowStageId,
             homeTeamId,
             awayTeamId,
             scheduledTime: row.kickoff,
           });
+          if (!legacy) {
+            tournamentIds.set(tournamentKey, rowTournamentId);
+            stageIds.set(stageKey, rowStageId);
+          }
+          teamIds.set(homeKey, homeTeamId);
+          teamIds.set(awayKey, awayTeamId);
           imported++;
         } catch (error) {
           await manager.query('ROLLBACK TO SAVEPOINT import_row');
@@ -213,6 +245,96 @@ export class MatchesService {
       }
       return { imported, rejected: errors.length, errors };
     });
+  }
+
+  private async findOrCreateTournament(
+    manager: EntityManager,
+    name: string,
+    adminId: number,
+    startDate?: string,
+    endDate?: string,
+  ) {
+    const startTimestamp = startDate ? `${startDate}T00:00:00.000+07:00` : null;
+    const endTimestamp = endDate ? `${endDate}T23:59:59.999+07:00` : null;
+    await manager.query(
+      "SELECT pg_advisory_xact_lock(hashtext('excel-tournament'), hashtext(LOWER($1)))",
+      [name],
+    );
+    const existing: Array<{
+      id: number;
+      startDate: string | null;
+      endDate: string | null;
+    }> = await manager.query(
+      `SELECT id,
+        to_char(start_date AT TIME ZONE 'Asia/Ho_Chi_Minh', 'YYYY-MM-DD') AS "startDate",
+        to_char(end_date AT TIME ZONE 'Asia/Ho_Chi_Minh', 'YYYY-MM-DD') AS "endDate"
+       FROM tournaments WHERE LOWER(name)=LOWER($1) AND sport_type='FOOTBALL' FOR UPDATE`,
+      [name],
+    );
+    if (existing.length > 1)
+      throw new BadRequestException(
+        `Multiple tournaments named ${name}; rename the tournament in Excel.`,
+      );
+    if (existing.length) {
+      const current = existing[0];
+      if (
+        (startDate && current.startDate && current.startDate !== startDate) ||
+        (endDate && current.endDate && current.endDate !== endDate)
+      )
+        throw new BadRequestException(
+          `Tournament ${name} already has different start or end dates.`,
+        );
+      if (startDate && endDate && (!current.startDate || !current.endDate))
+        await manager.query(
+          `UPDATE tournaments SET start_date=COALESCE(start_date,$2::timestamptz),
+           end_date=COALESCE(end_date,$3::timestamptz), updated_at=NOW() WHERE id=$1`,
+          [current.id, startTimestamp, endTimestamp],
+        );
+      return Number(current.id);
+    }
+    const [created] = await manager.query(
+      "INSERT INTO tournaments (name, sport_type, format, status, visibility, start_date, end_date, created_by) VALUES ($1, 'FOOTBALL', 'ROUND_ROBIN', 'UPCOMING', 'PUBLIC', $2, $3, $4) RETURNING id",
+      [name, startTimestamp, endTimestamp, adminId],
+    );
+    return Number(created.id);
+  }
+
+  private async findOrCreateStage(
+    manager: EntityManager,
+    tournamentId: number,
+    name: string,
+  ) {
+    const existing: Array<{ id: number }> = await manager.query(
+      'SELECT id FROM stages WHERE tournament_id=$1 AND LOWER(name)=LOWER($2)',
+      [tournamentId, name],
+    );
+    if (existing.length) return Number(existing[0].id);
+    const [created] = await manager.query(
+      'INSERT INTO stages (tournament_id, name, sort_order, is_knockout) VALUES ($1, $2, (SELECT COALESCE(MAX(sort_order), 0) + 1 FROM stages WHERE tournament_id=$1), FALSE) RETURNING id',
+      [tournamentId, name],
+    );
+    return Number(created.id);
+  }
+
+  private async findOrCreateTeam(
+    manager: EntityManager,
+    tournamentId: number,
+    name: string,
+  ) {
+    const existing: Array<{ id: number }> = await manager.query(
+      'SELECT id FROM teams WHERE tournament_id=$1 AND LOWER(name)=LOWER($2)',
+      [tournamentId, name],
+    );
+    if (existing.length > 1)
+      throw new BadRequestException(
+        `Multiple teams named ${name}; resolve duplicates first.`,
+      );
+    if (existing.length) return Number(existing[0].id);
+    const [created] = await manager.query(
+      'INSERT INTO teams (tournament_id, name) VALUES ($1, $2) RETURNING id',
+      [tournamentId, name],
+    );
+    return Number(created.id);
   }
 
   private databaseError(error: unknown): never {
