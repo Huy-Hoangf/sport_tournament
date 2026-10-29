@@ -219,7 +219,7 @@ function AdminNav({
   onOpenView: (view: AdminView) => void;
 }) {
   return (
-    <nav className="mt-6 flex overflow-x-auto text-sm font-bold xl:mt-8 xl:block xl:space-y-2 xl:overflow-visible">
+    <nav className="mt-6 flex flex-col gap-2 text-sm font-bold xl:mt-8">
       <MenuItem
         active={activeView === "dashboard"}
         icon={<LayoutDashboard size={21} />}
