@@ -136,7 +136,7 @@ export function PlayersView({
 
       <div className="mb-8 grid grid-cols-[repeat(auto-fit,minmax(260px,1fr))] gap-4 xl:gap-6">
         <StatCard
-          title="Total Players"
+          title="Total Accounts"
           value={players.length.toLocaleString()}
           icon={<Users size={22} />}
         />

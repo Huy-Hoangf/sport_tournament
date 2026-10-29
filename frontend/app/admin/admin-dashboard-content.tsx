@@ -92,6 +92,7 @@ const emptyDashboard: DashboardData = {
   },
   tournaments: [],
   tournamentMatches: [],
+  nextTournamentMatches: [],
   upcomingSchedule: [],
   recentActivity: [],
   inactivePlayers: [],
@@ -115,6 +116,7 @@ export default function AdminDashboardContent({
 }) {
   const [dashboard, setDashboard] = useState<DashboardData>(emptyDashboard);
   const [isLoading, setIsLoading] = useState(true);
+  const [hasLoadedDashboard, setHasLoadedDashboard] = useState(false);
   const [isMutating, setIsMutating] = useState(false);
   const [notice, setNotice] = useState<Notice | null>(null);
   const [openTournamentForm, setOpenTournamentForm] = useState(false);
@@ -192,6 +194,7 @@ export default function AdminDashboardContent({
         ...data,
         inactivePlayers: data.inactivePlayers ?? [],
       });
+      setHasLoadedDashboard(true);
     } catch (error) {
       showNotice(
         error instanceof Error ? error.message : "Cannot load dashboard.",
@@ -753,11 +756,16 @@ export default function AdminDashboardContent({
         });
         showNotice("Tournament updated successfully.", "success");
       } else {
-        await apiRequest("/tournaments/admin", {
+        const created = await apiRequest<{ tournament: { id: number } }>("/tournaments/admin", {
           method: "POST",
           body: JSON.stringify(tournamentForm),
         });
         showNotice("Tournament created successfully.", "success");
+        setOpenTournamentForm(false);
+        setEditingTournamentId(null);
+        await loadDashboard();
+        navigate({ view: "tournaments", tournamentId: created.tournament.id, tournamentTab: "Overview" });
+        return;
       }
 
       setOpenTournamentForm(false);
@@ -860,7 +868,7 @@ export default function AdminDashboardContent({
         </div>
       </div>
 
-      {isTournamentView && !selectedTournament && (
+      {hasLoadedDashboard && isTournamentView && !selectedTournament && (
         <section className="mb-5 rounded border border-[#3a4d54] bg-[#0d252d] p-5">
           <div className="grid gap-4 xl:grid-cols-[minmax(280px,1fr)_220px]">
             <label className="flex h-12 items-center gap-3 border border-[#3a4d54] bg-[#06161b] px-4 text-[#9fb2b8] focus-within:border-[#84d8e8]">
@@ -882,7 +890,16 @@ export default function AdminDashboardContent({
         </section>
       )}
 
-      {selectedTournament ? (
+      {!hasLoadedDashboard ? (
+        <div role={isLoading ? "status" : "alert"} className="rounded border border-[#3a4d54] bg-[#0d252d] p-5 text-[#c8d6db]">
+          {isLoading ? "Loading dashboard…" : (
+            <div>
+              <p>Could not load dashboard data.</p>
+              <button type="button" onClick={() => void loadDashboard()} className="mt-3 rounded border border-[#84d8e8] px-4 py-2 font-bold text-[#84d8e8]">Try again</button>
+            </div>
+          )}
+        </div>
+      ) : selectedTournament ? (
         <TournamentDetailView
           tournament={selectedTournament}
           activeTab={navigation.tournamentTab ?? "Overview"}
@@ -952,7 +969,7 @@ export default function AdminDashboardContent({
                 <DashboardTournamentOverview
                   tournaments={dashboardOverviewTournaments}
                   allTournamentsCount={searchedTournaments.length}
-                  matches={dashboard.tournamentMatches}
+                  matches={dashboard.nextTournamentMatches ?? []}
                   emptyGroups={dashboardEmptyGroups}
                   search={tournamentSearch}
                   sportFilter={dashboardSportFilter}

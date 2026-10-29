@@ -92,6 +92,7 @@ export class DashboardService {
       Promise<DashboardMatchRow[]>,
       Promise<DashboardActivityRow[]>,
       Promise<DashboardInactivePlayerRow[]>,
+      Promise<DashboardMatchRow[]>,
     ] = [
       this.usersRepository.query<DashboardSummaryRow[]>(
         this.summaryQuery(scope, includePrivateTournaments),
@@ -113,6 +114,11 @@ export class DashboardService {
             this.inactivePlayersQuery(),
           )
         : Promise.resolve<DashboardInactivePlayerRow[]>([]),
+      scope === 'today'
+        ? this.usersRepository.query<DashboardMatchRow[]>(
+            this.tournamentMatchesQuery(scope, includePrivateTournaments, true),
+          )
+        : Promise.resolve<DashboardMatchRow[]>([]),
     ];
 
     const [
@@ -122,6 +128,7 @@ export class DashboardService {
       upcomingSchedule,
       activities,
       inactivePlayers,
+      nextTournamentMatches,
     ] = await Promise.all(dashboardQueries);
     const summary = this.mapSummary(summaryRows[0]);
 
@@ -156,24 +163,10 @@ export class DashboardService {
         source: row.source ?? 'MANUAL',
         visibility: row.visibility ?? 'PUBLIC',
       })),
-      tournamentMatches: tournamentMatches.map((row) => ({
-        id: Number(row.id),
-        tournamentId: Number(row.tournamentId),
-        stageId: Number(row.stageId),
-        stageName: row.stageName,
-        homeName: row.homeTeam ?? 'TBD',
-        awayName: row.awayTeam ?? 'TBD',
-        homeLogoUrl: row.homeLogoUrl ?? null,
-        awayLogoUrl: row.awayLogoUrl ?? null,
-        encounter: `${row.homeTeam ?? 'TBD'} vs ${row.awayTeam ?? 'TBD'}`,
-        tournamentName: row.tournamentName,
-        scheduledTime: row.scheduledTime,
-        deadline: row.deadline,
-        source: row.source ?? 'MANUAL',
-        status: row.status,
-        actualHomeScore: this.mapNullableNumber(row.actualHomeScore),
-        actualAwayScore: this.mapNullableNumber(row.actualAwayScore),
-      })),
+      tournamentMatches: tournamentMatches.map((row) => this.mapTournamentMatch(row)),
+      nextTournamentMatches: nextTournamentMatches.map((row) =>
+        this.mapTournamentMatch(row),
+      ),
       upcomingSchedule: upcomingSchedule.map((row) => ({
         id: Number(row.id),
         homeName: row.homeTeam ?? 'TBD',
@@ -208,6 +201,27 @@ export class DashboardService {
     };
   }
 
+  private mapTournamentMatch(row: DashboardMatchRow) {
+    return {
+      id: Number(row.id),
+      tournamentId: Number(row.tournamentId),
+      stageId: Number(row.stageId),
+      stageName: row.stageName,
+      homeName: row.homeTeam ?? 'TBD',
+      awayName: row.awayTeam ?? 'TBD',
+      homeLogoUrl: row.homeLogoUrl ?? null,
+      awayLogoUrl: row.awayLogoUrl ?? null,
+      encounter: `${row.homeTeam ?? 'TBD'} vs ${row.awayTeam ?? 'TBD'}`,
+      tournamentName: row.tournamentName,
+      scheduledTime: row.scheduledTime,
+      deadline: row.deadline,
+      source: row.source ?? 'MANUAL',
+      status: row.status,
+      actualHomeScore: this.mapNullableNumber(row.actualHomeScore),
+      actualAwayScore: this.mapNullableNumber(row.actualAwayScore),
+    };
+  }
+
   private async ensureTeamLogoColumn() {
     await this.usersRepository.query(`
       ALTER TABLE teams
@@ -224,10 +238,10 @@ export class DashboardService {
     const matchVisibilityCondition = includePrivateTournaments
       ? ''
       : "AND t.visibility = 'PUBLIC'";
-    const upcomingMatchCondition =
+    const matchCountCondition =
       scope === 'today'
         ? `AND ${this.todayDateCondition('m.scheduled_time')}`
-        : '';
+        : `AND m.scheduled_time >= NOW() AND m.status IN ('PENDING', 'LIVE')`;
 
     return `
       SELECT
@@ -244,10 +258,9 @@ export class DashboardService {
           SELECT COUNT(*)
           FROM matches m
           JOIN tournaments t ON t.id = m.tournament_id
-          WHERE m.scheduled_time >= NOW()
-            AND m.status IN ('PENDING', 'LIVE')
+          WHERE 1 = 1
             ${matchVisibilityCondition}
-            ${upcomingMatchCondition}
+            ${matchCountCondition}
         ) AS "upcomingMatches",
         (
           SELECT COUNT(*)
@@ -410,16 +423,20 @@ export class DashboardService {
   private tournamentMatchesQuery(
     scope: DashboardScope,
     includePrivateTournaments: boolean,
+    nextOnly = false,
   ) {
     const visibilityCondition = includePrivateTournaments
       ? ''
       : "AND t.visibility = 'PUBLIC'";
     const scopeCondition =
-      scope === 'today'
-        ? `AND ${this.todayDateCondition('m.scheduled_time')}`
-        : '';
+      nextOnly
+        ? `AND m.scheduled_time >= NOW() AND m.status IN ('PENDING', 'LIVE')`
+        : scope === 'today'
+          ? `AND ${this.todayDateCondition('m.scheduled_time')}`
+          : '';
     const rowLimitCondition =
-      scope === 'today' ? 'WHERE ranked.row_number <= 20' : '';
+      nextOnly ? 'WHERE ranked.row_number <= 1' :
+        scope === 'today' ? 'WHERE ranked.row_number <= 20' : '';
 
     return `
       SELECT

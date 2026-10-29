@@ -17,6 +17,7 @@ import type { LeaderboardEntry } from "../../leaderboard/types";
 import { ScoringRulesView } from "./scoring-rules-tab";
 import { StageStrip } from "./stage-strip";
 import { TeamsTab } from "./teams-tab";
+import { TournamentSetup } from "./tournament-setup";
 import {
   DashboardPanelTitle,
   DashboardSourceBadge,
@@ -109,6 +110,8 @@ export function TournamentDetailView({
   const firstUpcoming = upcomingMatches[0];
   const schedulePageSize = 8;
   const [importOpen, setImportOpen] = useState(false);
+  const [matchEditorOpen, setMatchEditorOpen] = useState(false);
+  const [setupCounts, setSetupCounts] = useState<{ tournamentId: number; teamCount: number | null; matchCount: number | null } | null>(null);
   const [schedulePage, setSchedulePage] = useState(1);
   const [matchImportMessage, setMatchImportMessage] = useState("");
   const [stages, setStages] = useState<TournamentStage[]>([]);
@@ -190,6 +193,22 @@ export function TournamentDetailView({
       isMounted = false;
     };
   }, [tournament.id]);
+
+  useEffect(() => {
+    if (!canManage || activeTab !== "Overview") return;
+    let active = true;
+    Promise.allSettled([
+      apiRequest<Array<{ id: number }>>(`/teams?tournamentId=${tournament.id}`),
+      apiRequest<{ total: number }>(`/matches/page?tournamentId=${tournament.id}&page=1&pageSize=1`),
+    ]).then(([teams, matchesResult]) => {
+      if (active) setSetupCounts({
+        tournamentId: tournament.id,
+        teamCount: teams.status === "fulfilled" ? teams.value.length : null,
+        matchCount: matchesResult.status === "fulfilled" ? matchesResult.value.total : null,
+      });
+    });
+    return () => { active = false; };
+  }, [activeTab, canManage, tournament.id, loadedMatches]);
 
   return (
     <section className="min-w-0 overflow-hidden rounded border border-[#3a4d54] bg-[#07181d] bg-[radial-gradient(circle_at_1px_1px,rgba(132,216,232,0.08)_1px,transparent_0)] [background-size:24px_24px]">
@@ -285,6 +304,16 @@ export function TournamentDetailView({
           ))}
         </div>
       </div>
+
+      {canManage && activeTab === "Overview" && (
+        <TournamentSetup
+          teamCount={setupCounts?.tournamentId === tournament.id ? setupCounts.teamCount : null}
+          matchCount={setupCounts?.tournamentId === tournament.id ? setupCounts.matchCount : null}
+          onManageTeams={() => onTabChange("Teams")}
+          onCreateMatch={() => setMatchEditorOpen(true)}
+          onImportMatches={() => setImportOpen(true)}
+        />
+      )}
 
       {activeTab === "Scoring Rules" ? (
         <ScoringRulesView tournament={tournament} canManage={canManage} />
@@ -513,6 +542,17 @@ export function TournamentDetailView({
           onClose={() => setImportOpen(false)}
           onSaved={() => {
             setMatchImportMessage("Import complete. Match schedule refreshed.");
+            loadAllMatchPages((page) => apiRequest<{ items: MatchRow[]; total: number }>(`/matches/page?tournamentId=${tournament.id}&page=${page}&pageSize=100`))
+              .then(setLoadedMatches)
+              .catch((error) => setMatchImportMessage(error.message));
+          }}
+        />
+      )}
+      {matchEditorOpen && (
+        <MatchEditor
+          tournamentId={tournament.id}
+          onClose={() => setMatchEditorOpen(false)}
+          onSaved={() => {
             loadAllMatchPages((page) => apiRequest<{ items: MatchRow[]; total: number }>(`/matches/page?tournamentId=${tournament.id}&page=${page}&pageSize=100`))
               .then(setLoadedMatches)
               .catch((error) => setMatchImportMessage(error.message));

@@ -6,6 +6,7 @@ import {
 } from "../shared/dashboard-ui";
 import type { MatchRow, TournamentRow } from "../tournaments/types";
 import { formatDateTime, normalizeSportType } from "../tournaments/utils";
+import { getNextTournamentMatch } from "./next-tournament-match";
 
 export function DashboardTournamentCard({
   tournament,
@@ -43,7 +44,7 @@ export function DashboardTournamentCard({
           onSelectTournament(tournament.id);
         }
       }}
-      className="grid cursor-pointer gap-4 rounded border border-[#2c4750] bg-[#0b2027] p-4 shadow-[inset_0_1px_0_rgba(255,255,255,0.04)] transition hover:border-[#84d8e8] hover:bg-[#102d35] focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-[#84d8e8] xl:grid-cols-[112px_minmax(190px,1fr)_90px_110px_minmax(180px,1fr)_110px_112px] xl:items-center"
+      className="grid min-w-0 cursor-pointer grid-cols-1 gap-4 rounded border border-[#2c4750] bg-[#0b2027] p-4 shadow-[inset_0_1px_0_rgba(255,255,255,0.04)] transition hover:border-[#84d8e8] hover:bg-[#102d35] focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-[#84d8e8] sm:grid-cols-2"
       aria-label={`Open ${tournament.name} tournament details`}
     >
       <div className="flex h-[96px] w-[96px] items-center justify-center rounded border border-[#3a4d54] bg-[#102d35] text-[#84d8e8]">
@@ -53,7 +54,7 @@ export function DashboardTournamentCard({
       <div className="min-w-0">
         <h4
           title={tournament.name}
-          className="truncate text-2xl font-black text-white"
+          className="break-words text-2xl font-black text-white"
         >
           {tournament.name}
         </h4>
@@ -77,11 +78,11 @@ export function DashboardTournamentCard({
         </p>
         <p
           title={nextMatchLabel}
-          className="mt-2 truncate text-base font-black text-white"
+          className="mt-2 break-words text-base font-black text-white"
         >
           {nextMatchLabel}
         </p>
-        <p className="mt-2 truncate text-xs font-bold text-[#9fb2b8]">
+        <p className="mt-2 text-xs font-bold text-[#9fb2b8]">
           {nextMatchTime}
         </p>
       </div>
@@ -144,22 +145,6 @@ function MetricBlock({ label, value }: { label: string; value: number }) {
       <p className="mt-2 text-xs font-bold text-[#9fb2b8]">{label}</p>
     </div>
   );
-}
-
-function getNextTournamentMatch(matches: MatchRow[]) {
-  const now = Date.now();
-  const sortedMatches = [...matches].sort(
-    (first, second) =>
-      new Date(first.scheduledTime).getTime() -
-      new Date(second.scheduledTime).getTime(),
-  );
-  const upcoming = sortedMatches.find((match) => {
-    const timestamp = new Date(match.scheduledTime).getTime();
-
-    return Number.isFinite(timestamp) && timestamp >= now;
-  });
-
-  return upcoming ?? sortedMatches[0] ?? null;
 }
 
 function getTournamentSportFilterValue(tournament: TournamentRow) {
