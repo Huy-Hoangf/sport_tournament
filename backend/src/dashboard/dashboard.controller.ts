@@ -95,19 +95,31 @@ export class DashboardController {
   @Get('f1-meetings')
   async getF1Meetings(
     @Headers('authorization') authorization: string | undefined,
+    @Query('year') year?: string,
   ) {
     await this.authService.verifyAdminToken(authorization);
-    return this.sportsApiSyncService.listF1Meetings();
+    if (
+      year !== undefined &&
+      (!/^\d{4}$/.test(year) ||
+        Number(year) < 2018 ||
+        Number(year) > new Date().getUTCFullYear() + 1)
+    ) {
+      throw new BadRequestException('Invalid F1 meeting year.');
+    }
+    return this.sportsApiSyncService.listF1Meetings(
+      year === undefined ? undefined : Number(year),
+    );
   }
 
   @Post('sync-f1')
   async syncF1Meetings(
     @Headers('authorization') authorization: string | undefined,
-    @Body() body: { meetingKeys?: number[] },
+    @Body() body: { meetingKeys?: number[]; includeHistorical?: boolean },
   ) {
     await this.authService.verifyAdminToken(authorization);
     return this.sportsApiSyncService.syncSelectedF1Meetings(
       body.meetingKeys ?? [],
+      body.includeHistorical === true,
     );
   }
 

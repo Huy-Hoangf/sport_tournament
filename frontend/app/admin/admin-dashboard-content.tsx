@@ -120,8 +120,7 @@ export default function AdminDashboardContent({
   const [isMutating, setIsMutating] = useState(false);
   const [notice, setNotice] = useState<Notice | null>(null);
   const [openTournamentForm, setOpenTournamentForm] = useState(false);
-  const [openCustomFormatBuilder, setOpenCustomFormatBuilder] =
-    useState(false);
+  const [openCustomFormatBuilder, setOpenCustomFormatBuilder] = useState(false);
   const [openImportApiModal, setOpenImportApiModal] = useState(false);
   const [openSyncApiModal, setOpenSyncApiModal] = useState(false);
   const [confirmResetApiData, setConfirmResetApiData] = useState(false);
@@ -134,6 +133,7 @@ export default function AdminDashboardContent({
   >([]);
   const [importSport, setImportSport] = useState<ImportSport | null>(null);
   const [f1Meetings, setF1Meetings] = useState<F1MeetingOption[]>([]);
+  const [f1ImportYear, setF1ImportYear] = useState(new Date().getUTCFullYear());
   const [selectedF1MeetingKeys, setSelectedF1MeetingKeys] = useState<number[]>(
     [],
   );
@@ -164,9 +164,13 @@ export default function AdminDashboardContent({
     () => "#dashboard",
   );
   const navigation = parseNavigation(navigationHash);
-  const selectedTournamentId = navigation.view === view ? navigation.tournamentId ?? null : null;
-  const setSelectedTournamentId: React.Dispatch<React.SetStateAction<number | null>> = (value) => {
-    const id = typeof value === "function" ? value(selectedTournamentId) : value;
+  const selectedTournamentId =
+    navigation.view === view ? (navigation.tournamentId ?? null) : null;
+  const setSelectedTournamentId: React.Dispatch<
+    React.SetStateAction<number | null>
+  > = (value) => {
+    const id =
+      typeof value === "function" ? value(selectedTournamentId) : value;
     navigate(id ? { view, tournamentId: id } : { view });
   };
   const [tournamentSearch, setTournamentSearch] = useState("");
@@ -244,22 +248,34 @@ export default function AdminDashboardContent({
         error?: string | null;
       }>("/dashboard/sync", { method: "POST" });
       const hasNotes = Boolean(
-        result.error || result.football.error || result.f1.error || result.espn?.error || result.lol?.error || !result.espn || !result.lol,
+        result.error ||
+        result.football.error ||
+        result.f1.error ||
+        result.espn?.error ||
+        result.lol?.error ||
+        !result.espn ||
+        !result.lol,
       );
 
       showNotice(
         [
           `Football: ${result.football.competitions} competitions, ${result.football.matches} matches`,
           `F1: ${result.f1.meetings} meetings, ${result.f1.sessions} sessions`,
-          result.espn ? `ESPN: ${result.espn.competitions} competitions, ${result.espn.matches} matches` : "ESPN: backend update pending; retry after deployment.",
-          result.lol ? `League of Legends: ${result.lol.competitions} competitions, ${result.lol.matches} matches` : "League of Legends: backend update pending; retry after deployment.",
+          result.espn
+            ? `ESPN: ${result.espn.competitions} competitions, ${result.espn.matches} matches`
+            : "ESPN: backend update pending; retry after deployment.",
+          result.lol
+            ? `League of Legends: ${result.lol.competitions} competitions, ${result.lol.matches} matches`
+            : "League of Legends: backend update pending; retry after deployment.",
           result.error ? `Sync note: ${result.error}` : "",
           result.football.error
             ? `Football note: ${result.football.error}`
             : "",
           result.f1.error ? `F1 note: ${result.f1.error}` : "",
           result.espn?.error ? `ESPN note: ${result.espn.error}` : "",
-          result.lol?.error ? `League of Legends note: ${result.lol.error}` : "",
+          result.lol?.error
+            ? `League of Legends note: ${result.lol.error}`
+            : "",
         ]
           .filter(Boolean)
           .join("\n"),
@@ -323,13 +339,13 @@ export default function AdminDashboardContent({
     setImportSport(null);
   }
 
-  async function loadImportOptions(sport: ImportSport) {
+  async function loadImportOptions(sport: ImportSport, f1Year = f1ImportYear) {
     setIsLoadingCompetitions(true);
 
     try {
       if (sport === "F1") {
         const meetings = await apiRequest<F1MeetingOption[]>(
-          "/dashboard/f1-meetings",
+          `/dashboard/f1-meetings?year=${f1Year}`,
         );
         setF1Meetings(meetings);
         return;
@@ -511,7 +527,10 @@ export default function AdminDashboardContent({
         error: string | null;
       }>("/dashboard/sync-f1", {
         method: "POST",
-        body: JSON.stringify({ meetingKeys: selectedF1MeetingKeys }),
+        body: JSON.stringify({
+          meetingKeys: selectedF1MeetingKeys,
+          includeHistorical: true,
+        }),
       });
       setOpenImportApiModal(false);
       await loadDashboard();
@@ -626,6 +645,9 @@ export default function AdminDashboardContent({
   );
   const upcomingF1Meetings = f1Meetings.filter(
     (meeting) => getF1MeetingPhase(meeting) === "upcoming",
+  );
+  const historicalF1Meetings = f1Meetings.filter(
+    (meeting) => getF1MeetingPhase(meeting) === "historical",
   );
   const ongoingLolCompetitions = lolCompetitions.filter(
     (competition) => getLolCompetitionPhase(competition) === "ongoing",
@@ -762,15 +784,22 @@ export default function AdminDashboardContent({
         });
         showNotice("Tournament updated successfully.", "success");
       } else {
-        const created = await apiRequest<{ tournament: { id: number } }>("/tournaments/admin", {
-          method: "POST",
-          body: JSON.stringify(tournamentForm),
-        });
+        const created = await apiRequest<{ tournament: { id: number } }>(
+          "/tournaments/admin",
+          {
+            method: "POST",
+            body: JSON.stringify(tournamentForm),
+          },
+        );
         showNotice("Tournament created successfully.", "success");
         setOpenTournamentForm(false);
         setEditingTournamentId(null);
         await loadDashboard();
-        navigate({ view: "tournaments", tournamentId: created.tournament.id, tournamentTab: "Overview" });
+        navigate({
+          view: "tournaments",
+          tournamentId: created.tournament.id,
+          tournamentTab: "Overview",
+        });
         return;
       }
 
@@ -829,14 +858,14 @@ export default function AdminDashboardContent({
   return (
     <div className="px-4 py-6 sm:px-6 xl:px-8 xl:py-9">
       <NoticeBanner notice={notice} onClose={() => setNotice(null)} />
-      <div className="mb-8 grid gap-6 xl:grid-cols-[1fr_auto] xl:items-start">
+      <div className="mb-8 grid gap-6 lg:grid-cols-[minmax(160px,1fr)_auto] lg:items-center lg:gap-3">
         <div>
           <h2 className="text-[28px] font-black leading-none text-white sm:text-[34px]">
             {pageTitle}
           </h2>
         </div>
 
-        <div className="grid gap-3 sm:grid-cols-2 xl:flex xl:flex-wrap xl:justify-end xl:gap-4">
+        <div className="grid gap-3 sm:grid-cols-2 lg:flex lg:flex-nowrap lg:justify-end lg:gap-2">
           {isAdmin && isTournamentView && !selectedTournament ? (
             <>
               <DashboardActionButton
@@ -848,7 +877,7 @@ export default function AdminDashboardContent({
                 type="button"
                 onClick={() => setConfirmResetApiData(true)}
                 disabled={isMutating}
-                className="flex h-[56px] items-center justify-center gap-3 rounded border border-[#ff6b6b99] bg-[#35171b] px-5 text-base font-black text-[#ff9d9d] transition hover:border-[#ff6b6b] hover:text-[#ffd0d0] disabled:cursor-not-allowed disabled:opacity-60 sm:h-[62px] sm:px-7 sm:text-lg"
+                className="flex h-[56px] items-center justify-center gap-3 rounded border border-[#ff6b6b99] bg-[#35171b] px-5 text-base font-black text-[#ff9d9d] transition hover:border-[#ff6b6b] hover:text-[#ffd0d0] disabled:cursor-not-allowed disabled:opacity-60 sm:h-[62px] sm:px-7 sm:text-lg lg:h-11 lg:gap-2 lg:whitespace-nowrap lg:px-3 lg:text-sm"
               >
                 <Trash2 size={18} />
                 Delete Imported API
@@ -860,7 +889,7 @@ export default function AdminDashboardContent({
               />
               <button
                 onClick={openCreateTournament}
-                className="flex h-[56px] items-center justify-center gap-3 rounded bg-[#84d8e8] px-5 text-base font-black text-[#06161b] sm:h-[62px] sm:px-8 sm:text-lg"
+                className="flex h-[56px] items-center justify-center gap-3 rounded bg-[#84d8e8] px-5 text-base font-black text-[#06161b] sm:h-[62px] sm:px-8 sm:text-lg lg:h-11 lg:gap-2 lg:whitespace-nowrap lg:px-3 lg:text-sm"
               >
                 <Plus size={22} />
                 Create Tournament
@@ -889,6 +918,7 @@ export default function AdminDashboardContent({
                 className="h-full min-w-0 flex-1 bg-transparent text-sm font-bold text-white outline-none placeholder:text-[#789098]"
               />
             </label>
+
             <div className="flex h-12 items-center justify-center border border-[#3a4d54] bg-[#14272e] text-xs font-black uppercase tracking-[0.08em] text-[#84d8e8]">
               {searchedTournaments.length} tournaments
             </div>
@@ -897,11 +927,22 @@ export default function AdminDashboardContent({
       )}
 
       {!hasLoadedDashboard ? (
-        <div role={isLoading ? "status" : "alert"} className="rounded border border-[#3a4d54] bg-[#0d252d] p-5 text-[#c8d6db]">
-          {isLoading ? "Loading dashboard…" : (
+        <div
+          role={isLoading ? "status" : "alert"}
+          className="rounded border border-[#3a4d54] bg-[#0d252d] p-5 text-[#c8d6db]"
+        >
+          {isLoading ? (
+            "Loading dashboard…"
+          ) : (
             <div>
               <p>Could not load dashboard data.</p>
-              <button type="button" onClick={() => void loadDashboard()} className="mt-3 rounded border border-[#84d8e8] px-4 py-2 font-bold text-[#84d8e8]">Try again</button>
+              <button
+                type="button"
+                onClick={() => void loadDashboard()}
+                className="mt-3 rounded border border-[#84d8e8] px-4 py-2 font-bold text-[#84d8e8]"
+              >
+                Try again
+              </button>
             </div>
           )}
         </div>
@@ -909,7 +950,13 @@ export default function AdminDashboardContent({
         <TournamentDetailView
           tournament={selectedTournament}
           activeTab={navigation.tournamentTab ?? "Overview"}
-          onTabChange={(tab) => navigate({ view, tournamentId: selectedTournament.id, tournamentTab: tab })}
+          onTabChange={(tab) =>
+            navigate({
+              view,
+              tournamentId: selectedTournament.id,
+              tournamentTab: tab,
+            })
+          }
           matches={selectedTournamentMatches}
           isTodayScope={!isTournamentView}
           onBack={() => {
@@ -1010,12 +1057,15 @@ export default function AdminDashboardContent({
               Reset API Data
             </h3>
             <p className="mt-2 text-sm text-[#9fb2b8]">
-              This refreshes previously imported API competitions without deleting them. Dashboard refreshes never call external APIs.
+              This refreshes previously imported API competitions without
+              deleting them. Dashboard refreshes never call external APIs.
             </p>
             <div className="mt-6 rounded border border-[#3a4d54] bg-[#14272e] px-5 py-4">
               <p className="text-sm font-black text-white">Sources included</p>
               <p className="mt-2 text-xs font-bold leading-5 text-[#9fb2b8]">
-                Football Data, ESPN ASEAN, OpenF1 and Cito League of Legends. Team logos use TheSportsDB when available. Competitions without an API identity will be reported.
+                Football Data, ESPN ASEAN, OpenF1 and Cito League of Legends.
+                Team logos use TheSportsDB when available. Competitions without
+                an API identity will be reported.
               </p>
             </div>
             <div className="mt-6 flex justify-end gap-3">
@@ -1082,7 +1132,7 @@ export default function AdminDashboardContent({
                   Import API Competitions
                 </h3>
                 <p className="mt-2 text-sm text-[#9fb2b8]">
-                  Choose a sport, then import ongoing or upcoming competitions.
+                  Choose a sport and competition. F1 also supports past meetings by year.
                 </p>
               </div>
               <button
@@ -1119,6 +1169,31 @@ export default function AdminDashboardContent({
                 className="w-full"
               />
             </label>
+
+            {importSport === "F1" && (
+              <label className="mb-4 block text-sm text-[#dce8eb]">
+                Meeting year
+                <select
+                  value={f1ImportYear}
+                  onChange={(event) => {
+                    const year = Number(event.target.value);
+                    setF1ImportYear(year);
+                    setSelectedF1MeetingKeys([]);
+                    void loadImportOptions("F1", year);
+                  }}
+                  className="mt-2 block h-11 w-full rounded border border-[#3a4d54] bg-[#07181d] px-3 text-white"
+                >
+                  {Array.from(
+                    { length: new Date().getUTCFullYear() - 2016 },
+                    (_, index) => new Date().getUTCFullYear() + 1 - index,
+                  ).map((year) => (
+                    <option key={year} value={year}>
+                      {year}
+                    </option>
+                  ))}
+                </select>
+              </label>
+            )}
 
             <div className="mb-4 flex flex-wrap items-center justify-between gap-3">
               <button
@@ -1162,6 +1237,12 @@ export default function AdminDashboardContent({
                     </>
                   ) : importSport === "F1" ? (
                     <>
+                      <F1MeetingGroup
+                        title="Historical"
+                        meetings={historicalF1Meetings}
+                        selectedKeys={selectedF1MeetingKeys}
+                        onToggle={toggleF1Meeting}
+                      />
                       <F1MeetingGroup
                         title="Ongoing"
                         meetings={ongoingF1Meetings}

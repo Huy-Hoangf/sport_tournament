@@ -118,8 +118,13 @@ describe('tournament import identity', () => {
   it('does not move an existing imported match to another tournament', async () => {
     const query = jest
       .fn()
+      .mockResolvedValueOnce([])
       .mockResolvedValueOnce([{ id: 11, tournament_id: 4 }]);
-    const service = new SportsApiSyncService({ query } as never);
+    const service = new SportsApiSyncService({
+      manager: {
+        transaction: (run: (manager: unknown) => unknown) => run({ query }),
+      },
+    } as never);
     await expect(
       (service as any).upsertMatch({
         tournamentId: 8,
@@ -127,6 +132,27 @@ describe('tournament import identity', () => {
         externalMatchId: 'match-1',
       }),
     ).rejects.toThrow('reconcile its external identity');
-    expect(query).toHaveBeenCalledTimes(1);
+    expect(query).toHaveBeenCalledTimes(2);
+  });
+
+  it('refuses ambiguous duplicate API match identities', async () => {
+    const query = jest
+      .fn()
+      .mockResolvedValueOnce([])
+      .mockResolvedValueOnce([
+        { id: 11, tournament_id: 4 },
+        { id: 12, tournament_id: 4 },
+      ]);
+    const service = new SportsApiSyncService({
+      manager: {
+        transaction: (run: (manager: unknown) => unknown) => run({ query }),
+      },
+    } as never);
+    await expect(
+      (service as any).upsertMatch({
+        source: 'FOOTBALL_DATA',
+        externalMatchId: 'match-1',
+      }),
+    ).rejects.toThrow('Duplicate imported match identity');
   });
 });

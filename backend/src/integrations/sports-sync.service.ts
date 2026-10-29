@@ -285,7 +285,6 @@ export class SportsApiSyncService {
 
   async deleteImportedApiData() {
     const apiSources = ['FOOTBALL_DATA', 'ESPN_ASEAN', 'OPENF1', 'CITO_LOL'];
-    const apiStageNames = ['API Feed', 'Race Weekend', 'League Schedule'];
     const [result] = await this.usersRepository.query(
       `
         WITH api_tournaments AS MATERIALIZED (
@@ -303,27 +302,9 @@ export class SportsApiSyncService {
                 AND m.external_source = ANY($1::text[])
             )
             OR EXISTS (
-              SELECT 1
-              FROM stages s
-              WHERE s.tournament_id = t.id
-                AND s.name = ANY($2::text[])
-            )
-            OR (
-              t.sport_type IN ('FOOTBALL', 'F1', 'LOL')
-              AND NOT EXISTS (
-                SELECT 1 FROM matches m WHERE m.tournament_id = t.id
-              )
-              AND NOT EXISTS (
-                SELECT 1 FROM teams team WHERE team.tournament_id = t.id
-              )
-              AND NOT EXISTS (
-                SELECT 1 FROM stages s WHERE s.tournament_id = t.id
-              )
-              AND NOT EXISTS (
-                SELECT 1
-                FROM tournament_participants participant
-                WHERE participant.tournament_id = t.id
-              )
+              SELECT 1 FROM tournament_external_identities identity
+              WHERE identity.tournament_id = t.id
+                AND identity.provider = ANY($1::text[])
             )
             )
         ),
@@ -339,7 +320,7 @@ export class SportsApiSyncService {
         FROM api_tournaments api
         JOIN deleted ON deleted.id = api.id
       `,
-      [apiSources, apiStageNames],
+      [apiSources],
     );
 
     this.lolScheduleCache = null;
@@ -409,6 +390,7 @@ export class SportsApiSyncService {
       current?: boolean;
     }>,
     requireExisting = false,
+    providerByCompetition?: Map<number, 'FOOTBALL_DATA' | 'ESPN_ASEAN'>,
   ) {
     await this.ensureSportTypeConstraint();
 
@@ -442,8 +424,9 @@ export class SportsApiSyncService {
 
     for (const league of selectedLeagues) {
       try {
-        const isAseanChampionship =
-          league.name.trim().toLowerCase() === 'asean championship';
+        const isAseanChampionship = providerByCompetition?.get(league.id)
+          ? providerByCompetition.get(league.id) === 'ESPN_ASEAN'
+          : league.name.trim().toLowerCase() === 'asean championship';
         const fixtures = isAseanChampionship
           ? await this.fetchAseanChampionshipFixtures(league.season, true)
           : await this.fetchFootballDataOrgFixturesForLeague(
@@ -529,9 +512,20 @@ export class SportsApiSyncService {
     };
   }
 
-  async listF1Meetings() {
+  async listF1Meetings(year?: number) {
     const now = new Date();
-    const years = [now.getUTCFullYear(), now.getUTCFullYear() + 1];
+    if (
+      year !== undefined &&
+      (!Number.isInteger(year) ||
+        year < 2018 ||
+        year > now.getUTCFullYear() + 1)
+    ) {
+      throw new Error('Invalid F1 meeting year.');
+    }
+    const years =
+      year === undefined
+        ? [now.getUTCFullYear(), now.getUTCFullYear() + 1]
+        : [year];
     const meetingResponses = await Promise.all(
       years.map((year) =>
         fetchOptionalJson<OpenF1Meeting[]>(
@@ -542,7 +536,11 @@ export class SportsApiSyncService {
 
     return meetingResponses
       .flatMap((meetings) => meetings ?? [])
-      .filter((meeting) => this.isF1MeetingImportable(meeting))
+      .filter(
+        (meeting) =>
+          !meeting.is_cancelled &&
+          (year !== undefined || this.isF1MeetingImportable(meeting)),
+      )
       .map((meeting) => this.toF1MeetingOption(meeting))
       .sort((first, second) => {
         const firstPhasePriority = first.current ? 1 : 0;
@@ -563,6 +561,7 @@ export class SportsApiSyncService {
   async syncSelectedF1Meetings(
     meetingKeys: number[],
     includeHistorical = false,
+    requireExisting = false,
   ) {
     await this.ensureSportTypeConstraint();
 
@@ -602,7 +601,7 @@ export class SportsApiSyncService {
             adminId,
             meeting,
             sessionRows,
-            true,
+            requireExisting,
           );
           meetings += 1;
         } catch (error) {
@@ -889,6 +888,7 @@ export class SportsApiSyncService {
           const updated = await this.syncSelectedFootballLeagues(
             [league],
             true,
+            new Map([[league.id, provider]]),
           );
           result[key]!.competitions += updated.competitions;
           result[key]!.matches += updated.matches;
@@ -914,7 +914,7 @@ export class SportsApiSyncService {
       .map((row) => Number(row.competitionId));
     try {
       if (f1Keys.length)
-        result.f1 = await this.syncSelectedF1Meetings(f1Keys, true);
+        result.f1 = await this.syncSelectedF1Meetings(f1Keys, true, true);
     } catch (error) {
       result.f1 = {
         meetings: 0,
@@ -1733,20 +1733,31 @@ export class SportsApiSyncService {
     actualHomeScore: number | null;
     actualAwayScore: number | null;
   }) {
-    const [existing] = await this.usersRepository.query(
-      `
+    return this.usersRepository.manager.transaction(async (manager) => {
+      await manager.query(
+        'SELECT pg_advisory_xact_lock(hashtextextended($1, 0))',
+        [JSON.stringify([data.source, data.externalMatchId])],
+      );
+      const existingMatches = await manager.query(
+        `
         SELECT id, tournament_id
         FROM matches
         WHERE external_source = $1
           AND external_match_id = $2
-        LIMIT 1
+        LIMIT 2
       `,
-      [data.source, data.externalMatchId],
-    );
+        [data.source, data.externalMatchId],
+      );
+      if (existingMatches.length > 1) {
+        throw new Error(
+          'Duplicate imported match identity; resolve the duplicates before syncing.',
+        );
+      }
+      const [existing] = existingMatches;
 
-    if (!existing) {
-      await this.usersRepository.query(
-        `
+      if (!existing) {
+        await manager.query(
+          `
           INSERT INTO matches (
             tournament_id,
             stage_id,
@@ -1765,32 +1776,32 @@ export class SportsApiSyncService {
           )
           VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, NOW(), 'SYNCED')
         `,
-        [
-          data.tournamentId,
-          data.stageId,
-          data.homeTeamId,
-          data.awayTeamId,
-          data.homePlaceholder,
-          data.awayPlaceholder,
-          data.scheduledTime,
-          data.status,
-          data.actualHomeScore,
-          data.actualAwayScore,
-          data.source,
-          data.externalMatchId,
-        ],
-      );
-      return;
-    }
+          [
+            data.tournamentId,
+            data.stageId,
+            data.homeTeamId,
+            data.awayTeamId,
+            data.homePlaceholder,
+            data.awayPlaceholder,
+            data.scheduledTime,
+            data.status,
+            data.actualHomeScore,
+            data.actualAwayScore,
+            data.source,
+            data.externalMatchId,
+          ],
+        );
+        return;
+      }
 
-    if (Number(existing.tournament_id) !== data.tournamentId) {
-      throw new Error(
-        'Existing imported match belongs to another tournament; reconcile its external identity before importing.',
-      );
-    }
+      if (Number(existing.tournament_id) !== data.tournamentId) {
+        throw new Error(
+          'Existing imported match belongs to another tournament; reconcile its external identity before importing.',
+        );
+      }
 
-    await this.usersRepository.query(
-      `
+      await manager.query(
+        `
         UPDATE matches
         SET
           tournament_id = $1,
@@ -1808,20 +1819,21 @@ export class SportsApiSyncService {
           updated_at = NOW()
         WHERE id = $11
       `,
-      [
-        data.tournamentId,
-        data.stageId,
-        data.homeTeamId,
-        data.awayTeamId,
-        data.homePlaceholder,
-        data.awayPlaceholder,
-        data.scheduledTime,
-        data.status,
-        data.actualHomeScore,
-        data.actualAwayScore,
-        existing.id,
-      ],
-    );
+        [
+          data.tournamentId,
+          data.stageId,
+          data.homeTeamId,
+          data.awayTeamId,
+          data.homePlaceholder,
+          data.awayPlaceholder,
+          data.scheduledTime,
+          data.status,
+          data.actualHomeScore,
+          data.actualAwayScore,
+          existing.id,
+        ],
+      );
+    });
   }
 
   private async getLolScheduleSnapshot(force: boolean) {

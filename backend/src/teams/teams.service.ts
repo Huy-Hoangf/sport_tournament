@@ -382,75 +382,80 @@ export class TeamsService {
       throw new BadRequestException('At least one player is required.');
     }
 
-    const [tournament] = await this.usersRepository.query(
-      `
+    return this.usersRepository.manager.transaction(async (manager) => {
+      const [tournament] = await manager.query(
+        `
         SELECT
           id,
           ${this.tournamentStatusExpression('start_date', 'end_date', 'status')} AS status
         FROM tournaments
         WHERE id = $1
         LIMIT 1
+        FOR UPDATE
       `,
-      [tournamentId],
-    );
-
-    if (!tournament) {
-      throw new NotFoundException('Tournament not found.');
-    }
-
-    if (tournament.status !== 'UPCOMING') {
-      throw new BadRequestException(
-        'Teams can only be registered before the tournament starts.',
+        [tournamentId],
       );
-    }
 
-    const [existingTeam] = await this.usersRepository.query(
-      `
+      if (!tournament) {
+        throw new NotFoundException('Tournament not found.');
+      }
+
+      if (tournament.status !== 'UPCOMING') {
+        throw new BadRequestException(
+          'Teams can only be registered before the tournament starts.',
+        );
+      }
+
+      const [existingTeam] = await this.usersRepository.query(
+        `
         SELECT id
         FROM teams
         WHERE tournament_id = $1
           AND LOWER(name) = LOWER($2)
         LIMIT 1
       `,
-      [tournamentId, teamName],
-    );
+        [tournamentId, teamName],
+      );
 
-    if (existingTeam) {
-      throw new BadRequestException('Team already exists in this tournament.');
-    }
+      if (existingTeam) {
+        throw new BadRequestException(
+          'Team already exists in this tournament.',
+        );
+      }
 
-    const rosterPlayers = await this.resolveRosterPlayers(
-      tournamentId,
-      playerIds,
-    );
+      const rosterPlayers = await this.resolveRosterPlayers(
+        tournamentId,
+        playerIds,
+      );
 
-    const [team] = await this.usersRepository.query(
-      `
+      const [team] = await manager.query(
+        `
         INSERT INTO teams (tournament_id, name)
         VALUES ($1, $2)
         RETURNING id, name
       `,
-      [tournamentId, teamName],
-    );
+        [tournamentId, teamName],
+      );
 
-    for (const player of rosterPlayers) {
-      await this.usersRepository.query(
-        `
+      for (const player of rosterPlayers) {
+        await manager.query(
+          `
           INSERT INTO team_players (team_id, user_id, name)
           VALUES ($1, $2, $3)
         `,
-        [Number(team.id), player.id, player.name],
-      );
-    }
+          [Number(team.id), player.id, player.name],
+        );
+      }
 
-    return {
-      message: 'Team registered successfully.',
-      team: {
-        id: Number(team.id),
-        name: team.name,
-        members: rosterPlayers.length,
-      },
-    };
+      return {
+        message: 'Team registered successfully.',
+        team: {
+          id: Number(team.id),
+          name: team.name,
+          members: rosterPlayers.length,
+        },
+      };
+    });
   }
 
   async updateTeam(input: UpdateTeamInput) {

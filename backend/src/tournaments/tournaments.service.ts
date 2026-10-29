@@ -4,7 +4,7 @@ import {
   NotFoundException,
 } from '@nestjs/common';
 import { InjectRepository } from '@nestjs/typeorm';
-import { Repository } from 'typeorm';
+import { EntityManager, Repository } from 'typeorm';
 import { User } from '../users/user.entity';
 
 type TournamentInput = {
@@ -158,8 +158,9 @@ export class TournamentsService {
       data.format,
     );
 
-    const [row] = await this.usersRepository.query(
-      `
+    return this.usersRepository.manager.transaction(async (manager) => {
+      const [row] = await manager.query(
+        `
         INSERT INTO tournaments
           (name, sport_type, format, status, visibility, start_date, end_date, created_by)
         VALUES ($1, $2, $3, $4, $5, $6, $7, $8)
@@ -176,27 +177,33 @@ export class TournamentsService {
           created_at AS "createdAt",
           updated_at AS "updatedAt"
       `,
-      [
-        data.name,
-        data.sportType,
+        [
+          data.name,
+          data.sportType,
+          data.format,
+          data.status,
+          data.visibility,
+          data.startDate,
+          data.endDate,
+          adminId,
+        ],
+      );
+
+      if (data.format === 'CUSTOM') {
+        await this.saveCustomFormat(Number(row.id), customFormat, manager);
+      }
+      await this.ensureStagesForFormat(
+        Number(row.id),
         data.format,
-        data.status,
-        data.visibility,
-        data.startDate,
-        data.endDate,
-        adminId,
-      ],
-    );
+        customFormat,
+        manager,
+      );
 
-    if (data.format === 'CUSTOM') {
-      await this.saveCustomFormat(Number(row.id), customFormat);
-    }
-    await this.ensureStagesForFormat(Number(row.id), data.format, customFormat);
-
-    return {
-      message: 'Tournament created successfully.',
-      tournament: row,
-    };
+      return {
+        message: 'Tournament created successfully.',
+        tournament: row,
+      };
+    });
   }
 
   async updateTournamentByAdmin(id: number, input: TournamentInput) {
@@ -682,6 +689,7 @@ export class TournamentsService {
     tournamentId: number,
     format: TournamentFormat | undefined,
     customFormat?: CustomFormatInput,
+    manager: EntityManager = this.usersRepository.manager,
   ) {
     const stages =
       format === 'CUSTOM' && customFormat
@@ -694,7 +702,7 @@ export class TournamentsService {
         : STAGES_BY_FORMAT[format ?? 'ROUND_ROBIN'];
 
     for (const [index, stage] of stages.entries()) {
-      await this.usersRepository.query(
+      await manager.query(
         `
           INSERT INTO stages (tournament_id, name, sort_order, is_knockout)
           VALUES ($1, $2, $3, $4)
@@ -729,12 +737,13 @@ export class TournamentsService {
   private async saveCustomFormat(
     tournamentId: number,
     customFormat: CustomFormatInput | undefined,
+    manager: EntityManager = this.usersRepository.manager,
   ) {
     if (!customFormat) {
       throw new BadRequestException('Custom format definition is required.');
     }
 
-    await this.usersRepository.query(
+    await manager.query(
       `
         INSERT INTO tournament_custom_formats (tournament_id, name, definition)
         VALUES ($1, $2, $3::jsonb)

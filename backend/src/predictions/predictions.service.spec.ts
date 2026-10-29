@@ -63,6 +63,17 @@ describe('PredictionsService', () => {
     await expect(service.vote(1, 2, { outcome: 'INVALID' })).rejects.toThrow();
   });
 
+  it('rejects win/draw/loss votes on F1 sessions without scores', async () => {
+    query
+      .mockReset()
+      .mockResolvedValueOnce([
+        { sport_type: 'F1', status: 'PENDING', visibility: 'PUBLIC' },
+      ]);
+    await expect(service.vote(1, 2, { outcome: 'HOME_WIN' })).rejects.toThrow(
+      'unavailable for F1',
+    );
+  });
+
   it('keeps score-based requests working during the frontend rollout', async () => {
     await service.vote(1, 2, { homeScore: 2, awayScore: 1 });
     expect(query).toHaveBeenLastCalledWith(
@@ -99,5 +110,47 @@ describe('PredictionsService', () => {
     ]);
     const result = await service.list(1, false);
     expect(result.items[0].points).toBe(3);
+  });
+
+  it.each([
+    ['HOME_WIN', 2, 1],
+    ['AWAY_WIN', 1, 2],
+    ['DRAW', 1, 1],
+  ])('awards the configured points for %s', async (outcome, home, away) => {
+    const repo = (service as any).users;
+    repo.query.mockResolvedValue([
+      {
+        id: 1,
+        matchId: 2,
+        userId: 1,
+        matchStatus: 'FINISHED',
+        actualHomeScore: home,
+        actualAwayScore: away,
+        outcome,
+        correctPoints: 5,
+        total: 1,
+      },
+    ]);
+    const result = await service.list(1, false);
+    expect(result.items[0].points).toBe(5);
+  });
+
+  it('awards no points for an incorrect outcome', async () => {
+    const repo = (service as any).users;
+    repo.query.mockResolvedValue([
+      {
+        id: 1,
+        matchId: 2,
+        userId: 1,
+        matchStatus: 'FINISHED',
+        actualHomeScore: 2,
+        actualAwayScore: 1,
+        outcome: 'DRAW',
+        correctPoints: 5,
+        total: 1,
+      },
+    ]);
+    const result = await service.list(1, false);
+    expect(result.items[0].points).toBe(0);
   });
 });

@@ -118,6 +118,10 @@ export function getF1MeetingPhase(meeting: F1MeetingOption) {
     return "ongoing";
   }
 
+  if (end < now) {
+    return "historical";
+  }
+
   return "upcoming";
 }
 

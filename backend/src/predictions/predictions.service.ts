@@ -35,13 +35,19 @@ export class PredictionsService {
         prediction_locked: boolean;
         status: string;
         visibility: string;
+        sport_type: string;
       }> = await manager.query(
-        `SELECT m.*, t.visibility FROM matches m
+        `SELECT m.*, t.visibility, t.sport_type FROM matches m
         JOIN tournaments t ON t.id=m.tournament_id WHERE m.id=$1 FOR UPDATE OF m`,
         [matchId],
       );
       if (!rows.length) throw new NotFoundException('Match not found.');
       const match = rows[0];
+      if (match.sport_type === 'F1') {
+        throw new ConflictException(
+          'Win/draw/loss voting is unavailable for F1 sessions.',
+        );
+      }
       const players = await manager.query(
         "SELECT id FROM users WHERE id=$1 AND role IN ('PLAYER', 'ADMIN', 'SUPER_ADMIN') AND user_status='ACTIVE'",
         [userId],

@@ -79,7 +79,7 @@ export function F1MeetingGroup({
   selectedKeys,
   onToggle,
 }: {
-  title: "Ongoing" | "Upcoming";
+  title: "Ongoing" | "Upcoming" | "Historical";
   meetings: F1MeetingOption[];
   selectedKeys: number[];
   onToggle: (meeting: F1MeetingOption) => void;

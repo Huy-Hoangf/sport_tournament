@@ -14,7 +14,7 @@ export function DashboardActionButton({
   return (
     <button
       onClick={onClick}
-      className="flex h-[56px] items-center justify-center gap-3 rounded border border-[#3a4d54] bg-[#0d252d] px-5 text-base font-black text-[#dce8eb] transition hover:border-[#84d8e8] hover:text-[#84d8e8] sm:h-[62px] sm:px-7 sm:text-lg"
+      className="flex h-[56px] items-center justify-center gap-3 rounded border border-[#3a4d54] bg-[#0d252d] px-5 text-base font-black text-[#dce8eb] transition hover:border-[#84d8e8] hover:text-[#84d8e8] sm:h-[62px] sm:px-7 sm:text-lg lg:h-11 lg:gap-2 lg:whitespace-nowrap lg:px-3 lg:text-sm"
     >
       {icon}
       {label}

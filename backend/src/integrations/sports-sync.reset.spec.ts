@@ -3,6 +3,20 @@ import { User } from '../users/user.entity';
 import { SportsApiSyncService } from './sports-sync.service';
 
 describe('reset of imported API sources', () => {
+  it('deletes only tournaments with an API identity or API matches', async () => {
+    const query = jest
+      .fn()
+      .mockResolvedValue([{ deletedTournaments: 1, deletedMatches: 2 }]);
+    const service = new SportsApiSyncService({
+      query,
+    } as unknown as Repository<User>);
+    await service.deleteImportedApiData();
+    const sql = query.mock.calls[0][0] as string;
+    expect(sql).toContain('tournament_external_identities');
+    expect(sql).toContain('m.external_source = ANY');
+    expect(sql).not.toContain('s.name = ANY');
+    expect(sql).not.toContain('t.sport_type IN');
+  });
   it('syncs the imported identities for each source and isolates errors', async () => {
     const query = jest.fn().mockResolvedValue([
       {
@@ -49,7 +63,7 @@ describe('reset of imported API sources', () => {
       lol?: { matches: number };
     };
     expect(football).toHaveBeenCalledTimes(2);
-    expect(f1).toHaveBeenCalledWith([123], true);
+    expect(f1).toHaveBeenCalledWith([123], true, true);
     expect(lol).toHaveBeenCalledWith(['worlds'], true);
     expect(result.football?.competitions).toBe(1);
     expect(result.espn?.error).toContain('ESPN unavailable');

@@ -263,6 +263,7 @@ export default function MatchesView({
         {data.items.map((match) => {
           const closed =
             Boolean(match.predictionLocked) ||
+            match.source === "OPENF1" ||
             match.status !== "PENDING" ||
             new Date(match.deadline).getTime() <= now;
           return (
@@ -331,7 +332,7 @@ export default function MatchesView({
                       disabled={busy || closed}
                       onClick={() => setVote(match)}
                     >
-                      {closed ? "Voting closed" : "Vote / Edit my vote"}
+                      {match.source === "OPENF1" ? "Voting unavailable" : closed ? "Voting closed" : "Vote / Edit my vote"}
                     </button>
                   </>
                 ) : (
@@ -340,7 +341,7 @@ export default function MatchesView({
                     className={button}
                     onClick={() => setVote(match)}
                   >
-                    {closed ? "Voting closed" : "Vote / Edit prediction"}
+                    {match.source === "OPENF1" ? "Voting unavailable" : closed ? "Voting closed" : "Vote / Edit prediction"}
                   </button>
                 )}
               </div>
