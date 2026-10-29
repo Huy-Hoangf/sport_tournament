@@ -65,17 +65,25 @@ export function TeamsTab({
   matches,
   canManage,
   onUnavailableFeature,
+  openRegistration = false,
+  onRegistrationOpened,
+  onCreateMatch,
 }: {
   tournament: TournamentRow;
   matches: MatchRow[];
   canManage: boolean;
   onUnavailableFeature: () => void;
+  openRegistration?: boolean;
+  onRegistrationOpened?: () => void;
+  onCreateMatch?: () => void;
 }) {
   const [searchValue, setSearchValue] = useState("");
   const [stageFilter, setStageFilter] = useState("ALL");
   const [page, setPage] = useState(1);
   const [apiTeamRows, setApiTeamRows] = useState<TeamRow[] | null>(null);
-  const [isRegisterTeamOpen, setIsRegisterTeamOpen] = useState(false);
+  const [isRegisterTeamOpen, setIsRegisterTeamOpen] = useState(openRegistration && canManage && tournament.status.toUpperCase() === "UPCOMING");
+  const [teamCreated, setTeamCreated] = useState(false);
+  const [teamRefreshError, setTeamRefreshError] = useState("");
   const [selectedTeamDetail, setSelectedTeamDetail] =
     useState<TeamDetail | null>(null);
   const [teamDetailName, setTeamDetailName] = useState("");
@@ -96,6 +104,9 @@ export function TeamsTab({
   const pageSize = 4;
   const canRegisterTeam =
     canManage && tournament.status.toUpperCase() === "UPCOMING";
+  useEffect(() => {
+    if (openRegistration) onRegistrationOpened?.();
+  }, [openRegistration, onRegistrationOpened]);
   const canEditSelectedTeam =
     canManage &&
     !!selectedTeamDetail &&
@@ -410,8 +421,10 @@ export function TeamsTab({
         }),
       });
       closeRegisterTeamModal();
+      setTeamCreated(true);
+      setTeamRefreshError("");
       setPage(1);
-      await loadTeams();
+      await loadTeams().catch(() => setTeamRefreshError("Team was created, but the team list could not be refreshed."));
     } catch (error) {
       setRegisterTeamError(
         error instanceof Error ? error.message : "Cannot register team.",
@@ -423,6 +436,16 @@ export function TeamsTab({
 
   return (
     <section className="border-t border-[#314850] bg-[#06161b] p-4 sm:p-7 lg:p-8">
+      {teamCreated && (
+        <div role="status" className="mb-6 rounded border border-[#52757e] bg-[#102b33] p-4 text-[#dce8eb]">
+          <p className="font-bold">Team and players saved.</p>
+          {teamRefreshError && <p className="mt-2 text-sm text-[#ffb4b4]">{teamRefreshError}</p>}
+          <div className="mt-3 flex flex-wrap gap-3">
+            <button type="button" onClick={() => { setTeamCreated(false); setIsRegisterTeamOpen(true); }} className="rounded border border-[#84d8e8] px-4 py-2 font-bold text-[#84d8e8]">Add another team</button>
+            {onCreateMatch && <button type="button" onClick={onCreateMatch} className="rounded bg-[#84d8e8] px-4 py-2 font-bold text-[#06161b]">Continue to create match</button>}
+          </div>
+        </div>
+      )}
       <div className="mb-6 flex flex-wrap items-start justify-between gap-4">
         <div className="min-w-0">
           <p className="text-2xl font-black text-white">Active Teams</p>

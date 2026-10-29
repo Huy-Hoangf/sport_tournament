@@ -111,6 +111,7 @@ export function TournamentDetailView({
   const schedulePageSize = 8;
   const [importOpen, setImportOpen] = useState(false);
   const [matchEditorOpen, setMatchEditorOpen] = useState(false);
+  const [openTeamRegistration, setOpenTeamRegistration] = useState(false);
   const [setupCounts, setSetupCounts] = useState<{ tournamentId: number; teamCount: number | null; matchCount: number | null } | null>(null);
   const [schedulePage, setSchedulePage] = useState(1);
   const [matchImportMessage, setMatchImportMessage] = useState("");
@@ -309,7 +310,8 @@ export function TournamentDetailView({
         <TournamentSetup
           teamCount={setupCounts?.tournamentId === tournament.id ? setupCounts.teamCount : null}
           matchCount={setupCounts?.tournamentId === tournament.id ? setupCounts.matchCount : null}
-          onManageTeams={() => onTabChange("Teams")}
+          onManageTeams={() => { setOpenTeamRegistration(true); onTabChange("Teams"); }}
+          canRegisterTeam={tournament.status.toUpperCase() === "UPCOMING"}
           onCreateMatch={() => setMatchEditorOpen(true)}
           onImportMatches={() => setImportOpen(true)}
         />
@@ -325,6 +327,9 @@ export function TournamentDetailView({
           matches={activeMatches}
           canManage={canManage}
           onUnavailableFeature={onUnavailableFeature}
+          openRegistration={openTeamRegistration}
+          onRegistrationOpened={() => setOpenTeamRegistration(false)}
+          onCreateMatch={() => { onTabChange("Overview"); setMatchEditorOpen(true); }}
         />
       ) : (
         <>

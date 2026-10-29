@@ -231,6 +231,8 @@ type SyncResult = {
     sessions: number;
     error: string | null;
   };
+  espn?: { competitions: number; matches: number; error: string | null };
+  lol?: { competitions: number; matches: number; error: string | null };
 };
 
 type CitoLolMatch = Record<string, unknown>;
@@ -406,6 +408,7 @@ export class SportsApiSyncService {
       end?: string | null;
       current?: boolean;
     }>,
+    requireExisting = false,
   ) {
     await this.ensureSportTypeConstraint();
 
@@ -477,6 +480,7 @@ export class SportsApiSyncService {
             isAseanChampionship ? 'ESPN_ASEAN' : 'FOOTBALL_DATA',
             String(league.id),
             String(league.season),
+            requireExisting,
           );
           competitionCount += 1;
           continue;
@@ -489,6 +493,7 @@ export class SportsApiSyncService {
           tournamentStatus,
           fixtureRange,
           { competitionId: String(league.id), season: String(league.season) },
+          requireExisting,
         );
 
         if (importedMatches > 0) {
@@ -555,7 +560,10 @@ export class SportsApiSyncService {
   }
 
   // OpenF1 is queried separately from API-SPORTS football so F1 imports do not consume football quota.
-  async syncSelectedF1Meetings(meetingKeys: number[]) {
+  async syncSelectedF1Meetings(
+    meetingKeys: number[],
+    includeHistorical = false,
+  ) {
     await this.ensureSportTypeConstraint();
 
     const adminId = await this.findAdminId();
@@ -572,6 +580,42 @@ export class SportsApiSyncService {
 
     if (selectedKeys.size === 0) {
       throw new Error('Please choose at least one F1 meeting.');
+    }
+
+    if (includeHistorical) {
+      let meetings = 0;
+      let sessions = 0;
+      const errors: string[] = [];
+      for (const key of selectedKeys) {
+        try {
+          const [meetingRows, sessionRows] = await Promise.all([
+            fetchJson<OpenF1Meeting[]>(
+              `${OPENF1_API_BASE_URL}/meetings?meeting_key=${key}`,
+            ),
+            fetchJson<OpenF1Session[]>(
+              `${OPENF1_API_BASE_URL}/sessions?meeting_key=${key}`,
+            ),
+          ]);
+          const meeting = meetingRows.find((row) => row.meeting_key === key);
+          if (!meeting) throw new Error('Meeting not found.');
+          sessions += await this.upsertF1Meeting(
+            adminId,
+            meeting,
+            sessionRows,
+            true,
+          );
+          meetings += 1;
+        } catch (error) {
+          errors.push(
+            `${key}: ${error instanceof Error ? error.message : 'Sync failed.'}`,
+          );
+        }
+      }
+      return {
+        meetings,
+        sessions,
+        error: errors.length ? errors.join(' ') : null,
+      };
     }
 
     const now = new Date();
@@ -666,7 +710,10 @@ export class SportsApiSyncService {
       .slice(0, 120);
   }
 
-  async syncSelectedLolCompetitions(competitionIds: string[]) {
+  async syncSelectedLolCompetitions(
+    competitionIds: string[],
+    requireExisting = false,
+  ) {
     await this.ensureSportTypeConstraint();
 
     const adminId = await this.findAdminId();
@@ -735,6 +782,8 @@ export class SportsApiSyncService {
         startDate: competition.start,
         endDate: tournamentMatches.at(-1)?.__scheduledTime ?? null,
         adminId,
+        requireExisting,
+        externalMatchIds: tournamentMatches.map((match) => match.__matchId),
       });
       const stageId = await this.upsertStage(tournamentId, 'League Schedule');
 
@@ -788,32 +837,84 @@ export class SportsApiSyncService {
   }
 
   private async syncExternalData(): Promise<SyncResult> {
-    await this.ensureSportTypeConstraint();
-
-    const adminId = await this.findAdminId();
+    const identities: Array<{
+      provider: string;
+      competitionId: string | null;
+      season: string | null;
+      name: string;
+    }> = await this.usersRepository.query(`
+      SELECT i.provider, i.competition_id AS "competitionId", i.season, t.name
+      FROM tournament_external_identities i
+      JOIN tournaments t ON t.id = i.tournament_id
+      WHERE i.provider IN ('FOOTBALL_DATA', 'ESPN_ASEAN', 'OPENF1', 'CITO_LOL')
+      UNION ALL
+      SELECT DISTINCT m.external_source AS provider, NULL AS "competitionId", NULL AS season, t.name
+      FROM matches m JOIN tournaments t ON t.id = m.tournament_id
+      WHERE m.external_source IN ('FOOTBALL_DATA', 'ESPN_ASEAN', 'OPENF1', 'CITO_LOL')
+        AND NOT EXISTS (SELECT 1 FROM tournament_external_identities i WHERE i.tournament_id = t.id AND i.provider = m.external_source)
+    `);
     const result: SyncResult = {
       skipped: false,
       football: { competitions: 0, matches: 0, error: null },
       f1: { meetings: 0, sessions: 0, error: null },
+      espn: { competitions: 0, matches: 0, error: null },
+      lol: { competitions: 0, matches: 0, error: null },
       syncedAt: new Date().toISOString(),
     };
-
-    if (!adminId) {
-      return { ...result, error: 'Admin account was not found.' };
+    this.lolScheduleCache = null;
+    this.lolLeagueCatalogCache = null;
+    this.lolTeamLogoCache = null;
+    this.sportsDbLogoCache.clear();
+    for (const [provider, key] of [
+      ['FOOTBALL_DATA', 'football'],
+      ['ESPN_ASEAN', 'espn'],
+    ] as const) {
+      const rows = identities.filter((row) => row.provider === provider);
+      const leagues = rows
+        .filter(
+          (row) =>
+            row.competitionId &&
+            /^\d+$/.test(row.competitionId) &&
+            row.season &&
+            /^\d{4}$/.test(row.season),
+        )
+        .map((row) => ({
+          id: Number(row.competitionId),
+          season: Number(row.season),
+          name: row.name,
+        }));
+      const errors: string[] = [];
+      for (const league of leagues) {
+        try {
+          const updated = await this.syncSelectedFootballLeagues(
+            [league],
+            true,
+          );
+          result[key]!.competitions += updated.competitions;
+          result[key]!.matches += updated.matches;
+          if (updated.error) errors.push(`${league.name}: ${updated.error}`);
+        } catch (error) {
+          errors.push(
+            `${league.name}: ${error instanceof Error ? error.message : 'Sync failed.'}`,
+          );
+        }
+      }
+      result[key]!.error = errors.length ? errors.join(' ') : null;
+      if (leagues.length !== rows.length)
+        result[key]!.error = [
+          result[key]!.error,
+          'Some imported tournaments have missing or invalid API identities.',
+        ]
+          .filter(Boolean)
+          .join(' ');
     }
-
+    const f1Rows = identities.filter((row) => row.provider === 'OPENF1');
+    const f1Keys = f1Rows
+      .filter((row) => row.competitionId && /^\d+$/.test(row.competitionId))
+      .map((row) => Number(row.competitionId));
     try {
-      result.football = await this.syncFootball(adminId);
-    } catch (error) {
-      result.football = {
-        competitions: 0,
-        matches: 0,
-        error: error instanceof Error ? error.message : 'Football sync failed.',
-      };
-    }
-
-    try {
-      result.f1 = await this.syncF1(adminId);
+      if (f1Keys.length)
+        result.f1 = await this.syncSelectedF1Meetings(f1Keys, true);
     } catch (error) {
       result.f1 = {
         meetings: 0,
@@ -821,6 +922,42 @@ export class SportsApiSyncService {
         error: error instanceof Error ? error.message : 'F1 sync failed.',
       };
     }
+    if (f1Keys.length !== f1Rows.length)
+      result.f1!.error = [
+        result.f1!.error,
+        'Some imported tournaments have missing or invalid API identities.',
+      ]
+        .filter(Boolean)
+        .join(' ');
+    const lolRows = identities.filter((row) => row.provider === 'CITO_LOL');
+    const lolIds = [
+      ...new Set(
+        lolRows
+          .map((row) => row.competitionId)
+          .filter((id): id is string => Boolean(id)),
+      ),
+    ];
+    const lolErrors: string[] = [];
+    for (const id of lolIds) {
+      try {
+        const updated = await this.syncSelectedLolCompetitions([id], true);
+        result.lol!.competitions += updated.competitions;
+        result.lol!.matches += updated.matches;
+        if (updated.error) lolErrors.push(`${id}: ${updated.error}`);
+      } catch (error) {
+        lolErrors.push(
+          `${id}: ${error instanceof Error ? error.message : 'Sync failed.'}`,
+        );
+      }
+    }
+    result.lol!.error = lolErrors.length ? lolErrors.join(' ') : null;
+    if (lolRows.some((row) => !row.competitionId))
+      result.lol!.error = [
+        result.lol!.error,
+        'Some imported tournaments have missing API identities.',
+      ]
+        .filter(Boolean)
+        .join(' ');
 
     return result;
   }
@@ -888,28 +1025,49 @@ export class SportsApiSyncService {
     tournamentStatusOverride?: TournamentStatus,
     tournamentDateRange?: { start: string; end: string } | null,
     identity?: { competitionId: string; season: string },
+    requireExisting = false,
   ) {
     await this.ensureTeamLogoColumn();
     let matchCount = 0;
 
-    for (const match of matches) {
+    const allMatches = Array.from(matches);
+    const tournamentIds = new Map<string, number>();
+    for (const match of allMatches) {
       if (!match.league?.name) {
         continue;
       }
 
-      const tournamentId = await this.upsertTournament({
-        provider: source,
-        competitionId: identity?.competitionId ?? String(match.league.id ?? ''),
-        season: identity?.season ?? String(match.league.season ?? ''),
-        name: match.league.name,
-        sportType: 'FOOTBALL',
-        status:
-          tournamentStatusOverride ??
-          this.mapTournamentStatus(match.fixture.status?.short ?? ''),
-        startDate: tournamentDateRange?.start ?? match.league.startDate,
-        endDate: tournamentDateRange?.end ?? match.league.endDate,
-        adminId,
-      });
+      const competitionId =
+        identity?.competitionId ?? String(match.league.id ?? '');
+      const season = identity?.season ?? String(match.league.season ?? '');
+      const key = JSON.stringify([competitionId, season]);
+      let tournamentId = tournamentIds.get(key);
+      if (tournamentId === undefined) {
+        const externalMatchIds = allMatches
+          .filter(
+            (item) =>
+              identity ||
+              (String(item.league?.id ?? '') === competitionId &&
+                String(item.league?.season ?? '') === season),
+          )
+          .map((item) => String(item.fixture.id));
+        tournamentId = await this.upsertTournament({
+          provider: source,
+          competitionId,
+          season,
+          requireExisting,
+          externalMatchIds,
+          name: match.league.name,
+          sportType: 'FOOTBALL',
+          status:
+            tournamentStatusOverride ??
+            this.mapTournamentStatus(match.fixture.status?.short ?? ''),
+          startDate: tournamentDateRange?.start ?? match.league.startDate,
+          endDate: tournamentDateRange?.end ?? match.league.endDate,
+          adminId,
+        });
+        tournamentIds.set(key, tournamentId);
+      }
       const stageId = await this.upsertStage(tournamentId, 'API Feed');
       const homeName =
         match.teams?.home?.name || match.homeTeam?.name || 'Home team';
@@ -1286,6 +1444,7 @@ export class SportsApiSyncService {
     adminId: number,
     meeting: OpenF1Meeting,
     sessions: OpenF1Session[],
+    requireExisting = false,
   ) {
     const tournamentId = await this.upsertTournament({
       provider: 'OPENF1',
@@ -1301,6 +1460,10 @@ export class SportsApiSyncService {
       startDate: meeting.date_start,
       endDate: meeting.date_end,
       adminId,
+      requireExisting,
+      externalMatchIds: sessions
+        .filter((item) => item.meeting_key === meeting.meeting_key)
+        .map((item) => String(item.session_key)),
     });
     const stageId = await this.upsertStage(tournamentId, 'Race Weekend');
     let sessionCount = 0;
@@ -1346,6 +1509,8 @@ export class SportsApiSyncService {
     startDate?: string | null;
     endDate?: string | null;
     adminId: number;
+    requireExisting?: boolean;
+    externalMatchIds?: string[];
   }) {
     if (!data.provider || !data.competitionId || !data.season)
       throw new Error('Missing external tournament identity.');
@@ -1354,10 +1519,48 @@ export class SportsApiSyncService {
         'SELECT pg_advisory_xact_lock(hashtextextended($1, 0))',
         [JSON.stringify([data.provider, data.competitionId, data.season])],
       );
-      const [existing] = await manager.query(
+      let [existing] = await manager.query(
         'SELECT tournament_id AS id FROM tournament_external_identities WHERE provider = $1 AND competition_id = $2 AND season = $3 FOR UPDATE',
         [data.provider, data.competitionId, data.season],
       );
+      if (data.externalMatchIds?.length) {
+        const candidates: Array<{ id: number | string }> = await manager.query(
+          `SELECT DISTINCT tournament_id AS id FROM matches
+           WHERE external_source = $1 AND external_match_id = ANY($2::text[])`,
+          [data.provider, data.externalMatchIds],
+        );
+        if (
+          candidates.length > 1 ||
+          (existing &&
+            candidates.length === 1 &&
+            Number(candidates[0].id) !== Number(existing.id))
+        ) {
+          throw new Error(
+            'API matches belong to multiple tournaments; reconcile the conflict before syncing.',
+          );
+        }
+        if (!existing && candidates.length === 1) {
+          const tournamentId = Number(candidates[0].id);
+          await manager.query(
+            'SELECT id FROM tournaments WHERE id = $1 FOR UPDATE',
+            [tournamentId],
+          );
+          const conflictingIdentity = await manager.query(
+            `SELECT competition_id FROM tournament_external_identities
+             WHERE tournament_id = $1 AND provider = $2 AND season = $3 AND competition_id <> $4`,
+            [tournamentId, data.provider, data.season, data.competitionId],
+          );
+          if (conflictingIdentity.length)
+            throw new Error(
+              'The existing tournament has a conflicting API identity.',
+            );
+          await manager.query(
+            'INSERT INTO tournament_external_identities (provider, competition_id, season, tournament_id) VALUES ($1, $2, $3, $4)',
+            [data.provider, data.competitionId, data.season, tournamentId],
+          );
+          existing = { id: tournamentId };
+        }
+      }
       if (existing) {
         await manager.query(
           'UPDATE tournaments SET status = $1, start_date = COALESCE($2, start_date), end_date = COALESCE($3, end_date), updated_at = NOW() WHERE id = $4',
@@ -1370,6 +1573,10 @@ export class SportsApiSyncService {
         );
         return Number(existing.id);
       }
+      if (data.requireExisting)
+        throw new Error(
+          `Imported tournament identity not found for ${data.name} (${data.season}).`,
+        );
       const [created] = await manager.query(
         "INSERT INTO tournaments (name, sport_type, format, status, visibility, start_date, end_date, created_by) VALUES ($1, $2, 'ROUND_ROBIN', $3, 'PUBLIC', $4, $5, $6) RETURNING id",
         [
@@ -1398,11 +1605,13 @@ export class SportsApiSyncService {
     provider: string,
     competitionId: string,
     season: string,
+    requireExisting = false,
   ) {
     const tournamentId = await this.upsertTournament({
       provider,
       competitionId,
       season,
+      requireExisting,
       name,
       sportType: 'FOOTBALL',
       status,

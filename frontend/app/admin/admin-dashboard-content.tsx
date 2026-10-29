@@ -239,21 +239,27 @@ export default function AdminDashboardContent({
           sessions: number;
           error: string | null;
         };
+        espn?: { competitions: number; matches: number; error: string | null };
+        lol?: { competitions: number; matches: number; error: string | null };
         error?: string | null;
       }>("/dashboard/sync", { method: "POST" });
       const hasNotes = Boolean(
-        result.error || result.football.error || result.f1.error,
+        result.error || result.football.error || result.f1.error || result.espn?.error || result.lol?.error || !result.espn || !result.lol,
       );
 
       showNotice(
         [
           `Football: ${result.football.competitions} competitions, ${result.football.matches} matches`,
           `F1: ${result.f1.meetings} meetings, ${result.f1.sessions} sessions`,
+          result.espn ? `ESPN: ${result.espn.competitions} competitions, ${result.espn.matches} matches` : "ESPN: backend update pending; retry after deployment.",
+          result.lol ? `League of Legends: ${result.lol.competitions} competitions, ${result.lol.matches} matches` : "League of Legends: backend update pending; retry after deployment.",
           result.error ? `Sync note: ${result.error}` : "",
           result.football.error
             ? `Football note: ${result.football.error}`
             : "",
           result.f1.error ? `F1 note: ${result.f1.error}` : "",
+          result.espn?.error ? `ESPN note: ${result.espn.error}` : "",
+          result.lol?.error ? `League of Legends note: ${result.lol.error}` : "",
         ]
           .filter(Boolean)
           .join("\n"),
@@ -1004,13 +1010,12 @@ export default function AdminDashboardContent({
               Reset API Data
             </h3>
             <p className="mt-2 text-sm text-[#9fb2b8]">
-              This will reset all connected API feeds at once. Dashboard
-              refreshes never call external APIs.
+              This refreshes previously imported API competitions without deleting them. Dashboard refreshes never call external APIs.
             </p>
             <div className="mt-6 rounded border border-[#3a4d54] bg-[#14272e] px-5 py-4">
               <p className="text-sm font-black text-white">Sources included</p>
               <p className="mt-2 text-xs font-bold leading-5 text-[#9fb2b8]">
-                Football data feed and OpenF1 will be synced in the same run.
+                Football Data, ESPN ASEAN, OpenF1 and Cito League of Legends. Team logos use TheSportsDB when available. Competitions without an API identity will be reported.
               </p>
             </div>
             <div className="mt-6 flex justify-end gap-3">
