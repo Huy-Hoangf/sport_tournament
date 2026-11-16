@@ -39,9 +39,16 @@ export function DashboardTournamentCard({
     ? formatDateTime(nextMatch.scheduledTime)
     : "No upcoming match";
   const deleteAllowed = canDeleteTournament(tournament);
+  const hasVotingToday = (tournament.votableMatchesToday ?? 0) > 0;
 
   return (
-    <article className="flex min-w-0 flex-col rounded-lg border border-[#2c4750] bg-[#0b2027] p-5 transition hover:border-[#84d8e8]">
+    <article
+      className={`flex min-w-0 flex-col rounded-lg border p-5 transition ${
+        hasVotingToday
+          ? "border-[#84d8e8] bg-[#102d35] shadow-[0_0_18px_rgba(132,216,232,0.12)]"
+          : "border-[#243c43] bg-[#091c22] saturate-50 hover:saturate-100 focus-within:saturate-100"
+      }`}
+    >
       <div className="flex flex-wrap items-center justify-between gap-3">
         <span
           className={
@@ -53,6 +60,11 @@ export function DashboardTournamentCard({
         </span>
         <DashboardStatusBadge status={tournament.status} />
       </div>
+      <p className={`mt-3 text-xs font-bold ${hasVotingToday ? "text-[#84d8e8]" : "text-[#9fb2b8]"}`}>
+        {hasVotingToday
+          ? `${tournament.votableMatchesToday} matches open for voting today`
+          : "No voting open today"}
+      </p>
       <div className="my-5 flex min-w-0 items-center gap-4">
         <div className="flex h-16 w-16 shrink-0 items-center justify-center rounded-lg border border-[#3a4d54] bg-[#102d35] text-[#84d8e8]">
           {sportMeta.largeIcon}
@@ -98,9 +110,14 @@ export function DashboardTournamentCard({
       <button
         type="button"
         onClick={() => onSelectTournament(tournament.id)}
-        className="flex min-h-11 w-full items-center justify-between gap-2 rounded bg-[#84d8e8] px-4 py-3 text-sm font-black text-[#06161b] transition hover:bg-[#a6e5ef]"
+        className={`flex min-h-11 w-full items-center justify-between gap-2 rounded border px-4 py-3 text-sm font-black transition ${
+          hasVotingToday
+            ? "border-[#84d8e8] bg-[#84d8e8] text-[#06161b] hover:bg-[#a6e5ef]"
+            : "border-[#3a4d54] bg-[#10242b] text-[#9fb2b8] hover:text-white"
+        }`}
       >
-        Enter Tournament & Vote <ArrowRight aria-hidden="true" size={17} />
+        {hasVotingToday ? "Enter Tournament & Vote" : "View Tournament"}
+        <ArrowRight aria-hidden="true" size={17} />
       </button>
       {isAdmin && (
         <div className="mt-3 flex gap-2 border-t border-[#29444d] pt-3">

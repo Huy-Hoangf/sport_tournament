@@ -35,6 +35,7 @@ export type TournamentRow = {
   endDate?: string | null;
   teams: number;
   matches: number;
+  votableMatchesToday?: number;
   source: string;
 };
 

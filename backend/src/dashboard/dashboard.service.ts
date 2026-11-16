@@ -30,6 +30,7 @@ type DashboardTournamentRow = {
   visibility: TournamentVisibility | null;
   teams: string | number | null;
   matches: string | number | null;
+  votableMatchesToday: string | number | null;
   source: string | null;
 };
 
@@ -160,6 +161,7 @@ export class DashboardService {
         status: row.status,
         teams: Number(row.teams ?? 0),
         matches: Number(row.matches ?? 0),
+        votableMatchesToday: Number(row.votableMatchesToday ?? 0),
         source: row.source ?? 'MANUAL',
         visibility: row.visibility ?? 'PUBLIC',
       })),
@@ -316,6 +318,15 @@ export class DashboardService {
           ELSE COUNT(DISTINCT effective_team.name)
         END AS teams,
         COUNT(DISTINCT m.id) AS matches,
+        COUNT(DISTINCT m.id) FILTER (
+          WHERE t.visibility = 'PUBLIC'
+            AND t.sport_type <> 'F1'
+            AND m.status = 'PENDING'
+            AND COALESCE(m.prediction_locked, false) = false
+            AND m.scheduled_time
+                - (m.lock_minutes_before_start * INTERVAL '1 minute') > NOW()
+            AND ${this.todayDateCondition('m.scheduled_time')}
+        ) AS "votableMatchesToday",
         COALESCE(
           MAX(m.external_source),
           CASE
