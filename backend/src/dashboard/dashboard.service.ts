@@ -165,7 +165,9 @@ export class DashboardService {
         source: row.source ?? 'MANUAL',
         visibility: row.visibility ?? 'PUBLIC',
       })),
-      tournamentMatches: tournamentMatches.map((row) => this.mapTournamentMatch(row)),
+      tournamentMatches: tournamentMatches.map((row) =>
+        this.mapTournamentMatch(row),
+      ),
       nextTournamentMatches: nextTournamentMatches.map((row) =>
         this.mapTournamentMatch(row),
       ),
@@ -439,15 +441,16 @@ export class DashboardService {
     const visibilityCondition = includePrivateTournaments
       ? ''
       : "AND t.visibility = 'PUBLIC'";
-    const scopeCondition =
-      nextOnly
-        ? `AND m.scheduled_time >= NOW() AND m.status IN ('PENDING', 'LIVE')`
-        : scope === 'today'
-          ? `AND ${this.todayDateCondition('m.scheduled_time')}`
-          : '';
-    const rowLimitCondition =
-      nextOnly ? 'WHERE ranked.row_number <= 1' :
-        scope === 'today' ? 'WHERE ranked.row_number <= 20' : '';
+    const scopeCondition = nextOnly
+      ? `AND m.scheduled_time >= NOW() AND m.status IN ('PENDING', 'LIVE')`
+      : scope === 'today'
+        ? `AND ${this.todayDateCondition('m.scheduled_time')}`
+        : '';
+    const rowLimitCondition = nextOnly
+      ? 'WHERE ranked.row_number <= 1'
+      : scope === 'today'
+        ? 'WHERE ranked.row_number <= 20'
+        : '';
 
     return `
       SELECT

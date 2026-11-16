@@ -5,7 +5,7 @@ const fs = require('node:fs');
 const ts = require('typescript');
 const Module = require('node:module');
 const path = require('node:path');
-const file = path.resolve(__dirname, '../app/admin/matches/load-tournament-matches.ts');
+const file = path.resolve(__dirname, '../src/features/matches/load-tournament-matches.ts');
 const mod = new Module(file, module); mod.filename = file; mod.paths = module.paths;
 mod._compile(ts.transpileModule(fs.readFileSync(file, 'utf8'), {compilerOptions:{module:ts.ModuleKind.CommonJS}}).outputText, file);
 test('loads all pages of matches beyond 300', async () => {

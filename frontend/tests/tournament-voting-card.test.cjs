@@ -13,7 +13,7 @@ for (const extension of ['.ts', '.tsx']) {
     }).outputText, file);
   };
 }
-const { DashboardTournamentCard } = require('../app/admin/dashboard/tournament-overview-card.tsx');
+const { DashboardTournamentCard } = require('../src/features/dashboard/tournament-overview-card.tsx');
 const tournament = { id: 1, name: 'Bundesliga', sportType: 'FOOTBALL', status: 'ONGOING', visibility: 'PUBLIC', teams: 18, matches: 8, source: 'MANUAL' };
 function render(extra = {}) {
   return renderToStaticMarkup(React.createElement(DashboardTournamentCard, {

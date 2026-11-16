@@ -5,7 +5,7 @@ const fs = require('node:fs');
 const ts = require('typescript');
 const Module = require('node:module');
 const path = require('node:path');
-const file = path.resolve(__dirname, '../app/admin/matches/voting-availability.ts');
+const file = path.resolve(__dirname, '../src/features/matches/voting-availability.ts');
 // An empty module lets the first run report the missing behavior as an assertion.
 const source = fs.existsSync(file) ? fs.readFileSync(file, 'utf8') : '';
 const mod = new Module(file, module);
