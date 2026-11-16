@@ -897,7 +897,7 @@ export default function AdminDashboardContent({
             </>
           ) : !isAdmin ? (
             <div className="rounded border border-[#3a4d54] bg-[#0d252d] px-5 py-4 text-center text-sm font-bold text-[#9fb2b8]">
-              View-only access
+              Prediction access
             </div>
           ) : null}
         </div>
@@ -948,6 +948,7 @@ export default function AdminDashboardContent({
         </div>
       ) : selectedTournament ? (
         <TournamentDetailView
+          key={selectedTournament.id}
           tournament={selectedTournament}
           activeTab={navigation.tournamentTab ?? "Overview"}
           onTabChange={(tab) =>
@@ -998,7 +999,7 @@ export default function AdminDashboardContent({
             className={`mt-5 grid min-w-0 items-start gap-5 ${
               isTournamentView
                 ? "xl:grid-cols-1"
-                : "xl:grid-cols-[minmax(0,1fr)_390px]"
+                : "xl:grid-cols-[minmax(0,1fr)_280px]"
             }`}
           >
             <div className="space-y-5">

@@ -1,5 +1,12 @@
 import type React from "react";
-import { Gamepad2, Pencil, Trash2, Trophy, Users } from "lucide-react";
+import {
+  ArrowRight,
+  Gamepad2,
+  Pencil,
+  Trash2,
+  Trophy,
+  Users,
+} from "lucide-react";
 import {
   DashboardSourceBadge,
   DashboardStatusBadge,
@@ -34,117 +41,97 @@ export function DashboardTournamentCard({
   const deleteAllowed = canDeleteTournament(tournament);
 
   return (
-    <article
-      role="button"
-      tabIndex={0}
-      onClick={() => onSelectTournament(tournament.id)}
-      onKeyDown={(event) => {
-        if (event.key === "Enter" || event.key === " ") {
-          event.preventDefault();
-          onSelectTournament(tournament.id);
-        }
-      }}
-      className="grid min-w-0 cursor-pointer grid-cols-1 gap-4 rounded border border-[#2c4750] bg-[#0b2027] p-4 shadow-[inset_0_1px_0_rgba(255,255,255,0.04)] transition hover:border-[#84d8e8] hover:bg-[#102d35] focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-[#84d8e8] sm:grid-cols-2"
-      aria-label={`Open ${tournament.name} tournament details`}
-    >
-      <div className="flex h-[96px] w-[96px] items-center justify-center rounded border border-[#3a4d54] bg-[#102d35] text-[#84d8e8]">
-        {sportMeta.largeIcon}
-      </div>
-
-      <div className="min-w-0">
-        <h4
-          title={tournament.name}
-          className="break-words text-2xl font-black text-white"
+    <article className="flex min-w-0 flex-col rounded-lg border border-[#2c4750] bg-[#0b2027] p-5 transition hover:border-[#84d8e8]">
+      <div className="flex flex-wrap items-center justify-between gap-3">
+        <span
+          className={
+            "inline-flex items-center gap-2 rounded px-2 py-1 text-xs font-black " +
+            sportMeta.badgeClass
+          }
         >
-          {tournament.name}
-        </h4>
-        <div className="mt-3 flex flex-wrap items-center gap-2">
-          <span
-            className={`inline-flex items-center gap-2 rounded px-2 py-1 text-xs font-black ${sportMeta.badgeClass}`}
-          >
-            {sportMeta.icon}
-            {sportMeta.label}
-          </span>
-          <DashboardStatusBadge status={tournament.status} />
+          {sportMeta.icon} {sportMeta.label}
+        </span>
+        <DashboardStatusBadge status={tournament.status} />
+      </div>
+      <div className="my-5 flex min-w-0 items-center gap-4">
+        <div className="flex h-16 w-16 shrink-0 items-center justify-center rounded-lg border border-[#3a4d54] bg-[#102d35] text-[#84d8e8]">
+          {sportMeta.largeIcon}
+        </div>
+        <div className="min-w-0">
+          <h4 className="break-words text-xl font-black text-white">
+            <button
+              type="button"
+              onClick={() => onSelectTournament(tournament.id)}
+              className="text-left hover:text-[#84d8e8]"
+            >
+              {tournament.name}
+            </button>
+          </h4>
+          <div className="mt-2">
+            <DashboardSourceBadge source={tournament.source} />
+          </div>
         </div>
       </div>
-
-      <MetricBlock label="Teams" value={tournament.teams} />
-      <MetricBlock label="Matches Today" value={tournament.matches} />
-
-      <div className="min-w-0 border-[#29444d] xl:border-l xl:pl-6">
+      <div className="grid grid-cols-2 gap-4 border-y border-[#29444d] py-3 text-sm">
+        <p className="font-bold text-[#9fb2b8]">
+          <span className="mr-2 text-lg text-[#84d8e8]">
+            {tournament.teams}
+          </span>
+          Teams
+        </p>
+        <p className="font-bold text-[#9fb2b8]">
+          <span className="mr-2 text-lg text-[#84d8e8]">
+            {tournament.matches}
+          </span>
+          Matches Today
+        </p>
+      </div>
+      <div className="flex-1 py-4">
         <p className="text-xs font-bold uppercase tracking-[0.08em] text-[#9fb2b8]">
           Next Match
         </p>
-        <p
-          title={nextMatchLabel}
-          className="mt-2 break-words text-base font-black text-white"
-        >
+        <p className="mt-1 break-words text-sm font-black text-white">
           {nextMatchLabel}
         </p>
-        <p className="mt-2 text-xs font-bold text-[#9fb2b8]">
-          {nextMatchTime}
-        </p>
+        <p className="mt-1 text-xs font-bold text-[#9fb2b8]">{nextMatchTime}</p>
       </div>
-
-      <div className="min-w-0 border-[#29444d] xl:border-l xl:pl-6">
-        <p className="mb-2 text-xs font-bold uppercase tracking-[0.08em] text-[#9fb2b8]">
-          Source
-        </p>
-        <DashboardSourceBadge source={tournament.source} />
-      </div>
-
-      <div className="grid gap-2">
-        {isAdmin && (
-          <>
-            <button
-              type="button"
-              onClick={(event) => {
-                event.stopPropagation();
-                onEditTournament(tournament);
-              }}
-              className="flex h-9 items-center justify-center gap-2 rounded border border-[#3a4d54] bg-[#102d35] px-3 text-xs font-black text-[#84d8e8] transition hover:border-[#84d8e8]"
-            >
-              <Pencil size={14} />
-              Edit
-            </button>
-            <button
-              type="button"
-              onClick={(event) => {
-                event.stopPropagation();
-                onDeleteTournament(tournament);
-              }}
-              disabled={!deleteAllowed}
-              title={
-                deleteAllowed
-                  ? "Delete tournament"
-                  : "Only completed tournaments can be deleted"
-              }
-              className="flex h-9 items-center justify-center gap-2 rounded border border-[#5d3037] bg-[#2a1115] px-3 text-xs font-black text-[#ff8a8a] transition hover:border-[#ff8a8a] disabled:cursor-not-allowed disabled:border-[#3a4d54] disabled:bg-[#10242b] disabled:text-[#789098]"
-            >
-              <Trash2 size={14} />
-              Delete
-            </button>
-          </>
-        )}
-      </div>
+      <button
+        type="button"
+        onClick={() => onSelectTournament(tournament.id)}
+        className="flex min-h-11 w-full items-center justify-between gap-2 rounded bg-[#84d8e8] px-4 py-3 text-sm font-black text-[#06161b] transition hover:bg-[#a6e5ef]"
+      >
+        Enter Tournament & Vote <ArrowRight aria-hidden="true" size={17} />
+      </button>
+      {isAdmin && (
+        <div className="mt-3 flex gap-2 border-t border-[#29444d] pt-3">
+          <button
+            type="button"
+            onClick={() => onEditTournament(tournament)}
+            className="flex min-h-10 flex-1 items-center justify-center gap-2 rounded border border-[#3a4d54] text-xs font-bold text-[#84d8e8] hover:border-[#84d8e8]"
+          >
+            <Pencil size={14} /> Edit
+          </button>
+          <button
+            type="button"
+            onClick={() => onDeleteTournament(tournament)}
+            disabled={!deleteAllowed}
+            title={
+              deleteAllowed
+                ? "Delete tournament"
+                : "Only completed tournaments can be deleted"
+            }
+            className="flex min-h-10 flex-1 items-center justify-center gap-2 rounded border border-[#5d3037] text-xs font-bold text-[#ff8a8a] disabled:cursor-not-allowed disabled:opacity-40"
+          >
+            <Trash2 size={14} /> Delete
+          </button>
+        </div>
+      )}
     </article>
   );
 }
 
 function canDeleteTournament(tournament: TournamentRow) {
   return tournament.status.toUpperCase() === "COMPLETE";
-}
-
-function MetricBlock({ label, value }: { label: string; value: number }) {
-  return (
-    <div className="min-w-0 border-[#29444d] xl:border-l xl:pl-6">
-      <p className="text-[28px] font-black leading-none text-white tabular-nums">
-        {value.toLocaleString()}
-      </p>
-      <p className="mt-2 text-xs font-bold text-[#9fb2b8]">{label}</p>
-    </div>
-  );
 }
 
 function getTournamentSportFilterValue(tournament: TournamentRow) {

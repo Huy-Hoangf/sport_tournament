@@ -57,7 +57,7 @@ export function DashboardTournamentOverview({
         <div className="flex flex-wrap items-center justify-between gap-4">
           <div>
             <h3 className="text-lg font-black text-white">
-              Tournament Overview
+              Tournament Prediction Arena
             </h3>
             <p className="mt-1 text-xs font-bold uppercase tracking-[0.08em] text-[#84d8e8]">
               {tournaments.length} shown / {allTournamentsCount} total
@@ -98,7 +98,7 @@ export function DashboardTournamentOverview({
         </div>
       </header>
 
-      <div className="space-y-3 p-4">
+      <div className="grid gap-4 p-4 md:grid-cols-2">
         {tournaments.map((tournament) => (
           <DashboardTournamentCard
             key={tournament.id}
@@ -114,7 +114,7 @@ export function DashboardTournamentOverview({
         ))}
 
         {tournaments.length === 0 && (
-          <div className="rounded border border-dashed border-[#3a4d54] px-6 py-14 text-center">
+          <div className="md:col-span-2 rounded border border-dashed border-[#3a4d54] px-6 py-14 text-center">
             <p className="font-black text-white">No tournaments match this view.</p>
             <p className="mt-2 text-sm text-[#9fb2b8]">
               Try another sport, status, or search keyword.
@@ -123,7 +123,7 @@ export function DashboardTournamentOverview({
         )}
 
         {emptyGroups.length > 0 && (
-          <div className="flex flex-wrap gap-3 rounded border border-dashed border-[#3a4d54] bg-[#0a1d23] p-4">
+          <div className="md:col-span-2 flex flex-wrap gap-3 rounded border border-dashed border-[#3a4d54] bg-[#0a1d23] p-4">
             {emptyGroups.slice(0, 4).map((group) => (
               <div
                 key={group.sportType}

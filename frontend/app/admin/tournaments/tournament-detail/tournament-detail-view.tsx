@@ -13,6 +13,7 @@ import { apiRequest } from "../../../api";
 import { loadAllMatchPages } from "../../matches/load-tournament-matches";
 import { MatchEditor } from "../../matches/match-editor";
 import { PredictionHistory } from "../../matches/predictions";
+import { InlineVotePanel } from "../../matches/inline-vote-panel";
 import type { LeaderboardEntry } from "../../leaderboard/types";
 import { ScoringRulesView } from "./scoring-rules-tab";
 import { StageStrip } from "./stage-strip";
@@ -20,16 +21,13 @@ import { TeamsTab } from "./teams-tab";
 import { TournamentSetup } from "./tournament-setup";
 import {
   DashboardPanelTitle,
-  DashboardSourceBadge,
   DashboardStatusBadge,
   MatchTeams,
 } from "../../shared/dashboard-ui";
 import type { MatchRow, TournamentRow, TournamentStage } from "../types";
 import {
-  formatDateOnly,
   formatDateTime,
   formatScore,
-  formatShortTime,
   getTournamentDateRange,
   isFinishedStatus,
 } from "../utils";
@@ -76,6 +74,9 @@ export function TournamentDetailView({
 }) {
   const [loadedMatches, setLoadedMatches] = useState<MatchRow[] | null>(null);
   const [predictionCount, setPredictionCount] = useState(0);
+  const [predictionRefresh, setPredictionRefresh] = useState(0);
+  const [scheduleError, setScheduleError] = useState("");
+  const [scheduleRetry, setScheduleRetry] = useState(0);
   const [leaderboardResult, setLeaderboardResult] = useState<{
     tournamentId: number;
     entries: LeaderboardEntry[];
@@ -143,13 +144,13 @@ export function TournamentDetailView({
     scheduleStart,
     scheduleStart + schedulePageSize,
   );
-  const emptyScheduleMessage = isTodayScope
+  const emptyScheduleMessage = isTodayScope && !loadedMatches
     ? `${tournament.name} has no matches scheduled today.`
     : "No schedule has been imported for this tournament.";
 
   useEffect(() => {
     const initialTick = window.setTimeout(() => setNow(Date.now()), 0);
-    const interval = window.setInterval(() => setNow(Date.now()), 60_000);
+    const interval = window.setInterval(() => setNow(Date.now()), 1_000);
     return () => {
       window.clearTimeout(initialTick);
       window.clearInterval(interval);
@@ -165,6 +166,24 @@ export function TournamentDetailView({
       .catch(() => {
         if (isMounted) setPredictionCount(0);
       });
+
+    return () => { isMounted = false; };
+  }, [tournament.id, predictionRefresh]);
+
+  useEffect(() => {
+    let active = true;
+    loadAllMatchPages((page) => apiRequest<{ items: MatchRow[]; total: number }>(
+      `/matches/page?tournamentId=${tournament.id}&page=${page}&pageSize=100`,
+    )).then((items) => {
+      if (active) { setLoadedMatches(items); setScheduleError(""); }
+    }).catch(() => {
+      if (active) setScheduleError("Cannot load the full schedule. Please try again.");
+    });
+    return () => { active = false; };
+  }, [tournament.id, scheduleRetry]);
+
+  useEffect(() => {
+    let isMounted = true;
 
     apiRequest<TournamentStage[]>(`/stages?tournamentId=${tournament.id}`)
       .then((data) => {
@@ -214,7 +233,7 @@ export function TournamentDetailView({
   return (
     <section className="min-w-0 overflow-hidden rounded border border-[#3a4d54] bg-[#07181d] bg-[radial-gradient(circle_at_1px_1px,rgba(132,216,232,0.08)_1px,transparent_0)] [background-size:24px_24px]">
       <div className="border-b border-[#314850] px-4 py-5 sm:px-7 lg:px-8">
-        <div className="mb-7 flex flex-wrap items-center justify-between gap-4">
+        <div className="mb-4 flex flex-wrap items-center justify-between gap-4">
           <button
             type="button"
             onClick={onBack}
@@ -228,7 +247,7 @@ export function TournamentDetailView({
           </p>
         </div>
 
-        <div className="grid gap-5 lg:grid-cols-[minmax(300px,0.85fr)_minmax(420px,1.35fr)_200px] lg:items-start">
+        <div className="flex flex-wrap items-start justify-between gap-5">
           <div className="min-w-0">
             <div className="flex flex-wrap items-center gap-3">
               <span className="inline-flex items-center gap-2 border-l-4 border-[#84d8e8] bg-[#14272e] px-4 py-2 text-xs font-black uppercase tracking-[0.08em] text-[#dce8eb] shadow-[0_0_24px_rgba(132,216,232,0.12)]">
@@ -255,15 +274,20 @@ export function TournamentDetailView({
             </div>
           </div>
 
-          <StageStrip
-            stages={stageItems}
-            formatLabel={
-              tournamentFormat === "CUSTOM"
-                ? (tournament.customFormat?.name ?? formatLabels.CUSTOM)
-                : formatLabels[tournamentFormat]
-            }
-            onOpenStageMatches={onOpenStageMatches}
-          />
+          <details className="order-3 w-full min-w-0 text-xs font-bold text-[#84d8e8]">
+            <summary className="min-h-8 cursor-pointer">
+              Stages · {tournament.customFormat?.name || formatLabels[tournamentFormat]}
+            </summary>
+            <StageStrip
+              stages={stageItems}
+              formatLabel={
+                tournamentFormat === "CUSTOM"
+                  ? (tournament.customFormat?.name ?? formatLabels.CUSTOM)
+                  : formatLabels[tournamentFormat]
+              }
+              onOpenStageMatches={onOpenStageMatches}
+            />
+          </details>
 
           {canManage ? (
             <div>
@@ -283,12 +307,12 @@ export function TournamentDetailView({
             </div>
           ) : (
             <div className="inline-flex min-h-[54px] items-center justify-center border border-[#3a4d54] bg-[#0d252d] px-5 py-3 text-center text-xs font-black uppercase tracking-[0.08em] text-[#789098]">
-              View Only
+              Predict match outcomes · 1X2
             </div>
           )}
         </div>
 
-        <div className="mt-7 flex flex-wrap gap-5 border-b border-[#3a4d54]">
+        <div className="mt-4 flex flex-wrap gap-5 border-b border-[#3a4d54]">
           {(["Overview", "Teams", "Predictions", "Scoring Rules"] as TournamentTab[]).map((tab) => (
             <button
               key={tab}
@@ -320,7 +344,7 @@ export function TournamentDetailView({
       {activeTab === "Scoring Rules" ? (
         <ScoringRulesView tournament={tournament} canManage={canManage} />
       ) : activeTab === "Predictions" ? (
-        <PredictionHistory key={tournament.id} tournamentId={tournament.id} />
+        <PredictionHistory key={tournament.id} tournamentId={tournament.id} refresh={predictionRefresh} />
       ) : activeTab === "Teams" ? (
         <TeamsTab
           tournament={tournament}
@@ -333,123 +357,112 @@ export function TournamentDetailView({
         />
       ) : (
         <>
-          <div className="grid gap-5 p-4 sm:p-7 lg:grid-cols-[360px_minmax(0,1fr)] lg:p-8">
-            <section className="relative overflow-hidden border border-[#3a4d54] bg-[#0d252d] p-6 text-center">
-              <Trophy
-                aria-hidden="true"
-                className="absolute right-5 top-5 text-[#27414a]"
-                size={64}
-              />
-              <div
-                className="mx-auto grid h-48 w-48 place-items-center rounded-full"
-                style={{
-                  background: `conic-gradient(#84d8e8 ${progress * 3.6}deg, #203841 0deg)`,
-                }}
-              >
-                <div className="grid h-36 w-36 place-items-center rounded-full bg-[#0d252d]">
-                  <div>
-                    <p className="text-3xl font-black text-white">
-                      {progress}%
-                    </p>
-                    <p className="text-xs font-bold uppercase text-[#dce8eb]">
-                      Progress
-                    </p>
-                  </div>
-                </div>
-              </div>
-              <p className="mt-6 text-xl font-black text-white">
-                {completedCount} of {activeMatches.length} Matches Completed
-              </p>
-              <p className="mt-3 text-lg leading-relaxed text-[#c8d6db]">
-                {firstUpcoming
-                  ? `Next match starts ${formatDateTime(firstUpcoming.scheduledTime)}.`
-                  : now === null
-                    ? "Loading schedule…"
-                  : activeMatches.length > 0
-                    ? "No future matches are scheduled."
-                    : emptyScheduleMessage}
-              </p>
-            </section>
-
-            <section className="overflow-hidden border border-[#3a4d54] bg-[#0d252d]">
-              <DashboardPanelTitle
-                title="Upcoming Matches"
-                right={`${upcomingMatches.length} total`}
-              />
-              <div className="divide-y divide-[#243c43]">
-                {upcomingMatches.slice(0, 3).map((match) => (
-                  <CompactMatchRow key={match.id} match={match} />
-                ))}
-                {upcomingMatches.length === 0 && (
-                  <p className="px-6 py-16 text-center text-[#9fb2b8]">
-                    {now === null
-                      ? "Loading upcoming matches…"
-                      : activeMatches.length > 0
-                        ? "No future matches are scheduled."
-                        : emptyScheduleMessage}
-                  </p>
-                )}
-              </div>
-            </section>
-
-            <section className="overflow-hidden border border-[#3a4d54] bg-[#0d252d]">
-              <DashboardPanelTitle
-                title="Recent Results"
-                right={finishedMatches.length ? "Auto-synced" : undefined}
-              />
-              <div className="space-y-4 p-5">
-                {finishedMatches.slice(0, 3).map((match) => (
-                  <ResultMatchRow key={match.id} match={match} />
-                ))}
-                {finishedMatches.length === 0 && (
-                  <p className="py-12 text-center text-[#9fb2b8]">
-                    No completed results found.
-                  </p>
-                )}
-              </div>
-            </section>
-
-            <section className="overflow-hidden border border-[#3a4d54] bg-[#0d252d]">
-              <DashboardPanelTitle
-                title="Leaderboard Top 3"
-              />
-              <div className="space-y-4 p-5">
-                {visibleLeaderboard?.entries.slice(0, 3).map((entry, index) => (
-                  <div
-                    key={entry.userId}
-                    className={`flex items-center justify-between border border-[#243c43] bg-[#10242b] p-4 ${
-                      index === 0 ? "border-l-4 border-l-[#84d8e8]" : ""
-                    }`}
-                  >
+          {scheduleError && <div role="alert" className="mx-4 mt-4 rounded border border-[#5d3037] p-3 text-sm text-[#ffb4a8]">
+            {scheduleError} <button type="button" onClick={() => setScheduleRetry((value) => value + 1)} className="ml-2 min-h-10 underline">Try again</button>
+          </div>}
+          <div className="grid items-start gap-5 p-4 sm:p-5 lg:grid-cols-[240px_minmax(0,1fr)]">
+            <div className="space-y-5">
+              <section className="relative overflow-hidden rounded border border-[#3a4d54] bg-[#0d252d] p-5 text-center">
+                <Trophy
+                  aria-hidden="true"
+                  className="absolute right-5 top-5 text-[#27414a]"
+                  size={64}
+                />
+                <div
+                  className="mx-auto grid h-32 w-32 place-items-center rounded-full"
+                  style={{
+                    background: `conic-gradient(#84d8e8 ${progress * 3.6}deg, #203841 0deg)`,
+                  }}
+                >
+                  <div className="grid h-24 w-24 place-items-center rounded-full bg-[#0d252d]">
                     <div>
-                      <p className="text-xs font-black uppercase text-[#84d8e8]">
-                        Rank {String(index + 1).padStart(2, "0")}
+                      <p className="text-3xl font-black text-white">
+                        {progress}%
                       </p>
-                      <p className="mt-1 font-black text-white">
-                        {entry.fullName}
+                      <p className="text-xs font-bold uppercase text-[#dce8eb]">
+                        Progress
                       </p>
                     </div>
-                    <span className="text-lg font-black text-[#dce8eb]">
-                      {entry.totalPoints}
-                    </span>
                   </div>
-                ))}
-                {!visibleLeaderboard && (
-                  <p className="py-8 text-center text-[#9fb2b8]">Loading leaderboard…</p>
-                )}
-                {visibleLeaderboard?.error && (
-                  <p role="alert" className="py-8 text-center text-[#ffb4a8]">
-                    Cannot load leaderboard.
-                  </p>
-                )}
-                {visibleLeaderboard && !visibleLeaderboard.error &&
-                  visibleLeaderboard.entries.length === 0 && (
-                    <p className="py-8 text-center text-[#9fb2b8]">
-                      No predictions yet.
+                </div>
+                <p className="mt-4 text-sm font-black text-white">
+                  {completedCount} of {activeMatches.length} Matches Completed
+                </p>
+                <p className="mt-2 text-xs leading-relaxed text-[#c8d6db]">
+                  {firstUpcoming
+                    ? `Next match starts ${formatDateTime(firstUpcoming.scheduledTime)}.`
+                    : now === null
+                      ? "Loading schedule…"
+                    : activeMatches.length > 0
+                      ? "No future matches are scheduled."
+                      : emptyScheduleMessage}
+                </p>
+              </section>
+
+              <section className="overflow-hidden rounded border border-[#3a4d54] bg-[#0d252d]">
+                <div className="flex flex-wrap items-center justify-between gap-2 border-b border-[#3a4d54] bg-[#14272e] px-4 py-4">
+                  <h2 className="text-xs font-black uppercase tracking-[0.08em]">Recent Results</h2>
+                  {finishedMatches.length > 0 && <span className="text-[10px] font-bold uppercase text-[#84d8e8]">Auto-synced</span>}
+                </div>
+                <div className="space-y-4 p-5">
+                  {finishedMatches.slice(0, 3).map((match) => (
+                    <ResultMatchRow key={match.id} match={match} />
+                  ))}
+                  {finishedMatches.length === 0 && (
+                    <p className="py-12 text-center text-[#9fb2b8]">
+                      No completed results found.
                     </p>
                   )}
-              </div>
-            </section>
+                </div>
+              </section>
+
+            </div>
+            <div className="order-first min-w-0 space-y-5 lg:order-none">
+              <InlineVotePanel tournament={tournament} matches={upcomingMatches} now={now}
+                onSaved={() => setPredictionRefresh((value) => value + 1)} />
+
+              <section className="min-w-0 overflow-hidden rounded border border-[#3a4d54] bg-[#0d252d]">
+                <DashboardPanelTitle
+                  title="Leaderboard Top 3"
+                />
+                <div className="grid gap-3 p-4 sm:grid-cols-3">
+                  {visibleLeaderboard?.entries.slice(0, 3).map((entry, index) => (
+                    <div
+                      key={entry.userId}
+                      className={`flex items-center justify-between border border-[#243c43] bg-[#10242b] p-4 ${
+                        index === 0 ? "border-l-4 border-l-[#84d8e8]" : ""
+                      }`}
+                    >
+                      <div>
+                        <p className="text-xs font-black uppercase text-[#84d8e8]">
+                          Rank {String(index + 1).padStart(2, "0")}
+                        </p>
+                        <p className="mt-1 font-black text-white">
+                          {entry.fullName}
+                        </p>
+                      </div>
+                      <span className="text-lg font-black text-[#dce8eb]">
+                        {entry.totalPoints}
+                      </span>
+                    </div>
+                  ))}
+                  {!visibleLeaderboard && (
+                    <p className="py-8 text-center text-[#9fb2b8]">Loading leaderboard…</p>
+                  )}
+                  {visibleLeaderboard?.error && (
+                    <p role="alert" className="py-8 text-center text-[#ffb4a8]">
+                      Cannot load leaderboard.
+                    </p>
+                  )}
+                  {visibleLeaderboard && !visibleLeaderboard.error &&
+                    visibleLeaderboard.entries.length === 0 && (
+                      <p className="py-8 text-center text-[#9fb2b8]">
+                        No predictions yet.
+                      </p>
+                    )}
+                </div>
+              </section>
+            </div>
           </div>
 
           <section className="border-t border-[#314850] p-4 sm:p-7 lg:p-8">
@@ -568,27 +581,6 @@ export function TournamentDetailView({
   );
 }
 
-function CompactMatchRow({ match }: { match: MatchRow }) {
-  return (
-    <article className="grid gap-4 px-5 py-5 sm:grid-cols-[120px_minmax(0,1fr)_120px] sm:items-center">
-      <div>
-        <p className="text-xs font-black uppercase text-[#789098]">
-          {formatDateOnly(match.scheduledTime)}
-        </p>
-        <p className="mt-1 text-lg font-black text-white">
-          {formatShortTime(match.scheduledTime)}
-        </p>
-      </div>
-      <div className="min-w-0">
-        <MatchTeams match={match} />
-      </div>
-      <div className="sm:text-right">
-        <DashboardSourceBadge source={match.source} />
-      </div>
-    </article>
-  );
-}
-
 function ScheduleMatchRow({ match }: { match: MatchRow }) {
   return (
     <article className="grid gap-4 px-5 py-5 text-sm lg:grid-cols-[minmax(220px,1.4fr)_180px_180px_120px_120px] lg:items-center">
@@ -624,7 +616,7 @@ function ScheduleMatchRow({ match }: { match: MatchRow }) {
 
 function ResultMatchRow({ match }: { match: MatchRow }) {
   return (
-    <article className="grid gap-3 rounded border border-[#243c43] bg-[#10242b] p-4 text-center sm:grid-cols-[minmax(0,1fr)_120px_minmax(0,1fr)] sm:items-center">
+    <article className="grid gap-2 rounded border border-[#243c43] bg-[#10242b] p-3 text-center text-xs">
       <div className="font-black text-white">{match.homeName ?? "TBD"}</div>
       <div>
         <p className="text-xl font-black text-[#84d8e8]">

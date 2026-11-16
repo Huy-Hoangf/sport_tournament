@@ -15,7 +15,7 @@ export function DashboardStatGrid({
 }) {
   if (isAdmin && alignWithActivityRail) {
     return (
-      <section className="mb-5 grid grid-cols-1 gap-3 xl:grid-cols-[minmax(0,1fr)_390px] xl:gap-5">
+      <section className="mb-5 grid grid-cols-1 gap-3 xl:grid-cols-[minmax(0,1fr)_280px] xl:gap-5">
         <div className="grid min-w-0 grid-cols-1 gap-3 sm:grid-cols-3 xl:gap-5">
           <DashboardStatCard
             title="Active Tournaments"
