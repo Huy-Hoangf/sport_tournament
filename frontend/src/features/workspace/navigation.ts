@@ -15,6 +15,7 @@ export function parseNavigation(hash: string): Navigation {
   const params = new URLSearchParams(query);
   const tournamentId = positive(params.get('tournament'));
   const tab = params.get('tab');
+  if (view === 'leaderboard' && tournamentId) return { view, tournamentId };
   if ((view === 'dashboard' || view === 'tournaments') && tournamentId) {
     return { view, tournamentId, ...(tabs.includes(tab as TournamentTab) ? { tournamentTab: tab as TournamentTab } : {}) };
   }

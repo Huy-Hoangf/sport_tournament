@@ -3,10 +3,10 @@ import { Trophy } from "lucide-react";
 import { apiRequest } from "../../lib/api/client";
 import type { TournamentRow } from "../tournaments/types";
 import type { LeaderboardEntry } from "./types";
+import { navigate } from "../workspace/navigation";
 
-export function LeaderboardView() {
+export function LeaderboardView({ tournamentId = null }: { tournamentId?: number | null }) {
   const [tournaments, setTournaments] = useState<TournamentRow[]>([]);
-  const [tournamentId, setTournamentId] = useState<number | null>(null);
   const [entries, setEntries] = useState<LeaderboardEntry[]>([]);
   const [isLoading, setIsLoading] = useState(true);
   const [error, setError] = useState("");
@@ -70,7 +70,7 @@ export function LeaderboardView() {
             value={tournamentId ?? ""}
             onChange={(event) => {
               setIsLoading(true);
-              setTournamentId(event.target.value ? Number(event.target.value) : null);
+              navigate({ view: "leaderboard", tournamentId: event.target.value ? Number(event.target.value) : undefined });
             }}
             className="min-w-52 border border-[#41636d] bg-[#0d252d] px-3 py-2 text-sm font-semibold normal-case text-white"
           >

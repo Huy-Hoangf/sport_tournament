@@ -858,7 +858,7 @@ export default function AdminDashboardContent({
   return (
     <div className="px-4 py-6 sm:px-6 xl:px-8 xl:py-9">
       <NoticeBanner notice={notice} onClose={() => setNotice(null)} />
-      <div className="mb-8 grid gap-6 lg:grid-cols-[minmax(160px,1fr)_auto] lg:items-center lg:gap-3">
+      {!selectedTournament && <div className="mb-8 grid gap-6 lg:grid-cols-[minmax(160px,1fr)_auto] lg:items-center lg:gap-3">
         <div>
           <h2 className="text-[28px] font-black leading-none text-white sm:text-[34px]">
             {pageTitle}
@@ -901,7 +901,7 @@ export default function AdminDashboardContent({
             </div>
           ) : null}
         </div>
-      </div>
+      </div>}
 
       {hasLoadedDashboard && isTournamentView && !selectedTournament && (
         <section className="mb-5 rounded border border-[#3a4d54] bg-[#0d252d] p-5">

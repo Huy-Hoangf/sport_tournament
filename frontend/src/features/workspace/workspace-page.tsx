@@ -36,6 +36,7 @@ export default function AdminPage() {
   const router = useRouter();
   const [players, setPlayers] = useState<Player[]>([]);
   const [activeView, setActiveView] = useState<AdminView>("dashboard");
+  const [leaderboardTournamentId, setLeaderboardTournamentId] = useState<number | null>(null);
   const [dashboardRefreshKey, setDashboardRefreshKey] = useState(0);
   const [matchesInitialFilter, setMatchesInitialFilter] =
     useState<MatchesInitialFilter>({});
@@ -125,6 +126,7 @@ export default function AdminPage() {
       const navigation = parseNavigation(window.location.hash);
       setActiveView(navigation.view);
       setMatchesInitialFilter(navigation.matchFilters ?? {});
+      setLeaderboardTournamentId(navigation.view === "leaderboard" ? navigation.tournamentId ?? null : null);
     }
 
     handleHistoryChange();
@@ -648,7 +650,7 @@ export default function AdminPage() {
             onUnavailableFeature={() => showNotice("this feature is not ready")}
           />
         ) : activeView === "leaderboard" ? (
-          <LeaderboardView />
+          <LeaderboardView key={leaderboardTournamentId ?? "all"} tournamentId={leaderboardTournamentId} />
         ) : (
           <PlayersView
             activeCount={activeCount}

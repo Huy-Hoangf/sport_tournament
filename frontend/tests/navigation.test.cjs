@@ -20,6 +20,11 @@ test('history preserves matches filters', () => {
   const state = { view: 'matches', matchFilters: { tournamentId: 42, stageId: 8, tournamentName: 'Cup', stageName: 'Final' } };
   assert.deepEqual(parseNavigation(formatNavigation(state)), state);
 });
+test('a tournament leaderboard link preserves its filter through navigation', () => {
+  const state = { view: 'leaderboard', tournamentId: 42 };
+  assert.deepEqual(parseNavigation(formatNavigation(state)), state);
+  assert.deepEqual(parseNavigation('#leaderboard?tournament=-1'), { view: 'leaderboard' });
+});
 test('legacy and malformed links are safely handled', () => {
   assert.deepEqual(parseNavigation('#tournaments'), { view: 'tournaments' });
   assert.deepEqual(parseNavigation('#unknown'), { view: 'dashboard' });

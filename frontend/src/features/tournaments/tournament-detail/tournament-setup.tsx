@@ -6,34 +6,31 @@ export function TournamentSetup({ teamCount, matchCount, onManageTeams, onCreate
   onImportMatches: () => void;
   canRegisterTeam: boolean;
 }) {
-  const button = "rounded border border-[#52757e] px-4 py-2 text-sm font-bold text-[#dce8eb] hover:border-[#84d8e8] focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-[#84d8e8]";
+  const button = "inline-flex min-h-10 items-center justify-center rounded border border-[#3a4d54] px-3 py-2 text-xs font-bold text-[#dce8eb] transition hover:border-[#84d8e8] hover:text-white focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-[#84d8e8]";
   return (
-    <section aria-labelledby="tournament-setup-title" className="border-b border-[#314850] bg-[#0d252d] px-4 py-6 sm:px-7 lg:px-8">
-      <h3 id="tournament-setup-title" className="text-xl font-black text-white">Tournament setup</h3>
-      <p className="mt-2 text-sm text-[#c8d6db]">Set up your tournament at your own pace. Your changes are saved as you go.</p>
-      <ol className="mt-5 grid gap-4 md:grid-cols-3">
-        <li className="min-w-0 border-t border-[#52757e] pt-3">
-          <p className="font-bold text-white">Tournament details</p>
-          <p className="mt-1 text-sm text-[#c8d6db]">Saved</p>
-        </li>
-        <li className="min-w-0 border-t border-[#52757e] pt-3">
-          <p className="font-bold text-white">Teams and players</p>
-          <p className="mt-1 text-sm text-[#c8d6db]">{teamCount === null ? "Count unavailable" : `${teamCount} teams`}</p>
+    <section aria-labelledby="tournament-setup-title" className="grid gap-5 pt-5 md:grid-cols-[1.1fr_1fr_1.1fr]">
+      <div className="min-w-0">
+        <h3 id="tournament-setup-title" className="text-xs font-black uppercase tracking-[0.06em] text-white">Tournament setup</h3>
+        <p className="mt-2 max-w-64 text-xs leading-relaxed text-[#b6cbd1]">Set up your tournament at your own pace. Your changes are saved as you go.</p>
+        <p className="mt-2 text-xs font-bold text-[#84d8e8]">Details: Saved</p>
+      </div>
+      <div className="min-w-0">
+          <h3 className="text-xs font-black uppercase tracking-[0.06em] text-white">Teams and players</h3>
+          <p className="mt-2 text-xs text-[#b6cbd1]">{teamCount === null ? "Count unavailable" : `${teamCount} teams`}</p>
           {canRegisterTeam ? (
             <button type="button" className={`${button} mt-3`} onClick={onManageTeams}>Add teams and players</button>
           ) : (
-            <p className="mt-3 text-sm text-[#c8d6db]">Teams can only be registered before the tournament starts.</p>
+            <p className="mt-2 text-xs leading-relaxed text-[#b6cbd1]">Teams can only be registered before the tournament starts.</p>
           )}
-        </li>
-        <li className="min-w-0 border-t border-[#52757e] pt-3">
-          <p className="font-bold text-white">Match schedule</p>
-          <p className="mt-1 text-sm text-[#c8d6db]">{matchCount === null ? "Count unavailable" : `${matchCount} matches`}</p>
+      </div>
+      <div className="min-w-0">
+          <h3 className="text-xs font-black uppercase tracking-[0.06em] text-white">Match schedule</h3>
+          <p className="mt-2 text-xs text-[#b6cbd1]">{matchCount === null ? "Count unavailable" : `${matchCount} matches`}</p>
           <div className="mt-3 flex flex-wrap gap-2">
             <button type="button" className={button} onClick={onCreateMatch}>Create match</button>
-            <button type="button" className={button} onClick={onImportMatches}>Import matches</button>
+            <button type="button" className={`${button} bg-[#143943] text-[#84d8e8]`} onClick={onImportMatches}>Import matches</button>
           </div>
-        </li>
-      </ol>
+      </div>
     </section>
   );
 }
