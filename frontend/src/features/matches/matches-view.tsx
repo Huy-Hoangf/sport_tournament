@@ -55,7 +55,7 @@ export default function MatchesView({
   const [stages, setStages] = useState<TournamentStage[]>([]);
   const [page, setPage] = useState(savedNavigation?.page ?? 1),
     [refresh, setRefresh] = useState(0);
-  const [loading, setLoading] = useState(true),
+  const [loading, setLoading] = useState(Boolean(tournamentId)),
     [busy, setBusy] = useState(false);
   const [notice, setNotice] = useState(""),
     [error, setError] = useState("");
@@ -92,8 +92,11 @@ export default function MatchesView({
     };
   }, [tournamentId]);
   useEffect(() => {
+    if (!tournamentId) return;
+
     let active = true;
     const timer = setTimeout(() => {
+      setLoading(true);
       const params = new URLSearchParams({
         page: String(page),
         pageSize: "20",
@@ -101,7 +104,7 @@ export default function MatchesView({
       });
       if (status === "OPEN") params.set("openForVoting", "true");
       else params.set("status", status);
-      if (tournamentId) params.set("tournamentId", tournamentId);
+      params.set("tournamentId", tournamentId);
       if (stageId) params.set("stageId", stageId);
       apiRequest<MatchPage>(`/matches/page?${params}`)
         .then((next) => {
@@ -227,9 +230,13 @@ export default function MatchesView({
               setStageId("");
               setStages([]);
               setPage(1);
+              setData({ items: [], total: 0, page: 1, pageSize: 20 });
+              setLoading(Boolean(e.target.value));
+              setError("");
+              setNotice("");
             }}
           >
-            <option value="">All tournaments</option>
+            <option value="">Select tournament</option>
             {tournaments.map((t) => (
               <option key={t.id} value={t.id}>
                 {t.name}
@@ -257,6 +264,7 @@ export default function MatchesView({
         </label>
       </div>
       <section
+        hidden={!tournamentId}
         aria-busy={loading || busy}
         className="overflow-hidden rounded border border-[#3a4d54] bg-[#10242b]"
       >
@@ -377,11 +385,13 @@ export default function MatchesView({
           </button>
         </div>
       </section>
-      <PredictionHistory
-        key={tournamentId || "all-tournaments"}
-        tournamentId={tournamentId ? Number(tournamentId) : undefined}
-        refresh={refresh}
-      />
+      {tournamentId && (
+        <PredictionHistory
+          key={tournamentId}
+          tournamentId={Number(tournamentId)}
+          refresh={refresh}
+        />
+      )}
       {editor && (
         <MatchEditor
           match={editor.match}
