@@ -6,6 +6,7 @@ import {
 import { InjectRepository } from '@nestjs/typeorm';
 import { type EntityManager, Repository } from 'typeorm';
 import { User } from '../users/user.entity';
+import { prepareExcelImport, requireValidImport } from '../common/excel-import';
 import { readTeamWorkbook } from './team-workbook';
 
 type RegisterTeamInput = {
@@ -368,20 +369,130 @@ export class TeamsService {
 
   async registerTeam(input: RegisterTeamInput) {
     return this.usersRepository.manager.transaction(async (manager) => {
-      await this.lockUpcomingTournament(manager, input.tournamentId);
+      await this.checkUpcomingTournament(manager, input.tournamentId, true);
       return this.createTeam(manager, input);
     });
+  }
+
+  async previewWorkbook(input: Record<string, unknown>) {
+    const { teams, preview } = await prepareExcelImport('teams', input);
+    if (!preview.canImport) return preview;
+    await this.checkUpcomingTournament(
+      this.usersRepository,
+      Number(input.tournamentId),
+    );
+    const existing = await this.existingTeamNames(
+      this.usersRepository,
+      Number(input.tournamentId),
+    );
+    const pending = teams.filter(
+      (team) => !existing.has(team.name.toLowerCase()),
+    );
+    const existingCount = teams.length - pending.length;
+    const checks = pending.flatMap((team) => team.members);
+    const codes = [
+      ...new Set(checks.map((member) => member.code.toLowerCase())),
+    ];
+    const players: Array<{ code: string; teamName: string | null }> =
+      codes.length
+        ? await this.usersRepository.query(
+            `SELECT LOWER(u.member_code) AS code, membership.name AS "teamName"
+           FROM users u
+           LEFT JOIN LATERAL (
+             SELECT team.name
+             FROM team_players tp JOIN teams team ON team.id = tp.team_id
+             WHERE tp.user_id = u.id AND team.tournament_id = $2
+             LIMIT 1
+           ) membership ON TRUE
+           WHERE LOWER(u.member_code) = ANY($1::text[])
+             AND u.role = 'PLAYER' AND u.user_status = 'ACTIVE'`,
+            [codes, Number(input.tournamentId)],
+          )
+        : [];
+    const playersByCode = new Map<string, Array<{ teamName: string | null }>>();
+    for (const player of players) {
+      const entries = playersByCode.get(player.code) ?? [];
+      entries.push(player);
+      playersByCode.set(player.code, entries);
+    }
+
+    const issues = new Map<number, string>();
+    let validCount = 0;
+    for (const team of pending) {
+      let valid = true;
+      for (const member of team.members) {
+        const matches = playersByCode.get(member.code.toLowerCase());
+        if (!matches || matches.length !== 1) {
+          issues.set(
+            member.row,
+            'Member Code must identify one active player.',
+          );
+          valid = false;
+        } else if (matches[0].teamName) {
+          issues.set(
+            member.row,
+            `This player already belongs to ${matches[0].teamName}.`,
+          );
+          valid = false;
+        }
+      }
+      if (valid) validCount++;
+    }
+    return {
+      ...preview,
+      existingCount,
+      validCount,
+      errorCount: issues.size,
+      errors: [...issues.entries()]
+        .slice(0, 50)
+        .map(([row, message]) => ({ row, message })),
+      canImport: validCount > 0 && issues.size === 0,
+      sample: preview.sample.filter(
+        (item) => !existing.has(item.label.toLowerCase()),
+      ),
+    };
+  }
+
+  private async existingTeamNames(
+    database: Pick<Repository<User>, 'query'>,
+    tournamentId: number,
+  ) {
+    const rows: Array<{ name: string }> = await database.query(
+      'SELECT name FROM teams WHERE tournament_id = $1',
+      [tournamentId],
+    );
+    return new Set(rows.map((team) => team.name.toLowerCase()));
   }
 
   async importWorkbook(
     tournamentId: number,
     fileName: unknown,
     content: unknown,
+    selection?: unknown,
   ) {
-    const teams = await readTeamWorkbook(fileName, content);
+    const prepared =
+      selection === undefined
+        ? null
+        : await prepareExcelImport('teams', {
+            tournamentId,
+            fileName,
+            contentBase64: content,
+            selection,
+          });
+    if (prepared) requireValidImport(prepared.preview);
+    const teams =
+      prepared?.teams ?? (await readTeamWorkbook(fileName, content));
     return this.usersRepository.manager.transaction(async (manager) => {
-      await this.lockUpcomingTournament(manager, tournamentId);
+      await this.checkUpcomingTournament(manager, tournamentId, true);
+      const existing = prepared
+        ? await this.existingTeamNames(manager, tournamentId)
+        : new Set<string>();
+      let skipped = 0;
       for (const team of teams) {
+        if (existing.has(team.name.toLowerCase())) {
+          skipped++;
+          continue;
+        }
         const players: Array<{ id: number }> = [];
         const playerIds = new Set<number>();
         for (const { row, code } of team.members) {
@@ -424,19 +535,22 @@ export class TeamsService {
         }
       }
 
-      return { imported: teams.length };
+      return prepared
+        ? { imported: teams.length - skipped, skipped }
+        : { imported: teams.length };
     });
   }
 
-  private async lockUpcomingTournament(
-    manager: EntityManager,
+  private async checkUpcomingTournament(
+    database: Pick<Repository<User>, 'query'>,
     tournamentId: number,
+    lock = false,
   ) {
     if (!Number.isInteger(tournamentId) || tournamentId <= 0) {
       throw new BadRequestException('Invalid tournament id.');
     }
 
-    const [tournament] = await manager.query(
+    const [tournament] = await database.query(
       `
       SELECT
         id,
@@ -444,7 +558,7 @@ export class TeamsService {
       FROM tournaments
       WHERE id = $1
       LIMIT 1
-      FOR UPDATE
+      ${lock ? 'FOR UPDATE' : ''}
     `,
       [tournamentId],
     );

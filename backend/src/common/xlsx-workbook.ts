@@ -54,7 +54,7 @@ function checkArchive(buffer: Buffer) {
   }
 }
 
-export async function readXlsxWorksheet(fileName: unknown, content: unknown) {
+export async function readXlsxWorkbook(fileName: unknown, content: unknown) {
   if (
     typeof fileName !== 'string' ||
     !fileName.toLowerCase().endsWith('.xlsx') ||
@@ -71,12 +71,17 @@ export async function readXlsxWorksheet(fileName: unknown, content: unknown) {
     await workbook.xlsx.load(
       buffer as unknown as Parameters<typeof workbook.xlsx.load>[0],
     );
-    if (workbook.worksheets.length !== 1)
-      throw new Error('Use one worksheet only.');
-    return workbook.worksheets[0];
+    return workbook;
   } catch (error) {
     throw new BadRequestException(
       error instanceof Error ? error.message : 'Invalid Excel workbook.',
     );
   }
+}
+
+export async function readXlsxWorksheet(fileName: unknown, content: unknown) {
+  const workbook = await readXlsxWorkbook(fileName, content);
+  if (workbook.worksheets.length !== 1)
+    throw new BadRequestException('Use one worksheet only.');
+  return workbook.worksheets[0];
 }

@@ -78,6 +78,15 @@ export class MatchesController {
     return { items, total: first[0]?.totalCount ?? 0, page, pageSize };
   }
 
+  @Post('import/preview')
+  async previewImport(
+    @Headers('authorization') authorization: string | undefined,
+    @Body() body: Record<string, unknown>,
+  ) {
+    await this.authService.verifyAdminToken(authorization);
+    return this.matchesService.previewWorkbook(body ?? {});
+  }
+
   @Post('import')
   async import(
     @Headers('authorization') authorization: string | undefined,

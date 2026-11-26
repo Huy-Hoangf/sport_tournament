@@ -2,6 +2,7 @@
 
 import { useEffect, useRef, useState, type FormEvent } from "react";
 import { API_BASE_URL, apiRequest } from "../../lib/api/client";
+import { WorkbookImportDialog } from "../excel-import/workbook-import-dialog";
 import type {
   MatchRow,
   TournamentRow,
@@ -10,11 +11,6 @@ import type {
 
 const fieldClass =
   "w-full rounded border border-[#3a4d54] bg-[#06161b] px-3 py-2 text-white";
-type ImportResult = {
-  imported: number;
-  rejected: number;
-  errors: { row: number; message: string }[];
-};
 
 export async function downloadTemplate() {
   const response = await fetch(`${API_BASE_URL}/matches/template`, {
@@ -31,19 +27,22 @@ export async function downloadTemplate() {
   setTimeout(() => URL.revokeObjectURL(url), 1000);
 }
 
-export function MatchEditor({
-  match,
-  importing,
-  tournamentId: initialTournamentId,
-  onClose,
-  onSaved,
-}: {
+type MatchEditorProps = {
   match?: MatchRow;
   importing?: boolean;
   tournamentId?: number;
   onClose: () => void;
   onSaved: () => void;
-}) {
+};
+
+export function MatchEditor(props: MatchEditorProps) {
+  return props.importing ? (
+    <WorkbookImportDialog kind="matches" initialTournamentId={props.tournamentId}
+      onClose={props.onClose} onImported={props.onSaved} onDownloadTemplate={downloadTemplate} />
+  ) : <MatchForm {...props} />;
+}
+
+function MatchForm({ match, tournamentId: initialTournamentId, onClose, onSaved }: MatchEditorProps) {
   const dialog = useRef<HTMLDialogElement>(null);
   const [tournaments, setTournaments] = useState<TournamentRow[]>([]);
   const [tournamentId, setTournamentId] = useState(
@@ -61,11 +60,8 @@ export function MatchEditor({
       .slice(0, 16);
   });
   const [minutes, setMinutes] = useState(match?.lockMinutes ?? 15);
-  const [file, setFile] = useState<File | null>(null);
-  const [legacyImport, setLegacyImport] = useState(false);
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState("");
-  const [result, setResult] = useState<ImportResult | null>(null);
 
   useEffect(() => {
     dialog.current?.showModal();
@@ -100,49 +96,22 @@ export function MatchEditor({
     event.preventDefault();
     setBusy(true);
     setError("");
-    setResult(null);
     try {
-      if (importing) {
-        if (
-          !file ||
-          !file.name.toLowerCase().endsWith(".xlsx") ||
-          file.size > 5 * 1024 * 1024
-        )
-          throw new Error("Choose an .xlsx file up to 5 MB.");
-        const contentBase64 = await new Promise<string>((resolve, reject) => {
-          const reader = new FileReader();
-          reader.onload = () => resolve(String(reader.result).split(",")[1]);
-          reader.onerror = () => reject(new Error("Cannot read file."));
-          reader.readAsDataURL(file);
-        });
-        const data = await apiRequest<ImportResult>("/matches/import", {
-          method: "POST",
-          body: JSON.stringify({
-            tournamentId: tournamentId ? Number(tournamentId) : undefined,
-            stageId: stageId ? Number(stageId) : undefined,
-            fileName: file.name,
-            contentBase64,
-          }),
-        });
-        setResult(data);
-        onSaved();
-      } else {
-        if (!Number.isFinite(new Date(time).getTime()))
-          throw new Error("Choose a valid kickoff date and time.");
-        await apiRequest(match ? `/matches/${match.id}` : "/matches", {
-          method: match ? "PUT" : "POST",
-          body: JSON.stringify({
-            tournamentId: Number(tournamentId),
-            stageId: Number(stageId),
-            homeTeamId: Number(home),
-            awayTeamId: Number(away),
-            scheduledTime: new Date(time).toISOString(),
-            lockMinutes: minutes,
-          }),
-        });
-        onSaved();
-        onClose();
-      }
+      if (!Number.isFinite(new Date(time).getTime()))
+        throw new Error("Choose a valid kickoff date and time.");
+      await apiRequest(match ? `/matches/${match.id}` : "/matches", {
+        method: match ? "PUT" : "POST",
+        body: JSON.stringify({
+          tournamentId: Number(tournamentId),
+          stageId: Number(stageId),
+          homeTeamId: Number(home),
+          awayTeamId: Number(away),
+          scheduledTime: new Date(time).toISOString(),
+          lockMinutes: minutes,
+        }),
+      });
+      onSaved();
+      onClose();
     } catch (e) {
       setError(e instanceof Error ? e.message : "Cannot save match.");
     } finally {
@@ -162,7 +131,7 @@ export function MatchEditor({
     >
       <form onSubmit={submit} className="grid gap-4">
         <h3 id="match-editor-title" className="text-xl font-black">
-          {importing ? "Import Matches" : match ? "Edit Match" : "Create Match"}
+          {match ? "Edit Match" : "Create Match"}
         </h3>
         {error && (
           <p
@@ -172,193 +141,97 @@ export function MatchEditor({
             {error}
           </p>
         )}
-        {importing && (
-          <label className="flex items-center gap-2 text-sm text-[#b6cbd1]">
-            <input
-              type="checkbox"
-              checked={legacyImport}
-              disabled={busy}
-              onChange={(event) => setLegacyImport(event.target.checked)}
-            />
-            My file has only the old 3 columns
-          </label>
-        )}
-        {(!importing || legacyImport) && (
-          <>
-            <label>
-              Tournament
+        <label>
+          Tournament
+          <select
+            required
+            className={fieldClass}
+            value={tournamentId}
+            disabled={busy}
+            onChange={(e) => {
+              setTournamentId(e.target.value);
+              setStages([]);
+              setTeams([]);
+              setStageId("");
+              setHome("");
+              setAway("");
+            }}
+          >
+            <option value="">Select tournament</option>
+            {tournaments.map((t) => (
+              <option key={t.id} value={t.id}>
+                {t.name}
+              </option>
+            ))}
+          </select>
+        </label>
+        <label>
+          Stage
+          <select
+            required
+            className={fieldClass}
+            value={stageId}
+            disabled={busy}
+            onChange={(e) => setStageId(e.target.value)}
+          >
+            <option value="">Select stage</option>
+            {stages.map((s) => (
+              <option key={s.id} value={s.id}>
+                {s.name}
+              </option>
+            ))}
+          </select>
+        </label>
+        <div className="grid grid-cols-2 gap-3">
+          {[
+            ["Home Team", home, setHome],
+            ["Away Team", away, setAway],
+          ].map(([label, value, setter]) => (
+            <label key={String(label)}>
+              {String(label)}
               <select
                 required
                 className={fieldClass}
-                value={tournamentId}
+                value={String(value)}
                 disabled={busy}
-                onChange={(e) => {
-                  setTournamentId(e.target.value);
-                  setStages([]);
-                  setTeams([]);
-                  setStageId("");
-                  setHome("");
-                  setAway("");
-                  setResult(null);
-                }}
+                onChange={(e) =>
+                  (setter as (value: string) => void)(e.target.value)
+                }
               >
-                <option value="">Select tournament</option>
-                {tournaments.map((t) => (
+                <option value="">Select team</option>
+                {teams.map((t) => (
                   <option key={t.id} value={t.id}>
                     {t.name}
                   </option>
                 ))}
               </select>
             </label>
-            <label>
-              Stage
-              <select
-                required
-                className={fieldClass}
-                value={stageId}
-                disabled={busy}
-                onChange={(e) => setStageId(e.target.value)}
-              >
-                <option value="">Select stage</option>
-                {stages.map((s) => (
-                  <option key={s.id} value={s.id}>
-                    {s.name}
-                  </option>
-                ))}
-              </select>
-            </label>
-          </>
-        )}
-        {importing ? (
-          <>
-            <p className="text-sm text-[#b6cbd1]">
-              New template: Tournament, Start Date, End Date, Stage, Home Team,
-              Away Team, Kickoff Time. Dates use YYYY-MM-DD in Vietnam time
-              (UTC+07); kickoff uses ISO
-              time with timezone (for example 2027-11-01T19:00:00+07:00).
-              Missing tournaments, stages and teams are created automatically.
-              Player accounts are not required. Maximum 2000 rows.
-            </p>
-            <button
-              type="button"
-              className="text-left text-[#84d8e8] underline"
-              onClick={() =>
-                downloadTemplate().catch((e) => setError(e.message))
-              }
-            >
-              Download Excel template
-            </button>
-            <label>
-              Excel file
-              <input
-                aria-label="Excel file"
-                required
-                type="file"
-                accept=".xlsx"
-                disabled={busy}
-                className={fieldClass}
-                onChange={(e) => {
-                  setFile(e.target.files?.[0] ?? null);
-                  setResult(null);
-                }}
-              />
-            </label>
-          </>
-        ) : (
-          <>
-            <div className="grid grid-cols-2 gap-3">
-              {[
-                ["Home Team", home, setHome],
-                ["Away Team", away, setAway],
-              ].map(([label, value, setter]) => (
-                <label key={String(label)}>
-                  {String(label)}
-                  <select
-                    required
-                    className={fieldClass}
-                    value={String(value)}
-                    disabled={busy}
-                    onChange={(e) =>
-                      (setter as (value: string) => void)(e.target.value)
-                    }
-                  >
-                    <option value="">Select team</option>
-                    {teams.map((t) => (
-                      <option key={t.id} value={t.id}>
-                        {t.name}
-                      </option>
-                    ))}
-                  </select>
-                </label>
-              ))}
-            </div>
-            <label>
-              Kickoff (your local time)
-              <input
-                required
-                type="datetime-local"
-                className={fieldClass}
-                value={time}
-                disabled={busy}
-                onChange={(e) => setTime(e.target.value)}
-              />
-            </label>
-            <label>
-              Lock minutes before kickoff
-              <input
-                required
-                min={0}
-                max={10080}
-                type="number"
-                className={fieldClass}
-                value={minutes}
-                disabled={busy}
-                onChange={(e) => setMinutes(Number(e.target.value))}
-              />
-            </label>
-          </>
-        )}
-        {result && (
-          <section
-            aria-live="polite"
-            className="rounded border border-[#84d8e8] p-3"
-          >
-            <p>
-              {result.imported} imported · {result.rejected} rejected
-            </p>
-            <ul className="max-h-48 overflow-y-auto text-sm text-red-200">
-              {result.errors.map((item) => (
-                <li key={item.row}>
-                  Row {item.row}: {item.message}
-                </li>
-              ))}
-            </ul>
-            {!!result.errors.length && (
-              <button
-                type="button"
-                className="mt-2 underline"
-                onClick={() => {
-                  const blob = new Blob(
-                    [
-                      result.errors
-                        .map((item) => `Row ${item.row}: ${item.message}`)
-                        .join("\n"),
-                    ],
-                    { type: "text/plain;charset=utf-8" },
-                  );
-                  const url = URL.createObjectURL(blob);
-                  const a = document.createElement("a");
-                  a.href = url;
-                  a.download = "import-errors.txt";
-                  a.click();
-                  setTimeout(() => URL.revokeObjectURL(url), 1000);
-                }}
-              >
-                Download error log
-              </button>
-            )}
-          </section>
-        )}
+          ))}
+        </div>
+        <label>
+          Kickoff (your local time)
+          <input
+            required
+            type="datetime-local"
+            className={fieldClass}
+            value={time}
+            disabled={busy}
+            onChange={(e) => setTime(e.target.value)}
+          />
+        </label>
+        <label>
+          Lock minutes before kickoff
+          <input
+            required
+            min={0}
+            max={10080}
+            type="number"
+            className={fieldClass}
+            value={minutes}
+            disabled={busy}
+            onChange={(e) => setMinutes(Number(e.target.value))}
+          />
+        </label>
         <div className="flex justify-end gap-3">
           <button
             type="button"
@@ -372,7 +245,7 @@ export function MatchEditor({
             disabled={busy}
             className="rounded bg-[#84d8e8] px-4 py-2 font-bold text-[#06161b] disabled:opacity-50"
           >
-            {busy ? "Saving…" : importing ? "Import" : "Save Match"}
+            {busy ? "Saving..." : "Save Match"}
           </button>
         </div>
       </form>

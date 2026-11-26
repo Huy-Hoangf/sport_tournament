@@ -51,6 +51,15 @@ export class TeamsController {
     });
   }
 
+  @Post('import/preview')
+  async previewImport(
+    @Headers('authorization') authorization: string | undefined,
+    @Body() body: Record<string, unknown>,
+  ) {
+    await this.authService.verifyAdminToken(authorization);
+    return this.teamsService.previewWorkbook(body ?? {});
+  }
+
   @Post('import')
   async importWorkbook(
     @Headers('authorization') authorization: string | undefined,
@@ -59,6 +68,7 @@ export class TeamsController {
       tournamentId?: number;
       fileName?: string;
       contentBase64?: string;
+      selection?: unknown;
     },
   ) {
     await this.authService.verifyAdminToken(authorization);
@@ -66,6 +76,7 @@ export class TeamsController {
       Number(body?.tournamentId),
       body?.fileName,
       body?.contentBase64,
+      body?.selection,
     );
   }
 

@@ -8,6 +8,11 @@ import {
 import { InjectRepository } from '@nestjs/typeorm';
 import { EntityManager, Repository } from 'typeorm';
 import { User } from '../users/user.entity';
+import {
+  prepareExcelImport,
+  requireValidImport,
+  type MatchImportRow,
+} from '../common/excel-import';
 import { positiveId, validateMatchInput } from './match-validation';
 import { readMatchWorkbook } from './match-workbook';
 
@@ -152,8 +157,75 @@ export class MatchesService {
     return rows[0];
   }
 
+  async previewWorkbook(input: Record<string, unknown>) {
+    const { matches, preview } = await prepareExcelImport('matches', input);
+    if (!preview.canImport) return preview;
+    if (preview.selection.mode === 'selected') {
+      const stage = await this.usersRepository.query(
+        'SELECT id FROM stages WHERE id = $1 AND tournament_id = $2',
+        [positiveId(input.stageId), positiveId(input.tournamentId)],
+      );
+      if (!stage.length)
+        return {
+          ...preview,
+          canImport: false,
+          messages: [
+            'Choose a stage that belongs to the destination tournament.',
+          ],
+        };
+    }
+    const existing = await this.findExistingWorkbookMatches(matches, input);
+    if (existing.size === 0) return preview;
+    return {
+      ...preview,
+      existingCount: existing.size,
+      validCount: matches.length - existing.size,
+      canImport: existing.size < matches.length,
+      sample: preview.sample.filter((item) => !existing.has(item.row)),
+    };
+  }
+
+  private async findExistingWorkbookMatches(
+    rows: MatchImportRow[],
+    input: Record<string, unknown>,
+  ) {
+    const named = rows[0]?.tournament !== undefined;
+    const matches: Array<{ row: number }> = await this.usersRepository.query(
+      `SELECT DISTINCT uploaded."row"
+       FROM jsonb_to_recordset($1::jsonb) AS uploaded(
+         "row" integer, tournament text, stage text, home text, away text, kickoff timestamptz
+       )
+       JOIN matches m ON m.scheduled_time = uploaded.kickoff
+       JOIN tournaments t ON t.id = m.tournament_id
+       JOIN stages s ON s.id = m.stage_id
+       JOIN teams h ON h.id = m.home_team_id AND LOWER(h.name) = LOWER(uploaded.home)
+       JOIN teams a ON a.id = m.away_team_id AND LOWER(a.name) = LOWER(uploaded.away)
+       WHERE (uploaded.tournament IS NOT NULL AND t.sport_type = 'FOOTBALL'
+              AND LOWER(t.name) = LOWER(uploaded.tournament) AND LOWER(s.name) = LOWER(uploaded.stage))
+          OR (uploaded.tournament IS NULL AND m.tournament_id = $2 AND m.stage_id = $3)`,
+      [
+        JSON.stringify(rows),
+        named ? null : positiveId(input.tournamentId),
+        named ? null : positiveId(input.stageId),
+      ],
+    );
+    return new Set(matches.map((match) => Number(match.row)));
+  }
+
   async importWorkbook(input: Record<string, unknown>, adminId: number) {
-    const rows = await readMatchWorkbook(input.fileName, input.contentBase64);
+    const prepared =
+      input.selection === undefined
+        ? null
+        : await prepareExcelImport('matches', input);
+    if (prepared) requireValidImport(prepared.preview);
+    const existing = prepared
+      ? await this.findExistingWorkbookMatches(prepared.matches, input)
+      : null;
+    const rows =
+      prepared?.matches.filter((row) => !existing?.has(row.row)) ??
+      (await readMatchWorkbook(input.fileName, input.contentBase64));
+    let skipped = existing?.size ?? 0;
+    if (!rows.length) return { imported: 0, rejected: 0, errors: [], skipped };
     const legacy = rows[0].tournament === undefined;
     const tournamentId = legacy
       ? positiveId(input.tournamentId, 'tournamentId')
@@ -225,7 +297,19 @@ export class MatchesService {
           imported++;
         } catch (error) {
           await manager.query('ROLLBACK TO SAVEPOINT import_row');
-          const code = (error as { code?: string }).code;
+          const { code, constraint } = error as {
+            code?: string;
+            constraint?: string;
+          };
+          if (
+            prepared &&
+            code === '23505' &&
+            constraint === 'uq_matches_manual_identity'
+          ) {
+            skipped++;
+            await manager.query('RELEASE SAVEPOINT import_row');
+            continue;
+          }
           if (
             !(error instanceof HttpException) &&
             !['23505', '23503'].includes(code ?? '')
@@ -243,7 +327,12 @@ export class MatchesService {
         }
         await manager.query('RELEASE SAVEPOINT import_row');
       }
-      return { imported, rejected: errors.length, errors };
+      return {
+        imported,
+        rejected: errors.length,
+        errors,
+        ...(prepared ? { skipped } : {}),
+      };
     });
   }
 

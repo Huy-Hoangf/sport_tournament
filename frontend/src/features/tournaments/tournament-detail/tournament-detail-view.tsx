@@ -507,10 +507,10 @@ export function TournamentDetailView({
         <TeamImportDialog
           key={tournament.id}
           tournamentId={tournament.id}
+          tournamentName={tournament.name}
           onClose={() => setTeamImportOpen(false)}
           onImported={(count) => {
             setTeamImportResult({ count, tournamentId: tournament.id });
-            setTeamImportOpen(false);
           }}
         />
       )}
