@@ -21,6 +21,7 @@ import type { LeaderboardEntry } from "../../leaderboard/types";
 import { ScoringRulesView } from "./scoring-rules-tab";
 import { StageStrip } from "./stage-strip";
 import { TeamsTab } from "./teams-tab";
+import { TeamImportDialog } from "./team-import-dialog";
 import { TournamentSetup } from "./tournament-setup";
 import {
   DashboardPanelTitle,
@@ -117,6 +118,8 @@ export function TournamentDetailView({
   const votingOpen = upcomingMatches.some((match) => !getVotingClosedReason(match, tournament, now));
   const schedulePageSize = 8;
   const [importOpen, setImportOpen] = useState(false);
+  const [teamImportOpen, setTeamImportOpen] = useState(false);
+  const [teamImportResult, setTeamImportResult] = useState<{ count: number; tournamentId: number } | null>(null);
   const [matchEditorOpen, setMatchEditorOpen] = useState(false);
   const [openTeamRegistration, setOpenTeamRegistration] = useState(false);
   const [setupCounts, setSetupCounts] = useState<{ tournamentId: number; teamCount: number | null; matchCount: number | null } | null>(null);
@@ -234,7 +237,9 @@ export function TournamentDetailView({
       });
     });
     return () => { active = false; };
-  }, [activeTab, canManage, tournament.id, loadedMatches]);
+  }, [activeTab, canManage, tournament.id, loadedMatches, teamImportResult]);
+
+  const teamCount = setupCounts?.tournamentId === tournament.id ? setupCounts.teamCount : null;
 
   return (
     <section className="min-w-0 space-y-5">
@@ -276,19 +281,22 @@ export function TournamentDetailView({
         <nav aria-label="Tournament sections" className="mt-2 flex flex-wrap gap-x-5 border-b border-[#243c43]">
           {(["Overview", "Teams", "Predictions", "Scoring Rules"] as TournamentTab[]).map((tab) => (
             <button key={tab} type="button" onClick={() => onTabChange(tab)} aria-current={activeTab === tab ? "page" : undefined} className={`min-h-11 border-b-2 text-xs font-black uppercase tracking-[0.06em] transition ${activeTab === tab ? "border-[#84d8e8] text-[#84d8e8]" : "border-transparent text-[#b6cbd1] hover:text-[#84d8e8]"}`}>
-              {tab}{tab === "Teams" && ` (${tournament.teams})`}
+              {tab}{tab === "Teams" && ` (${teamCount ?? tournament.teams})`}
               {tab === "Predictions" && <span className="ml-2 rounded bg-[#143943] px-1.5 py-0.5 text-[10px] text-[#84d8e8]">1X2</span>}
             </button>
           ))}
         </nav>
         {canManage && activeTab === "Overview" && <TournamentSetup
-          teamCount={setupCounts?.tournamentId === tournament.id ? setupCounts.teamCount : null}
+          teamCount={teamCount}
           matchCount={setupCounts?.tournamentId === tournament.id ? setupCounts.matchCount : null}
           onManageTeams={() => { setOpenTeamRegistration(true); onTabChange("Teams"); }}
           canRegisterTeam={tournament.status.toUpperCase() === "UPCOMING"}
           onCreateMatch={() => setMatchEditorOpen(true)}
-          onImportMatches={() => setImportOpen(true)}
+          onImportTeams={() => setTeamImportOpen(true)}
         />}
+        {teamImportResult?.tournamentId === tournament.id && <p role="status" className="mt-3 text-xs font-bold text-[#84d8e8]">
+          {teamImportResult.count} {teamImportResult.count === 1 ? "team" : "teams"} imported.
+        </p>}
         {matchImportMessage && <p role="status" className="mt-3 text-xs font-bold text-[#84d8e8]">{matchImportMessage}</p>}
       </div>
 
@@ -494,6 +502,17 @@ export function TournamentDetailView({
             </div>
           </details>
         </>
+      )}
+      {teamImportOpen && canManage && tournament.status.toUpperCase() === "UPCOMING" && (
+        <TeamImportDialog
+          key={tournament.id}
+          tournamentId={tournament.id}
+          onClose={() => setTeamImportOpen(false)}
+          onImported={(count) => {
+            setTeamImportResult({ count, tournamentId: tournament.id });
+            setTeamImportOpen(false);
+          }}
+        />
       )}
       {importOpen && (
         <MatchEditor

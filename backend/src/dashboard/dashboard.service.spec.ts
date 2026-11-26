@@ -3,7 +3,8 @@ import { User } from '../users/user.entity';
 import { DashboardService } from './dashboard.service';
 
 describe('DashboardService', () => {
-  it('returns the number of voteable matches today independently of total matches', async () => {
+  it('returns open voting for a tomorrow match separately from today totals', async () => {
+    const kickoff = new Date('2026-11-27T01:00:00+07:00');
     const query = jest
       .fn()
       .mockResolvedValue([])
@@ -14,8 +15,10 @@ describe('DashboardService', () => {
           id: '1',
           name: 'Open',
           sportType: 'FOOTBALL',
-          matches: '8',
-          votableMatchesToday: '2',
+          matches: '0',
+          votableMatchesToday: '0',
+          openVotingCount: '1',
+          nextOpenVotingKickoff: kickoff,
         },
         {
           id: '2',
@@ -30,33 +33,44 @@ describe('DashboardService', () => {
     } as unknown as Repository<User>);
     const result = await service.getDashboard();
     expect(result.tournaments[0]).toMatchObject({
-      matches: 8,
-      votableMatchesToday: 2,
+      matches: 0,
+      votableMatchesToday: 0,
+      openVotingCount: 1,
+      nextOpenVotingKickoff: kickoff,
     });
     expect(result.tournaments[1]).toMatchObject({
       matches: 3,
       votableMatchesToday: 0,
+      openVotingCount: 0,
+      nextOpenVotingKickoff: null,
     });
   });
 
-  it('restricts the voting count to public supported pending unlocked matches before their deadline today in Vietnam', () => {
+  it('counts only open voting and includes its tournaments in today scope regardless of kickoff date', () => {
     const service = new DashboardService({} as Repository<User>);
     for (const scope of ['today', 'all']) {
       const sql = (service as any).tournamentsQuery(scope, true) as string;
-      const filter = sql.match(
-        /COUNT\(DISTINCT m\.id\) FILTER \(([\s\S]*?)\) AS "votableMatchesToday"/,
-      )?.[1];
-      expect(filter).toBeDefined();
-      expect(filter).toContain("t.visibility = 'PUBLIC'");
-      expect(filter).toContain("t.sport_type <> 'F1'");
-      expect(filter).toContain("m.status = 'PENDING'");
-      expect(filter).toContain('COALESCE(m.prediction_locked, false) = false');
-      expect(filter).toMatch(
-        /m\.scheduled_time\s*-\s*\(m\.lock_minutes_before_start \* INTERVAL '1 minute'\) > NOW\(\)/,
+      const openVoting = sql
+        .split(') open_voting ON TRUE')[0]
+        .split('LEFT JOIN LATERAL (')
+        .pop()!;
+      const eligibility = openVoting.split('FROM matches vote_match')[1];
+      expect(eligibility).toContain("t.visibility = 'PUBLIC'");
+      expect(eligibility).toContain("t.sport_type <> 'F1'");
+      expect(eligibility).toContain(
+        "vote_match.external_source IS DISTINCT FROM 'OPENF1'",
       );
-      expect(filter).toContain(
-        "(m.scheduled_time AT TIME ZONE 'Asia/Ho_Chi_Minh')::date = (NOW() AT TIME ZONE 'Asia/Ho_Chi_Minh')::date",
+      expect(eligibility).toContain("vote_match.status = 'PENDING'");
+      expect(eligibility).toContain(
+        'NOT COALESCE(vote_match.prediction_locked, false)',
       );
+      expect(eligibility).toMatch(
+        /vote_match\.scheduled_time\s*-\s*vote_match\.lock_minutes_before_start \* INTERVAL '1 minute' > NOW\(\)/,
+      );
+      expect(eligibility).not.toContain('AT TIME ZONE');
+      expect(openVoting).toContain("AT TIME ZONE 'Asia/Ho_Chi_Minh'");
+      if (scope === 'today')
+        expect(sql).toContain('OR open_voting.match_count > 0');
     }
   });
 

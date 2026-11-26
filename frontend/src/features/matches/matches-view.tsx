@@ -55,7 +55,8 @@ export default function MatchesView({
   const [stages, setStages] = useState<TournamentStage[]>([]);
   const [page, setPage] = useState(savedNavigation?.page ?? 1),
     [refresh, setRefresh] = useState(0);
-  const [loading, setLoading] = useState(Boolean(tournamentId)),
+  const shouldLoadMatches = Boolean(tournamentId || query.trim());
+  const [loading, setLoading] = useState(shouldLoadMatches),
     [busy, setBusy] = useState(false);
   const [notice, setNotice] = useState(""),
     [error, setError] = useState("");
@@ -92,7 +93,7 @@ export default function MatchesView({
     };
   }, [tournamentId]);
   useEffect(() => {
-    if (!tournamentId) return;
+    if (!shouldLoadMatches) return;
 
     let active = true;
     const timer = setTimeout(() => {
@@ -100,12 +101,12 @@ export default function MatchesView({
       const params = new URLSearchParams({
         page: String(page),
         pageSize: "20",
-        search: query,
+        search: query.trim(),
       });
       if (status === "OPEN") params.set("openForVoting", "true");
       else params.set("status", status);
-      params.set("tournamentId", tournamentId);
-      if (stageId) params.set("stageId", stageId);
+      if (tournamentId) params.set("tournamentId", tournamentId);
+      if (tournamentId && stageId) params.set("stageId", stageId);
       apiRequest<MatchPage>(`/matches/page?${params}`)
         .then((next) => {
           if (active) {
@@ -124,7 +125,7 @@ export default function MatchesView({
       active = false;
       clearTimeout(timer);
     };
-  }, [page, query, status, tournamentId, stageId, refresh]);
+  }, [page, query, status, tournamentId, stageId, refresh, shouldLoadMatches]);
 
   function reload() {
     setPage(1);
@@ -154,7 +155,7 @@ export default function MatchesView({
         <div>
           <h2 className="text-3xl font-black">Matches</h2>
           <p className="mt-2 text-sm text-[#b6cbd1]">
-            {data.total} matches · Search and filter matches
+            {shouldLoadMatches ? data.total : 0} matches · Search and filter matches
           </p>
         </div>
         {canManage && (
@@ -231,7 +232,7 @@ export default function MatchesView({
               setStages([]);
               setPage(1);
               setData({ items: [], total: 0, page: 1, pageSize: 20 });
-              setLoading(Boolean(e.target.value));
+              setLoading(Boolean(e.target.value || query.trim()));
               setError("");
               setNotice("");
             }}
@@ -264,7 +265,7 @@ export default function MatchesView({
         </label>
       </div>
       <section
-        hidden={!tournamentId}
+        hidden={!shouldLoadMatches}
         aria-busy={loading || busy}
         className="overflow-hidden rounded border border-[#3a4d54] bg-[#10242b]"
       >

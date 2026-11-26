@@ -95,7 +95,7 @@ export function TeamsTab({
   const [deleteTeamError, setDeleteTeamError] = useState<string | null>(null);
   const [isDeletingTeam, setIsDeletingTeam] = useState(false);
   const [teamName, setTeamName] = useState("");
-  const [playerIds, setPlayerIds] = useState<number[]>([0]);
+  const [playerIds, setPlayerIds] = useState<number[]>([]);
   const [playerOptions, setPlayerOptions] = useState<RosterPlayerOption[]>([]);
   const [registerTeamError, setRegisterTeamError] = useState<string | null>(
     null,
@@ -218,7 +218,7 @@ export function TeamsTab({
   function closeRegisterTeamModal() {
     setIsRegisterTeamOpen(false);
     setTeamName("");
-    setPlayerIds([0]);
+    setPlayerIds([]);
     setRegisterTeamError(null);
   }
 
@@ -260,9 +260,7 @@ export function TeamsTab({
       setSelectedTeamDetail(detail);
       setTeamDetailName(detail.name);
       setTeamDetailPlayerIds(
-        detail.players.length > 0
-          ? detail.players.map((player) => player.id ?? 0)
-          : [0],
+        detail.players.map((player) => player.id ?? 0),
       );
     } catch (error) {
       setTeamDetailError(
@@ -287,9 +285,7 @@ export function TeamsTab({
 
   function removeTeamDetailPlayer(index: number) {
     setTeamDetailPlayerIds((current) =>
-      current.length === 1
-        ? [0]
-        : current.filter((_, currentIndex) => currentIndex !== index),
+      current.filter((_, currentIndex) => currentIndex !== index),
     );
   }
 
@@ -377,9 +373,7 @@ export function TeamsTab({
 
   function removePlayerField(index: number) {
     setPlayerIds((current) =>
-      current.length === 1
-        ? [0]
-        : current.filter((_, currentIndex) => currentIndex !== index),
+      current.filter((_, currentIndex) => currentIndex !== index),
     );
   }
 
@@ -390,11 +384,6 @@ export function TeamsTab({
 
     if (!normalizedTeamName) {
       setRegisterTeamError("Team name is required.");
-      return;
-    }
-
-    if (selectedPlayerIds.length === 0) {
-      setRegisterTeamError("Add at least one player.");
       return;
     }
 
@@ -655,7 +644,7 @@ export function TeamsTab({
                   Players
                 </label>
                 <p className="mt-1 text-xs font-bold text-[#789098]">
-                  Choose active players from the player directory.
+                  Optional. Choose active players from the player directory.
                 </p>
               </div>
               <button
@@ -671,7 +660,7 @@ export function TeamsTab({
 
             {playerOptions.length === 0 && (
               <p className="mt-3 border border-[#705f1d] bg-[#2a240d] px-4 py-3 text-xs font-bold text-[#ffd76a]">
-                No active players available. Create or activate players first.
+                No active players are available to add.
               </p>
             )}
 

@@ -14,19 +14,19 @@ mod.paths = module.paths;
 mod._compile(ts.transpileModule(fs.readFileSync(file, 'utf8'), { compilerOptions: { module: ts.ModuleKind.CommonJS, jsx: ts.JsxEmit.ReactJSX } }).outputText, file);
 const { TournamentSetup } = mod.exports;
 test('shows setup progress and actionable entry points', () => {
-  const html = renderToStaticMarkup(React.createElement(TournamentSetup, { teamCount: 2, matchCount: 3, canRegisterTeam: true, onManageTeams() {}, onCreateMatch() {}, onImportMatches() {} }));
+  const html = renderToStaticMarkup(React.createElement(TournamentSetup, { teamCount: 2, matchCount: 3, canRegisterTeam: true, onManageTeams() {}, onCreateMatch() {}, onImportTeams() {} }));
   assert.match(html, /2 teams/);
   assert.match(html, /3 matches/);
   assert.match(html, /Add teams and players/);
   assert.match(html, /Create match/);
-  assert.match(html, /Import matches/);
+  assert.match(html, /Import Teams/);
 });
 test('explains why teams cannot be registered after the tournament starts', () => {
-  const html = renderToStaticMarkup(React.createElement(TournamentSetup, { teamCount: 2, matchCount: 3, canRegisterTeam: false, onManageTeams() {}, onCreateMatch() {}, onImportMatches() {} }));
+  const html = renderToStaticMarkup(React.createElement(TournamentSetup, { teamCount: 2, matchCount: 3, canRegisterTeam: false, onManageTeams() {}, onCreateMatch() {}, onImportTeams() {} }));
   assert.match(html, /only be registered before the tournament starts/);
-  assert.doesNotMatch(html, /Add teams and players/);
+  assert.doesNotMatch(html, /Add teams and players|Import Teams/);
 });
 test('does not report zero while team or match data is unavailable', () => {
-  const html = renderToStaticMarkup(React.createElement(TournamentSetup, { teamCount: null, matchCount: null, onManageTeams() {}, onCreateMatch() {}, onImportMatches() {} }));
+  const html = renderToStaticMarkup(React.createElement(TournamentSetup, { teamCount: null, matchCount: null, onManageTeams() {}, onCreateMatch() {}, onImportTeams() {} }));
   assert.doesNotMatch(html, /0 teams|0 matches/);
 });

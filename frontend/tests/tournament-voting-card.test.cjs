@@ -13,6 +13,7 @@ for (const extension of ['.ts', '.tsx']) {
     }).outputText, file);
   };
 }
+const { formatDateTime } = require('../src/features/tournaments/utils.ts');
 const { DashboardTournamentCard } = require('../src/features/dashboard/tournament-overview-card.tsx');
 const tournament = { id: 1, name: 'Bundesliga', sportType: 'FOOTBALL', status: 'ONGOING', visibility: 'PUBLIC', teams: 18, matches: 8, source: 'MANUAL' };
 function render(extra = {}) {
@@ -21,15 +22,17 @@ function render(extra = {}) {
     onSelectTournament() {}, onEditTournament() {}, onDeleteTournament() {},
   }));
 }
-test('highlights a card with open voting today and explains the count', () => {
-  const html = render({ votableMatchesToday: 2 });
-  assert.match(html, /2 matches open for voting today/);
+test('highlights a card before midnight for voting on a 01:00 match tomorrow', () => {
+  const kickoff = '2026-11-27T01:00:00+07:00';
+  const html = render({ matches: 0, votableMatchesToday: 0, openVotingCount: 1, nextOpenVotingKickoff: kickoff });
+  assert.match(html, /Open for voting/);
+  assert.ok(html.includes(formatDateTime(kickoff)));
   assert.match(html, /Enter Tournament &amp; Vote/);
   assert.match(html, /<article class="[^"]*border-\[#84d8e8\]/);
 });
 test('deemphasizes a card even when it has matches today if voting is closed', () => {
-  const html = render({ votableMatchesToday: 0 });
-  assert.match(html, /No voting open today/);
+  const html = render({ openVotingCount: 0 });
+  assert.match(html, /No voting open/);
   assert.match(html, /View Tournament/);
   assert.doesNotMatch(html, /Enter Tournament &amp; Vote/);
   assert.doesNotMatch(html, /disabled/);

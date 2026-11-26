@@ -31,6 +31,8 @@ type DashboardTournamentRow = {
   teams: string | number | null;
   matches: string | number | null;
   votableMatchesToday: string | number | null;
+  openVotingCount: string | number | null;
+  nextOpenVotingKickoff: string | Date | null;
   source: string | null;
 };
 
@@ -162,6 +164,8 @@ export class DashboardService {
         teams: Number(row.teams ?? 0),
         matches: Number(row.matches ?? 0),
         votableMatchesToday: Number(row.votableMatchesToday ?? 0),
+        openVotingCount: Number(row.openVotingCount ?? 0),
+        nextOpenVotingKickoff: row.nextOpenVotingKickoff ?? null,
         source: row.source ?? 'MANUAL',
         visibility: row.visibility ?? 'PUBLIC',
       })),
@@ -320,15 +324,9 @@ export class DashboardService {
           ELSE COUNT(DISTINCT effective_team.name)
         END AS teams,
         COUNT(DISTINCT m.id) AS matches,
-        COUNT(DISTINCT m.id) FILTER (
-          WHERE t.visibility = 'PUBLIC'
-            AND t.sport_type <> 'F1'
-            AND m.status = 'PENDING'
-            AND COALESCE(m.prediction_locked, false) = false
-            AND m.scheduled_time
-                - (m.lock_minutes_before_start * INTERVAL '1 minute') > NOW()
-            AND ${this.todayDateCondition('m.scheduled_time')}
-        ) AS "votableMatchesToday",
+        MAX(open_voting.today_count) AS "votableMatchesToday",
+        MAX(open_voting.match_count) AS "openVotingCount",
+        MAX(open_voting.next_kickoff) AS "nextOpenVotingKickoff",
         COALESCE(
           MAX(m.external_source),
           CASE
@@ -350,6 +348,23 @@ export class DashboardService {
       ) effective_team ON effective_team.name IS NOT NULL
         AND LOWER(TRIM(effective_team.name)) NOT IN ('tbd', 'team 1', 'team 2', 'home team', 'away team')
       LEFT JOIN stages s ON s.tournament_id = t.id
+      LEFT JOIN LATERAL (
+        SELECT
+          COUNT(*) AS match_count,
+          COUNT(*) FILTER (
+            WHERE ${this.todayDateCondition('vote_match.scheduled_time')}
+          ) AS today_count,
+          MIN(vote_match.scheduled_time) AS next_kickoff
+        FROM matches vote_match
+        WHERE vote_match.tournament_id = t.id
+          AND t.visibility = 'PUBLIC'
+          AND t.sport_type <> 'F1'
+          AND vote_match.external_source IS DISTINCT FROM 'OPENF1'
+          AND vote_match.status = 'PENDING'
+          AND NOT COALESCE(vote_match.prediction_locked, false)
+          AND vote_match.scheduled_time
+              - vote_match.lock_minutes_before_start * INTERVAL '1 minute' > NOW()
+      ) open_voting ON TRUE
       ${whereClause}
       GROUP BY t.id, t.name, t.sport_type, t.format, cf.id, t.status, t.visibility, t.start_date, t.end_date, t.updated_at, t.created_at
       ORDER BY
@@ -630,6 +645,7 @@ export class DashboardService {
     if (scope === 'today') {
       conditions.push(`(
         ${this.tournamentStatusExpression('t.start_date', 't.end_date', 't.status')} = 'ONGOING'
+        OR open_voting.match_count > 0
         OR EXISTS (
           SELECT 1
           FROM matches today_match

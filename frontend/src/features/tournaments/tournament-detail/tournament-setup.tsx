@@ -1,9 +1,9 @@
-export function TournamentSetup({ teamCount, matchCount, onManageTeams, onCreateMatch, onImportMatches, canRegisterTeam }: {
+export function TournamentSetup({ teamCount, matchCount, onManageTeams, onCreateMatch, onImportTeams, canRegisterTeam }: {
   teamCount: number | null;
   matchCount: number | null;
   onManageTeams: () => void;
   onCreateMatch: () => void;
-  onImportMatches: () => void;
+  onImportTeams: () => void;
   canRegisterTeam: boolean;
 }) {
   const button = "inline-flex min-h-10 items-center justify-center rounded border border-[#3a4d54] px-3 py-2 text-xs font-bold text-[#dce8eb] transition hover:border-[#84d8e8] hover:text-white focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-[#84d8e8]";
@@ -28,7 +28,7 @@ export function TournamentSetup({ teamCount, matchCount, onManageTeams, onCreate
           <p className="mt-2 text-xs text-[#b6cbd1]">{matchCount === null ? "Count unavailable" : `${matchCount} matches`}</p>
           <div className="mt-3 flex flex-wrap gap-2">
             <button type="button" className={button} onClick={onCreateMatch}>Create match</button>
-            <button type="button" className={`${button} bg-[#143943] text-[#84d8e8]`} onClick={onImportMatches}>Import matches</button>
+            {canRegisterTeam && <button type="button" className={`${button} bg-[#143943] text-[#84d8e8]`} onClick={onImportTeams}>Import Teams</button>}
           </div>
       </div>
     </section>

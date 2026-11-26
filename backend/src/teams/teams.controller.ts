@@ -51,6 +51,24 @@ export class TeamsController {
     });
   }
 
+  @Post('import')
+  async importWorkbook(
+    @Headers('authorization') authorization: string | undefined,
+    @Body()
+    body: {
+      tournamentId?: number;
+      fileName?: string;
+      contentBase64?: string;
+    },
+  ) {
+    await this.authService.verifyAdminToken(authorization);
+    return this.teamsService.importWorkbook(
+      Number(body?.tournamentId),
+      body?.fileName,
+      body?.contentBase64,
+    );
+  }
+
   @Post('register')
   async registerTeam(
     @Headers('authorization') authorization: string | undefined,

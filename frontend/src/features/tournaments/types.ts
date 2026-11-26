@@ -36,6 +36,8 @@ export type TournamentRow = {
   teams: number;
   matches: number;
   votableMatchesToday?: number;
+  openVotingCount?: number;
+  nextOpenVotingKickoff?: string | null;
   source: string;
 };
 
