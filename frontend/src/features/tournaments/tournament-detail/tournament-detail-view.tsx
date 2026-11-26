@@ -371,7 +371,7 @@ export function TournamentDetailView({
             <div className="order-first min-w-0 space-y-5 md:order-none">
               <InlineVotePanel key={tournament.id} tournament={tournament} matches={upcomingMatches} now={now}
                 onPredictionsLoaded={setPersonalPredictions}
-                onViewAll={() => navigate({ view: "matches", matchFilters: { tournamentId: tournament.id, tournamentName: tournament.name } })}
+                onViewAll={() => navigate({ view: "matches", matchFilters: { tournamentId: tournament.id, tournamentName: tournament.name, prioritizeVoting: true } })}
                 onSaved={() => setPredictionRefresh((value) => value + 1)} />
 
               <section className="@container min-w-0 overflow-hidden rounded border border-[#3a4d54] bg-[#0d252d]">

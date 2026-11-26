@@ -51,6 +51,8 @@ export class MatchesController {
       throw new BadRequestException('Invalid status.');
     if (query.openForVoting && query.openForVoting !== 'true')
       throw new BadRequestException('Invalid openForVoting filter.');
+    if (query.sort && query.sort !== 'voting')
+      throw new BadRequestException('Invalid match sort order.');
     const filters = {
       includePrivateTournaments: ['ADMIN', 'SUPER_ADMIN'].includes(user.role),
       tournamentId: query.tournamentId
@@ -59,6 +61,7 @@ export class MatchesController {
       stageId: query.stageId ? positiveId(query.stageId) : undefined,
       status: query.status,
       openForVoting: query.openForVoting === 'true',
+      prioritizeVoting: query.sort === 'voting',
       search: query.search,
       page,
       pageSize,

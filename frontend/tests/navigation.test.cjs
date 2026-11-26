@@ -65,3 +65,10 @@ test('in-page back uses a known prior entry and falls back for direct links', ()
   assert.equal(pushed, '#tournaments');
   delete global.window;
 });
+
+test('View all matches carries voting priority through the URL', () => {
+  const state = { view: 'matches', matchFilters: { tournamentId: 42, prioritizeVoting: true } };
+  const url = formatNavigation(state);
+  assert.match(url, /sort=voting/);
+  assert.deepEqual(parseNavigation(url), state);
+});

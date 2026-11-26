@@ -24,7 +24,8 @@ export function parseNavigation(hash: string): Navigation {
     const stageId = positive(params.get('stage'));
     const tournamentName = params.get('tournamentName') || undefined;
     const stageName = params.get('stageName') || undefined;
-    if (tid || stageId || tournamentName || stageName) return { view, matchFilters: { ...(tid ? { tournamentId: tid } : {}), ...(stageId ? { stageId } : {}), ...(tournamentName ? { tournamentName } : {}), ...(stageName ? { stageName } : {}) } };
+    const prioritizeVoting = params.get('sort') === 'voting';
+    if (tid || stageId || tournamentName || stageName || prioritizeVoting) return { view, matchFilters: { ...(tid ? { tournamentId: tid } : {}), ...(stageId ? { stageId } : {}), ...(tournamentName ? { tournamentName } : {}), ...(stageName ? { stageName } : {}), ...(prioritizeVoting ? { prioritizeVoting } : {}) } };
   }
   return { view };
 }
@@ -36,6 +37,7 @@ export function formatNavigation(state: Navigation): string {
   if (state.matchFilters?.stageId) p.set('stage', String(state.matchFilters.stageId));
   if (state.matchFilters?.tournamentName) p.set('tournamentName', state.matchFilters.tournamentName);
   if (state.matchFilters?.stageName) p.set('stageName', state.matchFilters.stageName);
+  if (state.matchFilters?.prioritizeVoting) p.set('sort', 'voting');
   const query = p.toString();
   return `#${state.view}${query ? `?${query}` : ''}`;
 }

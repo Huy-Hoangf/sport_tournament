@@ -351,6 +351,7 @@ export class MatchesService {
     stageId?: number;
     status?: string;
     openForVoting?: boolean;
+    prioritizeVoting?: boolean;
     search?: string;
     page?: number;
     pageSize?: number;
@@ -377,14 +378,13 @@ export class MatchesService {
       where.push(`m.status = $${values.length}`);
     }
 
-    if (filters.openForVoting) {
-      where.push("m.status = 'PENDING'");
-      where.push('m.prediction_locked = FALSE');
-      where.push(
-        "m.scheduled_time - (m.lock_minutes_before_start * INTERVAL '1 minute') > clock_timestamp()",
-      );
-      where.push('m.home_team_id IS NOT NULL AND m.away_team_id IS NOT NULL');
-    }
+    const openForVotingConditions = [
+      "m.status = 'PENDING'",
+      'm.prediction_locked = FALSE',
+      "m.scheduled_time - (m.lock_minutes_before_start * INTERVAL '1 minute') > clock_timestamp()",
+      'm.home_team_id IS NOT NULL AND m.away_team_id IS NOT NULL',
+    ];
+    if (filters.openForVoting) where.push(...openForVotingConditions);
 
     const search = filters.search?.trim();
     if (search) {
@@ -398,6 +398,17 @@ export class MatchesService {
         )
       `);
     }
+
+    const orderBy = filters.prioritizeVoting
+      ? `CASE
+           WHEN ${openForVotingConditions.join(' AND ')}
+             AND t.visibility = 'PUBLIC'
+             AND t.sport_type <> 'F1'
+             AND m.external_source IS DISTINCT FROM 'OPENF1' THEN 0
+           WHEN m.status = 'FINISHED' THEN 2
+           ELSE 1
+         END, m.scheduled_time ASC, m.id ASC`
+      : 'm.scheduled_time ASC, m.id ASC';
 
     const rows = await this.usersRepository.query(
       `
@@ -428,7 +439,7 @@ export class MatchesService {
         LEFT JOIN teams home ON home.id = m.home_team_id
         LEFT JOIN teams away ON away.id = m.away_team_id
         ${where.length ? `WHERE ${where.join(' AND ')}` : ''}
-        ORDER BY m.scheduled_time ASC, m.id ASC
+        ORDER BY ${orderBy}
         LIMIT $${values.length + 1} OFFSET $${values.length + 2}
       `,
       [

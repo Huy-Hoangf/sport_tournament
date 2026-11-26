@@ -18,6 +18,7 @@ export type MatchesInitialFilter = {
   stageId?: number;
   tournamentName?: string;
   stageName?: string;
+  prioritizeVoting?: boolean;
 };
 type MatchPage = {
   items: MatchRow[];
@@ -44,9 +45,11 @@ export default function MatchesView({
     page: 1,
     pageSize: 20,
   });
+  const prioritizeVoting = initialFilter?.prioritizeVoting === true;
+  const defaultStatus = prioritizeVoting || canManage ? "ALL" : "OPEN";
   const [savedNavigation] = useState(() => readMatchesState());
   const [query, setQuery] = useState(savedNavigation?.query ?? ""),
-    [status, setStatus] = useState(savedNavigation?.status ?? (canManage ? "ALL" : "OPEN"));
+    [status, setStatus] = useState(savedNavigation?.status ?? defaultStatus);
   const [tournamentId, setTournamentId] = useState(
     savedNavigation?.tournamentId ?? String(initialFilter?.tournamentId ?? ""),
   );
@@ -105,6 +108,7 @@ export default function MatchesView({
       });
       if (status === "OPEN") params.set("openForVoting", "true");
       else params.set("status", status);
+      if (prioritizeVoting) params.set("sort", "voting");
       if (tournamentId) params.set("tournamentId", tournamentId);
       if (tournamentId && stageId) params.set("stageId", stageId);
       apiRequest<MatchPage>(`/matches/page?${params}`)
@@ -125,7 +129,7 @@ export default function MatchesView({
       active = false;
       clearTimeout(timer);
     };
-  }, [page, query, status, tournamentId, stageId, refresh, shouldLoadMatches]);
+  }, [page, query, status, tournamentId, stageId, refresh, shouldLoadMatches, prioritizeVoting]);
 
   function reload() {
     setPage(1);
