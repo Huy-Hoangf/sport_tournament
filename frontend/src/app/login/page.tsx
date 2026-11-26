@@ -2,14 +2,7 @@
 
 import Link from "next/link";
 import { useRouter } from "next/navigation";
-import {
-  CircleHelp,
-  EyeOff,
-  Globe2,
-  LogIn,
-  Lock,
-  UserCircle,
-} from "lucide-react";
+import { Eye, EyeOff, LogIn } from "lucide-react";
 import type { FormEvent } from "react";
 import { useEffect, useState } from "react";
 import { apiRequest, type CurrentUser } from "../../lib/api/client";
@@ -144,104 +137,88 @@ export default function LoginPage() {
   }
 
   return (
-    <main className="auth-page flex min-h-screen flex-col overflow-hidden">
+    <main className="auth-page flex min-h-screen flex-col">
       <NoticeBanner notice={notice} onClose={() => setNotice(null)} />
-      <header className="flex h-[90px] shrink-0 items-center justify-between border-b border-white/10 px-8">
-        <h1 className="text-[30px] font-black tracking-[-0.06em] text-[#84d8e8] drop-shadow-[0_0_10px_rgba(132,216,232,0.35)]">
-          TWENTY-TECH
-        </h1>
-
-        <div className="flex items-center gap-8 text-zinc-300">
-          <CircleHelp size={26} />
-          <Globe2 size={28} />
-        </div>
+      <header className="flex h-16 items-center border-b border-white/10 px-5 sm:px-8">
+        <p className="text-xl font-black tracking-tight text-[#84d8e8]">TWENTY-TECH</p>
       </header>
 
-      <section className="flex flex-1 items-center justify-center px-5 py-12">
+      <section className="flex flex-1 items-start justify-center px-4 py-5 sm:items-center sm:px-6 sm:py-10">
         <form
           onSubmit={handleLogin}
-          className="w-full max-w-[560px] rounded-lg border border-[#84d8e844] bg-[#0d1b1ecc] px-10 py-11 shadow-[0_0_45px_rgba(132,216,232,0.1)] backdrop-blur"
+          className="w-full max-w-md space-y-5 rounded-xl border border-[#3a4d54] bg-[#0d252d] p-5 sm:p-8"
         >
-          <h2 className="mb-12 text-center text-[40px] font-bold tracking-[-0.02em] text-zinc-200">
-            System Access
-          </h2>
-
-          <label className="mb-3 flex items-center gap-2 text-[15px] font-bold uppercase tracking-[0.18em] text-zinc-400">
-            <UserCircle size={18} />
-            Email
-          </label>
-
-          <input
-            type="email"
-            value={username}
-            onChange={(event) => setUsername(event.target.value)}
-            placeholder="YOUR EMAIL"
-            className="mb-8 h-[72px] w-full rounded border border-white/10 bg-[#080f0f] px-5 text-xl font-bold text-zinc-200 outline-none transition placeholder:text-zinc-600 focus:border-[#84d8e888]"
-          />
-
-          <label className="mb-3 flex items-center gap-2 text-sm font-bold uppercase tracking-[0.18em] text-zinc-400">
-            <Lock size={17} />
-            Password
-          </label>
-
-          <div className="mb-8 flex h-[72px] items-center rounded border border-white/10 bg-[#080f0f] px-5 focus-within:border-[#84d8e888]">
-            <input
-              type={showPassword ? "text" : "password"}
-              value={password}
-              onChange={(event) => setPassword(event.target.value)}
-              placeholder="YOUR PASSWORD"
-              className="w-full bg-transparent text-xl font-bold text-zinc-200 outline-none placeholder:text-zinc-600"
-            />
-
-            <button
-              type="button"
-              onClick={() => setShowPassword(!showPassword)}
-              className="text-zinc-400 hover:text-[#84d8e8]"
-            >
-              <EyeOff size={28} />
-            </button>
+          <div>
+            <h1 className="text-balance text-2xl font-black tracking-tight text-white sm:text-3xl">
+              Sign in to predict matches
+            </h1>
+            <p className="mt-2 text-sm leading-relaxed text-[#c8d6db]">
+              Pick match results and see how you rank on the leaderboard.
+            </p>
           </div>
 
-          <button
-            type="submit"
-            disabled={isLoading}
-            className="flex h-[72px] w-full items-center justify-center gap-4 rounded bg-[#84d8e8] text-[18px] font-black uppercase tracking-[0.28em] text-[#102026] shadow-[0_0_20px_rgba(132,216,232,0.28)] transition hover:bg-[#a5e9f3] disabled:opacity-60"
-          >
-            {isLoading ? "Logging in..." : "Login"}
-            <LogIn size={24} />
-          </button>
+          <div className="space-y-4">
+            <div>
+              <label htmlFor="login-email" className="mb-1 block text-sm font-bold text-[#dce8eb]">Email</label>
+              <input
+                id="login-email"
+                type="email"
+                autoComplete="username"
+                value={username}
+                onChange={(event) => setUsername(event.target.value)}
+                className="h-12 w-full rounded border border-[#3a4d54] bg-[#06161b] px-3 text-white focus-visible:outline-2 focus-visible:outline-[#84d8e8]"
+              />
+            </div>
 
-          <div className="mt-12 flex items-center justify-between gap-4 text-sm font-semibold text-zinc-300">
-            <Link href="/forgot-password" className="hover:text-[#84d8e8]">
-              Forgot password?
-            </Link>
+            <div>
+              <label htmlFor="login-password" className="mb-1 block text-sm font-bold text-[#dce8eb]">Password</label>
+              <div className="relative">
+                <input
+                  id="login-password"
+                  type={showPassword ? "text" : "password"}
+                  autoComplete="current-password"
+                  value={password}
+                  onChange={(event) => setPassword(event.target.value)}
+                  className="h-12 w-full rounded border border-[#3a4d54] bg-[#06161b] pl-3 pr-14 text-white focus-visible:outline-2 focus-visible:outline-[#84d8e8]"
+                />
+                <button
+                  type="button"
+                  aria-label={showPassword ? "Hide password" : "Show password"}
+                  onClick={() => setShowPassword(!showPassword)}
+                  className="absolute inset-y-0 right-0 grid w-12 place-items-center rounded text-[#c8d6db] hover:text-white focus-visible:outline-2 focus-visible:outline-[#84d8e8]"
+                >
+                  {showPassword ? <EyeOff size={20} aria-hidden="true" /> : <Eye size={20} aria-hidden="true" />}
+                </button>
+              </div>
+            </div>
+          </div>
+
+          <div className="grid gap-2.5">
+            <button
+              type="submit"
+              disabled={isLoading}
+              className="flex min-h-12 w-full items-center justify-center gap-2 rounded bg-[#84d8e8] px-4 py-2 font-black text-[#06161b] hover:bg-[#a6e5ef] focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-[#84d8e8] disabled:opacity-60"
+            >
+              {isLoading ? "Signing in..." : "Sign in"}
+              <LogIn size={19} aria-hidden="true" />
+            </button>
+
             <button
               type="button"
               onClick={() => void handleGoogleLogin()}
               disabled={isLoading}
-              className="flex h-9 items-center gap-2 rounded border border-white/10 bg-[#080f0f] px-3 text-xs font-black uppercase tracking-[0.08em] text-zinc-300 transition hover:border-[#84d8e888] hover:text-[#84d8e8]"
+              className="flex min-h-12 w-full items-center justify-center gap-2 rounded border border-[#3a4d54] bg-[#06161b] px-4 py-2 text-sm font-bold text-white hover:border-[#84d8e8] focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-[#84d8e8] disabled:opacity-60"
             >
               <GoogleLogo />
-              Login with Google
+              Continue with Google
             </button>
           </div>
 
-          <div className="mt-10 flex items-center gap-5 text-[13px] font-medium uppercase tracking-[0.45em] text-zinc-600">
-            <span className="h-px flex-1 bg-white/10" />
-            <span>Secure Portal</span>
-            <span className="h-px flex-1 bg-white/10" />
-          </div>
+          <Link href="/forgot-password" className="inline-flex min-h-11 items-center text-sm font-bold text-[#84d8e8] underline-offset-4 hover:underline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-[#84d8e8]">
+            Forgot password?
+          </Link>
         </form>
       </section>
-
-      <footer className="flex h-[78px] shrink-0 items-center justify-between border-t border-white/10 px-10 text-xs font-bold uppercase tracking-[0.16em] text-zinc-400">
-        <p>2026 TWENTY-TECH Predictor. All data is encrypted.</p>
-        <div className="flex gap-10">
-          <span>Terms</span>
-          <span>Security</span>
-          <span>System Status</span>
-        </div>
-      </footer>
     </main>
   );
 }

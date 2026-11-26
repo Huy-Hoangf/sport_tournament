@@ -89,7 +89,7 @@ export function InlineVotePanel({
           </span>
         </div>
         <p className="mt-2 text-xs leading-relaxed text-[#b6cbd1]">
-          Pick Home (1), Draw (X) or Away (2) before kick-off. Points follow the scoring rules.
+          Pick a result before the voting deadline. You can change your prediction until voting closes.
         </p>
         <div
           className="mt-3 flex flex-wrap gap-2"
@@ -239,32 +239,30 @@ function InlineVoteRow({
         </div>
       </div>
       <div className="grid min-w-0 gap-3 @min-[38rem]:grid-cols-[minmax(0,1.1fr)_minmax(0,1fr)] @min-[38rem]:items-center">
-        <div className="min-w-0 text-xs"><MatchTeams match={match} /></div>
+        <div className="min-w-0 text-xs"><MatchTeams match={match} wrapNames /></div>
         <fieldset
           disabled={loading || saving || Boolean(closed)}
           className="grid min-w-0 grid-cols-3 gap-2"
         >
-          <legend className="sr-only">
-            Predict {match.homeName} versus {match.awayName}
+          <legend className="mb-2 text-xs font-bold text-[#b6cbd1]">
+            Voting closes <time dateTime={match.deadline}>{formatDateTime(match.deadline)}</time>
           </legend>
           {(
             [
-              ["HOME_WIN", "1", match.homeName ?? "Home"],
-              ["DRAW", "X", "Draw"],
-              ["AWAY_WIN", "2", match.awayName ?? "Away"],
+              ["HOME_WIN", "Home win", match.homeName ?? "Home team"],
+              ["DRAW", "Draw", null],
+              ["AWAY_WIN", "Away win", match.awayName ?? "Away team"],
             ] as const
-          ).map(([outcome, symbol, label]) => (
+          ).map(([outcome, label, teamName]) => (
             <button
               key={outcome}
               type="button"
               aria-pressed={initialOutcome === outcome}
-              title={`[${symbol}] ${label}`}
               onClick={() => void saveVote(outcome)}
               className={`flex min-h-14 min-w-0 flex-col items-center justify-center rounded border px-2 py-2 text-xs font-bold transition disabled:cursor-not-allowed disabled:opacity-60 ${initialOutcome === outcome ? "border-[#84d8e8] bg-[#143943] text-[#84d8e8]" : "border-[#243c43] bg-[#0d252d] text-[#dce8eb] hover:border-[#84d8e8]"}`}
             >
-              <span className="w-full truncate text-center">
-                [{symbol}] {label}
-              </span>
+              <span>{label}</span>
+              {teamName && <span className="mt-1 w-full break-words text-center font-normal">{teamName}</span>}
               {initialOutcome === outcome && (
                 <span className="mt-1 flex items-center gap-1 text-[10px]">
                   <Check size={12} /> Selected
@@ -274,8 +272,7 @@ function InlineVoteRow({
           ))}
         </fieldset>
       </div>
-      <div className="mt-3 flex flex-wrap justify-between gap-2 text-xs text-[#b6cbd1]">
-        <span>Deadline: {formatDateTime(match.deadline)}</span>
+      <div className="mt-2 text-xs">
         <span role="status" className="text-[#84d8e8]">
           {saving
             ? "Saving…"

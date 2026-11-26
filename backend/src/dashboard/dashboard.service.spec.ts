@@ -74,6 +74,16 @@ describe('DashboardService', () => {
     }
   });
 
+  it('lists open matches by deadline across midnight for the player dashboard', () => {
+    const service = new DashboardService({} as Repository<User>);
+    const sql = service['upcomingScheduleQuery']('today', false, true);
+    expect(sql).toContain("m.status = 'PENDING'");
+    expect(sql).toContain("m.external_source IS DISTINCT FROM 'OPENF1'");
+    expect(sql).toContain('ORDER BY deadline ASC, m.id');
+    expect(sql).toContain('LIMIT 3');
+    expect(sql).not.toContain('AT TIME ZONE');
+  });
+
   it('counts every match today and includes future matches for tournament cards', () => {
     const service = new DashboardService({} as Repository<User>);
     const summary = (service as any).summaryQuery('today', true) as string;
@@ -185,6 +195,6 @@ describe('DashboardService', () => {
     expect(dashboard.stats.pendingPredictions).toBe(0);
     expect(dashboard.stats.warningMatches).toBe(0);
     expect(dashboard.inactivePlayers).toEqual([]);
-    expect(queryMock).toHaveBeenCalledTimes(7);
+    expect(queryMock).toHaveBeenCalledTimes(8);
   });
 });

@@ -219,7 +219,7 @@ export function VoteDialog({
           {match.homeName} vs {match.awayName}
         </p>
         <p className="text-sm text-[#b6cbd1]">
-          Deadline: {new Date(match.deadline).toLocaleString()}
+          Voting closes <time dateTime={match.deadline}>{new Date(match.deadline).toLocaleString()}</time>
         </p>
         {error && (
           <p role="alert" className="text-red-200">
@@ -229,10 +229,10 @@ export function VoteDialog({
         <fieldset disabled={busy || loading} className="grid gap-2">
           <legend className="mb-2 font-bold">Who will win?</legend>
           {([
-            ["HOME_WIN", `${match.homeName} wins`],
-            ["DRAW", "Draw"],
-            ["AWAY_WIN", `${match.awayName} wins`],
-          ] as const).map(([value, label]) => (
+            ["HOME_WIN", "Home win", match.homeName],
+            ["DRAW", "Draw", null],
+            ["AWAY_WIN", "Away win", match.awayName],
+          ] as const).map(([value, label, teamName]) => (
             <label key={value} className="flex cursor-pointer items-center gap-3 rounded border border-[#3a4d54] bg-[#06161b] p-3 has-[:checked]:border-[#84d8e8] has-[:checked]:bg-[#17363d]">
               <input
                 type="radio"
@@ -242,7 +242,10 @@ export function VoteDialog({
                 onChange={() => setOutcome(value)}
                 className="accent-[#84d8e8]"
               />
-              {label}
+              <span className="min-w-0 break-words">
+                <span className="block font-bold">{label}</span>
+                {teamName && <span className="block text-sm text-[#c8d6db]">{teamName}</span>}
+              </span>
             </label>
           ))}
         </fieldset>

@@ -113,25 +113,26 @@ export function DashboardPanelTitle({
   );
 }
 
-export function MatchTeams({ match }: { match: MatchRow }) {
+export function MatchTeams({ match, wrapNames = false }: { match: MatchRow; wrapNames?: boolean }) {
   const score = formatScore(match);
   const homeName = match.homeName ?? "TBD";
   const awayName = match.awayName ?? "TBD";
+  const nameClass = wrapNames ? "min-w-0 break-words" : "min-w-0 truncate whitespace-nowrap";
 
   return (
-    <div className="grid min-w-0 grid-cols-[minmax(0,1fr)_54px_minmax(0,1fr)] items-center gap-3 font-black text-white">
+    <div className={`grid min-w-0 items-center font-black text-white ${wrapNames ? "grid-cols-[minmax(0,1fr)_auto_minmax(0,1fr)] gap-2" : "grid-cols-[minmax(0,1fr)_54px_minmax(0,1fr)] gap-3"}`}>
       <div className="flex min-w-0 items-center gap-2 overflow-hidden">
         <TeamLogo
           name={match.homeName ?? "Home team"}
           src={match.homeLogoUrl}
         />
-        <span title={homeName} className="min-w-0 truncate whitespace-nowrap">
+        <span title={homeName} className={nameClass}>
           {homeName}
         </span>
       </div>
       <span
         title={score === "-" ? "Versus" : score}
-        className={`flex h-7 w-[54px] shrink-0 items-center justify-center rounded-sm px-2 py-1 text-center text-xs uppercase tabular-nums ${
+        className={`flex h-7 shrink-0 items-center justify-center rounded-sm py-1 text-center text-xs uppercase tabular-nums ${wrapNames && score === "-" ? "px-1" : "w-[54px] px-2"} ${
           score === "-"
             ? "text-[#84d8e8]"
             : "bg-[#183229] text-[#a7e8c0]"
@@ -140,7 +141,7 @@ export function MatchTeams({ match }: { match: MatchRow }) {
         {score === "-" ? "vs" : score}
       </span>
       <div className="flex min-w-0 items-center justify-end gap-2 overflow-hidden text-right">
-        <span title={awayName} className="min-w-0 truncate whitespace-nowrap">
+        <span title={awayName} className={nameClass}>
           {awayName}
         </span>
         <TeamLogo

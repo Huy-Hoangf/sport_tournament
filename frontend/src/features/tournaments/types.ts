@@ -18,6 +18,7 @@ export type DashboardData = {
   tournaments: TournamentRow[];
   tournamentMatches: MatchRow[];
   nextTournamentMatches: MatchRow[];
+  openVotingMatches?: MatchRow[];
   upcomingSchedule: MatchRow[];
   recentActivity: ActivityRow[];
   inactivePlayers: InactivePlayerRow[];

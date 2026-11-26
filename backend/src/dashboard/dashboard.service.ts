@@ -96,6 +96,7 @@ export class DashboardService {
       Promise<DashboardActivityRow[]>,
       Promise<DashboardInactivePlayerRow[]>,
       Promise<DashboardMatchRow[]>,
+      Promise<DashboardMatchRow[]>,
     ] = [
       this.usersRepository.query<DashboardSummaryRow[]>(
         this.summaryQuery(scope, includePrivateTournaments),
@@ -122,6 +123,11 @@ export class DashboardService {
             this.tournamentMatchesQuery(scope, includePrivateTournaments, true),
           )
         : Promise.resolve<DashboardMatchRow[]>([]),
+      scope === 'today' && !includeAttentionDetails
+        ? this.usersRepository.query<DashboardMatchRow[]>(
+            this.upcomingScheduleQuery(scope, false, true),
+          )
+        : Promise.resolve<DashboardMatchRow[]>([]),
     ];
 
     const [
@@ -132,6 +138,7 @@ export class DashboardService {
       activities,
       inactivePlayers,
       nextTournamentMatches,
+      openVotingMatches,
     ] = await Promise.all(dashboardQueries);
     const summary = this.mapSummary(summaryRows[0]);
 
@@ -173,6 +180,9 @@ export class DashboardService {
         this.mapTournamentMatch(row),
       ),
       nextTournamentMatches: nextTournamentMatches.map((row) =>
+        this.mapTournamentMatch(row),
+      ),
+      openVotingMatches: openVotingMatches.map((row) =>
         this.mapTournamentMatch(row),
       ),
       upcomingSchedule: upcomingSchedule.map((row) => ({
@@ -357,13 +367,7 @@ export class DashboardService {
           MIN(vote_match.scheduled_time) AS next_kickoff
         FROM matches vote_match
         WHERE vote_match.tournament_id = t.id
-          AND t.visibility = 'PUBLIC'
-          AND t.sport_type <> 'F1'
-          AND vote_match.external_source IS DISTINCT FROM 'OPENF1'
-          AND vote_match.status = 'PENDING'
-          AND NOT COALESCE(vote_match.prediction_locked, false)
-          AND vote_match.scheduled_time
-              - vote_match.lock_minutes_before_start * INTERVAL '1 minute' > NOW()
+          AND ${this.openVotingCondition('vote_match')}
       ) open_voting ON TRUE
       ${whereClause}
       GROUP BY t.id, t.name, t.sport_type, t.format, cf.id, t.status, t.visibility, t.start_date, t.end_date, t.updated_at, t.created_at
@@ -401,15 +405,27 @@ export class DashboardService {
     `;
   }
 
+  private openVotingCondition(match: 'm' | 'vote_match') {
+    return `t.visibility = 'PUBLIC'
+          AND t.sport_type <> 'F1'
+          AND ${match}.external_source IS DISTINCT FROM 'OPENF1'
+          AND ${match}.status = 'PENDING'
+          AND NOT COALESCE(${match}.prediction_locked, false)
+          AND ${match}.scheduled_time
+              - ${match}.lock_minutes_before_start * INTERVAL '1 minute' > NOW()`;
+  }
+
   private upcomingScheduleQuery(
     scope: DashboardScope,
     includePrivateTournaments: boolean,
+    openVotingOnly = false,
   ) {
     const visibilityCondition = includePrivateTournaments
       ? ''
       : "AND t.visibility = 'PUBLIC'";
-    const scopeCondition =
-      scope === 'today'
+    const scopeCondition = openVotingOnly
+      ? `AND ${this.openVotingCondition('m')}`
+      : scope === 'today'
         ? `AND ${this.todayDateCondition('m.scheduled_time')}`
         : '';
     const scheduleTimeCondition =
@@ -418,6 +434,7 @@ export class DashboardService {
     return `
       SELECT
         m.id,
+        m.tournament_id AS "tournamentId",
         t.name AS "tournamentName",
         m.stage_id AS "stageId",
         s.name AS "stageName",
@@ -440,11 +457,15 @@ export class DashboardService {
         ${scheduleTimeCondition}
         ${visibilityCondition}
         ${scopeCondition}
-      ORDER BY
+      ORDER BY ${
+        openVotingOnly
+          ? 'deadline ASC, m.id'
+          : `
         CASE WHEN m.scheduled_time >= NOW() THEN 0 ELSE 1 END,
         CASE WHEN m.scheduled_time >= NOW() THEN m.scheduled_time END ASC,
-        CASE WHEN m.scheduled_time < NOW() THEN m.scheduled_time END DESC
-      LIMIT 8
+        CASE WHEN m.scheduled_time < NOW() THEN m.scheduled_time END DESC`
+      }
+      LIMIT ${openVotingOnly ? 3 : 8}
     `;
   }
 

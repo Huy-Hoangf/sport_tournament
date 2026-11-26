@@ -13,6 +13,8 @@ import {
 } from "../dashboard/dashboard-overview";
 import { ApiStatusBanner } from "../dashboard/api-status-banner";
 import { AttentionModal } from "../dashboard/attention-modal";
+import { OpenVotingSection } from "../dashboard/open-voting-section";
+import { VoteDialog } from "../matches/predictions";
 import { DashboardStatGrid } from "../dashboard/dashboard-stat-grid";
 import { RecentActivityPanel } from "../dashboard/recent-activity-panel";
 import { TournamentInput, TournamentSelect } from "./form-controls";
@@ -118,6 +120,7 @@ export default function AdminDashboardContent({
   const [isLoading, setIsLoading] = useState(true);
   const [hasLoadedDashboard, setHasLoadedDashboard] = useState(false);
   const [isMutating, setIsMutating] = useState(false);
+  const [votingMatch, setVotingMatch] = useState<MatchRow | null>(null);
   const [notice, setNotice] = useState<Notice | null>(null);
   const [openTournamentForm, setOpenTournamentForm] = useState(false);
   const [openCustomFormatBuilder, setOpenCustomFormatBuilder] = useState(false);
@@ -895,10 +898,6 @@ export default function AdminDashboardContent({
                 Create Tournament
               </button>
             </>
-          ) : !isAdmin ? (
-            <div className="rounded border border-[#3a4d54] bg-[#0d252d] px-5 py-4 text-center text-sm font-bold text-[#9fb2b8]">
-              Prediction access
-            </div>
           ) : null}
         </div>
       </div>}
@@ -980,11 +979,22 @@ export default function AdminDashboardContent({
         <>
           {!isTournamentView && (
             <div className="space-y-5">
-              <ApiStatusBanner
+              {isAdmin && <ApiStatusBanner
                 apiStatus={dashboard.apiStatus}
                 isLoading={isLoading}
                 onRefresh={() => void loadDashboard()}
-              />
+              />}
+              {!isAdmin && <OpenVotingSection
+                matches={dashboard.openVotingMatches ?? []}
+                onVote={(match) => {
+                  if (Date.parse(match.deadline) <= Date.now()) {
+                    showNotice("Voting has closed for this match.", "info");
+                    void loadDashboard();
+                    return;
+                  }
+                  setVotingMatch(match);
+                }}
+              />}
 
               <DashboardStatGrid
                 stats={dashboard.stats}
@@ -1043,6 +1053,12 @@ export default function AdminDashboardContent({
           </div>
         </>
       )}
+
+      {votingMatch && <VoteDialog
+        match={votingMatch}
+        onClose={() => setVotingMatch(null)}
+        onSaved={() => showNotice("Prediction saved.", "success")}
+      />}
 
       {isAdmin && openAttentionDetails && (
         <AttentionModal
